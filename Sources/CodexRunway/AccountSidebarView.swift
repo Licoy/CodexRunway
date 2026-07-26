@@ -345,36 +345,10 @@ struct SubscriptionTierTag: View {
     var l10n: L10n
 
     var body: some View {
-        RunwayTag(label, tone: tone, horizontalPadding: 5, verticalPadding: 1)
-    }
-
-    private var tone: RunwayTagTone {
-        switch tier {
-        case .free: return .gray
-        case .plus: return .blue
-        case .pro5x: return .purple
-        case .pro20x: return .orange
-        case .business: return .teal
-        case .team: return .indigo
-        case .enterprise: return .red
-        case .edu: return .green
-        case .api: return .cyan
-        case .unknown: return .neutral
-        }
-    }
-
-    private var label: String {
-        switch tier {
-        case .free: return l10n.text(.planFree)
-        case .plus: return l10n.text(.planPlus)
-        case .pro5x: return l10n.text(.planPro5x)
-        case .pro20x: return l10n.text(.planPro20x)
-        case .business: return l10n.text(.planBusiness)
-        case .team: return l10n.text(.planTeam)
-        case .enterprise: return l10n.text(.planEnterprise)
-        case .edu: return l10n.text(.planEdu)
-        case .api: return l10n.text(.planAPI)
-        case .unknown: return l10n.text(.planUnknown)
-        }
+        SubscriptionTierBadge(
+            tier: tier,
+            label: SubscriptionTierBadge.localizedTitle(for: tier, l10n: l10n),
+            horizontalPadding: 5,
+            verticalPadding: 1)
     }
 }

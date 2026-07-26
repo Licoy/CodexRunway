@@ -73,6 +73,9 @@ struct RunwayPopoverView: View {
     private var mainContent: some View {
         PolishedScrollView(verticalPadding: 4) {
             VStack(alignment: .leading, spacing: 14) {
+                if RunwayDevFlags.showsTierBadgeGallery {
+                    DevTierBadgeGallery(l10n: l10n)
+                }
                 QuotaMetersView(
                     title: l10n.text(.quota),
                     meters: model.quotaMeters,
@@ -150,23 +153,25 @@ struct RunwayPopoverView: View {
         }
     }
 
-    /// Plan badge + email; click opens multi-account detail page.
+    /// Plan badge + identity text (same font / metal tint / glyph sheen as the tier, no capsule).
     private var accountIdentityRow: some View {
-        Button {
+        let tier = model.accountDisplay.subscriptionTier
+        return Button {
             detailPage = .accounts
             model.reloadAccountIndex()
         } label: {
-            HStack(spacing: 8) {
-                SubscriptionBadge(tier: model.accountDisplay.subscriptionTier, l10n: l10n)
-                Text(accountDisplayName)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+            HStack(spacing: 6) {
+                SubscriptionBadge(tier: tier, l10n: l10n)
+                SubscriptionTierShimmerText(
+                    tier: tier,
+                    text: accountDisplayName,
+                    truncationMode: .middle)
+                    .frame(maxWidth: 196, alignment: .leading)
+                    .layoutPriority(0)
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
-            .font(.callout)
-            .foregroundStyle(.secondary)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -262,84 +267,54 @@ private struct SubscriptionBadge: View {
     var l10n: L10n
 
     var body: some View {
-        RunwayTag(label, tone: tone)
-    }
-
-    private var tone: RunwayTagTone {
-        switch tier {
-        case .free:
-            return .gray
-        case .plus:
-            return .blue
-        case .pro5x:
-            return .purple
-        case .pro20x:
-            return .orange
-        case .business:
-            return .teal
-        case .team:
-            return .indigo
-        case .enterprise:
-            return .red
-        case .edu:
-            return .green
-        case .api:
-            return .cyan
-        case .unknown:
-            return .neutral
-        }
-    }
-
-    private var label: String {
-        switch tier {
-        case .free:
-            return l10n.text(.planFree)
-        case .plus:
-            return l10n.text(.planPlus)
-        case .pro5x:
-            return l10n.text(.planPro5x)
-        case .pro20x:
-            return l10n.text(.planPro20x)
-        case .business:
-            return l10n.text(.planBusiness)
-        case .team:
-            return l10n.text(.planTeam)
-        case .enterprise:
-            return l10n.text(.planEnterprise)
-        case .edu:
-            return l10n.text(.planEdu)
-        case .api:
-            return l10n.text(.planAPI)
-        case .unknown:
-            return l10n.text(.planUnknown)
-        }
+        SubscriptionTierBadge(
+            tier: tier,
+            label: SubscriptionTierBadge.localizedTitle(for: tier, l10n: l10n))
     }
 }
 
 /// Compact capsule under the account row: icon · label · date · optional remaining.
-private struct SubscriptionExpiryBadge: View {
+/// Soft tinted chip (not solid fill) so light mode stays calm next to metallic plan badges.
+struct SubscriptionExpiryBadge: View {
     var expiresAt: Date
     var l10n: L10n
     var now: Date = Date()
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
-        RunwayTag(tone: tone, horizontalPadding: 8) {
-            HStack(spacing: 5) {
-                Image(systemName: isExpired ? "calendar.badge.exclamationmark" : "calendar")
-                    .font(.caption2.weight(.semibold))
-                    .imageScale(.small)
-                Text(statusLabel)
-                    .font(.caption2.weight(.semibold))
+        let look = phaseLook
+        HStack(spacing: 5) {
+            Image(systemName: isExpired ? "calendar.badge.exclamationmark" : "calendar")
+                .font(.caption2.weight(.semibold))
+                .imageScale(.small)
+            Text(statusLabel)
+                .font(.caption2.weight(.semibold))
+            separator
+            Text(dateText)
+                .font(.caption2.monospacedDigit().weight(.medium))
+            if let remainingText {
                 separator
-                Text(dateText)
-                    .font(.caption2.monospacedDigit().weight(.medium))
-                if let remainingText {
-                    separator
-                    Text(remainingText)
-                        .font(.caption2.monospacedDigit())
-                }
+                Text(remainingText)
+                    .font(.caption2.monospacedDigit())
             }
         }
+        .foregroundStyle(look.foreground)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background {
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: look.fill,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing))
+        }
+        .overlay {
+            Capsule()
+                .strokeBorder(look.stroke, lineWidth: colorScheme == .light ? 1.0 : 0.85)
+        }
+        .lineLimit(1)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
     }
@@ -364,15 +339,51 @@ private struct SubscriptionExpiryBadge: View {
         return .active
     }
 
-    private var tone: RunwayTagTone {
+    private struct Look {
+        var foreground: Color
+        var fill: [Color]
+        var stroke: Color
+    }
+
+    private var phaseLook: Look {
+        let light = colorScheme == .light
         switch phase {
         case .active:
-            return .green
+            return softLook(
+                tint: Color(nsColor: .systemGreen),
+                light: light,
+                deep: Color(red: 0.08, green: 0.42, blue: 0.22))
         case .expiringSoon:
-            return .orange
+            return softLook(
+                tint: Color(nsColor: .systemOrange),
+                light: light,
+                deep: Color(red: 0.62, green: 0.32, blue: 0.04))
         case .expired:
-            return .red
+            return softLook(
+                tint: Color(nsColor: .systemRed),
+                light: light,
+                deep: Color(red: 0.58, green: 0.10, blue: 0.12))
         }
+    }
+
+    /// Soft wash + tinted label (light); translucent tint chip (dark). Avoids solid “paint blob” fills.
+    private func softLook(tint: Color, light: Bool, deep: Color) -> Look {
+        if light {
+            return Look(
+                foreground: deep,
+                fill: [
+                    tint.opacity(0.14),
+                    tint.opacity(0.08),
+                ],
+                stroke: tint.opacity(0.34))
+        }
+        return Look(
+            foreground: tint,
+            fill: [
+                tint.opacity(0.28),
+                tint.opacity(0.16),
+            ],
+            stroke: tint.opacity(0.42))
     }
 
     private var statusLabel: String {

@@ -6,6 +6,10 @@ if CommandLine.arguments.contains("--self-check") {
     exit(0)
 }
 
+// Dev helper: `--dev-tier-badges` (or CODEX_RUNWAY_DEV_TIER_BADGES=1) shows every
+// subscription tier capsule + expiry phase chips in the main popover. Example:
+//   swift run CodexRunway -- --dev-tier-badges
+
 // Dev helper: render the rate-limit-reset card with mock data to a PNG.
 // Example: CodexRunway --render-reset-today-mock=yes-countdown /tmp/reset-yes.png
 if let renderIndex = CommandLine.arguments.firstIndex(where: { $0.hasPrefix("--render-reset-today-mock=") }) {
