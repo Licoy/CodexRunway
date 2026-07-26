@@ -48,9 +48,16 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
         Coordinator()
     }
 
+    /// The nested NSHostingView is a separate SwiftUI root: custom environment keys do
+    /// not cross it, so the panel-visibility flag that pauses shimmer timelines must be
+    /// re-injected from the outer tree.
+    private func rootView(_ context: Context) -> AnyView {
+        AnyView(content.environment(\.runwayPanelVisible, context.environment.runwayPanelVisible))
+    }
+
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = SizingScrollView()
-        let hostingView = NSHostingView(rootView: AnyView(content))
+        let hostingView = NSHostingView(rootView: rootView(context))
         hostingView.isFlipped = true
 
         scrollView.borderType = .noBorder
@@ -71,8 +78,14 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let hostingView = scrollView.documentView as? NSHostingView<AnyView> else { return }
-        hostingView.rootView = AnyView(content)
-        resize(hostingView, in: scrollView, coordinator: context.coordinator, force: true)
+        hostingView.rootView = rootView(context)
+        // Model refreshes publish in bursts; a full height probe costs several layout
+        // passes of the whole panel, so coalesce probes instead of paying one per publish.
+        let coordinator = context.coordinator
+        coordinator.throttleProbe { [weak scrollView, weak hostingView] in
+            guard let scrollView, let hostingView else { return }
+            resize(hostingView, in: scrollView, coordinator: coordinator, force: true)
+        }
     }
 
     private func resize(
@@ -108,9 +121,36 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
         coordinator.lastHeight = height
     }
 
+    @MainActor
     final class Coordinator {
         var lastWidth: CGFloat = 0
         var lastHeight: CGFloat = 0
+
+        private let probeInterval: TimeInterval = 0.1
+        private var lastProbeAt: Date?
+        private var pendingProbe: (() -> Void)?
+
+        /// Leading + trailing throttle: probe immediately when idle, and collapse a
+        /// publish burst into a single trailing probe.
+        func throttleProbe(_ probe: @escaping () -> Void) {
+            let now = Date()
+            if let lastProbeAt, now.timeIntervalSince(lastProbeAt) < probeInterval {
+                let alreadyScheduled = pendingProbe != nil
+                pendingProbe = probe
+                guard !alreadyScheduled else { return }
+                let delay = probeInterval - now.timeIntervalSince(lastProbeAt)
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: UInt64(max(0, delay) * 1_000_000_000))
+                    self.lastProbeAt = Date()
+                    let pending = self.pendingProbe
+                    self.pendingProbe = nil
+                    pending?()
+                }
+                return
+            }
+            lastProbeAt = now
+            probe()
+        }
     }
 }
 

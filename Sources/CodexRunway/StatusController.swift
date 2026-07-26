@@ -50,7 +50,8 @@ final class StatusController: NSObject, NSPopoverDelegate {
         popover.animates = false
         popover.delegate = self
         popover.contentSize = NSSize(width: 390, height: 560)
-        popover.contentViewController = NSHostingController(rootView: popoverRootView())
+        // No hosting yet: showPopover builds a fresh tree per open, and while hidden no
+        // SwiftUI tree stays alive subscribed to model publishes.
         resignActiveObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didResignActiveNotification,
             object: nil,
@@ -62,11 +63,14 @@ final class StatusController: NSObject, NSPopoverDelegate {
             }
         }
         installEventMonitor()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        let tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.tick()
             }
         }
+        // Menu-bar text is minute-granular; tolerance lets the system coalesce wakeups.
+        tickTimer.tolerance = 0.2
+        timer = tickTimer
         beginFullRefresh(policy: .ifChanged)
     }
 
@@ -132,18 +136,28 @@ final class StatusController: NSObject, NSPopoverDelegate {
             appearance = NSAppearance(named: .darkAqua)
         }
         NSApp.appearance = appearance
-        popover.contentViewController?.view.window?.appearance = appearance
+        // loadedPopoverWindow: touching .view would force-load a hidden hosting tree.
+        loadedPopoverWindow?.appearance = appearance
         detailsWindow?.appearance = appearance
         controlPanelWindow?.appearance = appearance
     }
 
     private func rebuildHostedViews() {
         let wasVisible = isMainPanelVisible
-        // Settings change: replace hosting, keep visibility if the panel is still open.
-        popover.contentViewController = NSHostingController(rootView: popoverRootView())
+        // Settings change: rebuild hosting in place when visible; when hidden just drop
+        // the trees — the next open builds fresh ones.
+        if popover.isShown {
+            popover.contentViewController = NSHostingController(rootView: popoverRootView())
+        } else {
+            popover.contentViewController = nil
+        }
         if let detailsWindow {
-            detailsWindow.contentViewController = NSHostingController(rootView: popoverRootView())
-            detailsWindow.title = "Codex Runway"
+            if detailsWindow.isVisible {
+                detailsWindow.contentViewController = NSHostingController(rootView: popoverRootView())
+                detailsWindow.title = "Codex Runway"
+            } else {
+                detailsWindow.contentViewController = nil
+            }
         }
         mainPanelVisibility.isVisible = wasVisible
         if let controlPanelWindow {
@@ -186,8 +200,15 @@ final class StatusController: NSObject, NSPopoverDelegate {
         popover.isShown || (detailsWindow?.isVisible == true)
     }
 
+    /// Window of the popover content without force-loading a hidden hosting tree
+    /// (`viewIfLoaded` needs macOS 14; `isViewLoaded` covers the 12.0 floor).
+    private var loadedPopoverWindow: NSWindow? {
+        guard let controller = popover.contentViewController, controller.isViewLoaded else { return nil }
+        return controller.view.window
+    }
+
     private func closeMainPanel() {
-        // Always destroy sheets first, then hide hosts, then rebuild hosting so the
+        // Always destroy sheets first, then hide hosts, then drop hosting so the
         // next open never reuses a half-dismissed SwiftUI presentation.
         closePopover()
         closeDetailsWindow()
@@ -196,12 +217,17 @@ final class StatusController: NSObject, NSPopoverDelegate {
     private func showPopover() {
         guard let button = statusItem.button else { return }
         NSApp.activate(ignoringOtherApps: true)
+        // Visible before show so the first frame already renders with shimmer unpaused;
+        // fresh hosting per open (dropped on close) keeps presentation state clean.
+        mainPanelVisibility.isVisible = true
+        if popover.contentViewController == nil {
+            popover.contentViewController = NSHostingController(rootView: popoverRootView())
+        }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         if !popover.isShown {
             showDetailsWindow()
             return
         }
-        mainPanelVisibility.isVisible = true
         applyAppearance()
         // Key focus for active controls; safe with applicationDefined + custom dismiss.
         focusPopoverWindow()
@@ -214,7 +240,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
     }
 
     private func focusPopoverWindow() {
-        guard popover.isShown, let window = popover.contentViewController?.view.window else { return }
+        guard popover.isShown, let window = loadedPopoverWindow else { return }
         if !NSApp.isActive {
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -274,7 +300,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
     }
 
     private func eventHitsPopover(_ event: NSEvent) -> Bool {
-        guard let popoverWindow = popover.contentViewController?.view.window else { return false }
+        guard let popoverWindow = loadedPopoverWindow else { return false }
         if eventBelongsToWindowFamily(event.window, root: popoverWindow) { return true }
         // Global monitors may not attach event.window; fall back to screen coordinates.
         let screenPoint = NSEvent.mouseLocation
@@ -316,17 +342,17 @@ final class StatusController: NSObject, NSPopoverDelegate {
         }
     }
 
-    /// After the main panel is hidden: destroy sheets and rebuild hosting so the next
-    /// open never reuses half-dismissed SwiftUI presentation state (e.g. account switch sheet).
+    /// After the main panel is hidden: destroy sheets and drop the hosted trees. The
+    /// next open builds a fresh tree, so it can never reuse half-dismissed SwiftUI
+    /// presentation state (e.g. account switch sheet) — and while hidden no tree stays
+    /// alive subscribed to model publishes (assigning a controller to the hidden
+    /// details window would load it immediately and keep it re-rendering off screen).
     private func destroyMainPanelPresentation() {
-        dismissPresentedSheets(on: popover.contentViewController?.view.window)
+        dismissPresentedSheets(on: loadedPopoverWindow)
         dismissPresentedSheets(on: detailsWindow)
         mainPanelVisibility.isVisible = false
-        popover.contentViewController = NSHostingController(rootView: popoverRootView())
-        if let detailsWindow {
-            detailsWindow.contentViewController = NSHostingController(rootView: popoverRootView())
-            detailsWindow.title = "Codex Runway"
-        }
+        popover.contentViewController = nil
+        detailsWindow?.contentViewController = nil
     }
 
     private func eventHitsStatusButtonScreen(_ event: NSEvent) -> Bool {
@@ -342,12 +368,15 @@ final class StatusController: NSObject, NSPopoverDelegate {
 
     private func closePopover() {
         guard popover.isShown else { return }
-        // Destroy confirm sheet before hiding the host, then rebuild in popoverDidClose.
-        dismissPresentedSheets(on: popover.contentViewController?.view.window)
+        // Destroy confirm sheet before hiding the host, then tear down in popoverDidClose.
+        dismissPresentedSheets(on: loadedPopoverWindow)
         mainPanelVisibility.isVisible = false
         popover.performClose(nil)
         if popover.isShown {
-            // performClose can no-op; still tear down monitors and presentation.
+            // performClose can no-op; force close so the delegate teardown still runs.
+            popover.close()
+        }
+        if popover.isShown {
             stopPopoverCloseMonitors()
             destroyMainPanelPresentation()
         }

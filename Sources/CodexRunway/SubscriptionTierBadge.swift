@@ -349,43 +349,60 @@ struct SubscriptionTierShimmerText: View {
         .accessibilityLabel(text)
     }
 
-    /// Moves a bright band through the gradient along TL → BR.
+    /// Static metal gradient text with a bright band sweeping across it via a masked
+    /// overlay: glyphs rasterize once, and each animation frame is only a transform of
+    /// the small band (per-frame gradient `foregroundStyle` re-rasterizes the glyphs).
     private func flowingGradientLabel(colors: [Color]) -> some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: !panelVisible)) { context in
-            let cycle = 2.4
-            let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: cycle) / cycle
-            // Sweep gradient anchors diagonally across the glyphs.
-            let start = UnitPoint(x: -0.6 + t * 1.9, y: -0.6 + t * 1.9)
-            let end = UnitPoint(x: -0.05 + t * 1.9, y: -0.05 + t * 1.9)
-            let band = flowingTextColors(base: colors)
-            Text(text)
-                .font(font)
-                .lineLimit(1)
-                .truncationMode(truncationMode)
-                .foregroundStyle(
-                    LinearGradient(colors: band, startPoint: start, endPoint: end))
-        }
+        let peak = sheenPeak(in: colors)
+        return styledLabel
+            .foregroundStyle(
+                LinearGradient(
+                    colors: colors,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing))
+            .overlay {
+                GeometryReader { proxy in
+                    let width = max(proxy.size.width, 1)
+                    let height = max(proxy.size.height, 1)
+                    let bandWidth = max(24, width * 0.3)
+                    TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !panelVisible)) { context in
+                        let cycle = 2.4
+                        let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: cycle) / cycle
+                        // Travel with overshoot so the tilted band fully enters/exits.
+                        let travel = width + bandWidth * 2
+                        LinearGradient(
+                            colors: [
+                                peak.opacity(0),
+                                peak.opacity(0.85),
+                                peak.opacity(0),
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing)
+                            .frame(width: bandWidth, height: height * 2.5)
+                            .rotationEffect(.degrees(24))
+                            .offset(x: -bandWidth + CGFloat(t) * travel, y: -height * 0.75)
+                    }
+                }
+                .mask(styledLabel)
+                .allowsHitTesting(false)
+            }
     }
 
-    /// Insert a brighter mid peak so the moving gradient reads as metal sheen, not washout.
-    private func flowingTextColors(base: [Color]) -> [Color] {
-        guard let first = base.first, let last = base.last else { return base }
-        let mid = base.count > 1 ? base[base.count / 2] : first
-        // Light mode: peak stays within the metal palette (pure white washes out on light UI).
-        // Dark mode: a short white peak sells the sheen without killing contrast.
-        let peak: Color
+    /// Shared glyph styling for the visible label and the sheen mask (must match exactly).
+    private var styledLabel: some View {
+        Text(text)
+            .font(font)
+            .lineLimit(1)
+            .truncationMode(truncationMode)
+    }
+
+    /// Light mode: peak stays within the metal palette (pure white washes out on light UI).
+    /// Dark mode: a short white peak sells the sheen without killing contrast.
+    private func sheenPeak(in colors: [Color]) -> Color {
         if colorScheme == .light {
-            peak = base.count >= 3 ? base[2] : mid
-        } else {
-            peak = .white
+            return colors.count >= 3 ? colors[2] : (colors.first ?? .white)
         }
-        return [
-            first,
-            mid,
-            peak,
-            mid,
-            last,
-        ]
+        return .white
     }
 }
 
@@ -403,27 +420,32 @@ private struct SubscriptionTierFlowingSheen: View {
             let bandLength = max(height, width) * 2.4
             // Path angle of the host diagonal (TL → BR).
             let pathDegrees = Double(atan2(height, width)) * 180 / .pi
-            TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: !panelVisible)) { context in
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !panelVisible)) { context in
                 let cycle = 2.25
                 let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: cycle) / cycle
                 // Parametric travel along TL → BR, with overshoot so the band fully enters/exits.
                 let margin = max(bandWidth, height) * 1.15
                 let x = -margin + CGFloat(t) * (width + margin * 2)
                 let y = -margin + CGFloat(t) * (height + margin * 2)
-                LinearGradient(
-                    colors: [
-                        color.opacity(0),
-                        color.opacity(0.28),
-                        color,
-                        color.opacity(0.28),
-                        color.opacity(0),
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing)
-                    .frame(width: bandWidth, height: bandLength)
-                    // Align the band so its thin axis follows the TL→BR path.
-                    .rotationEffect(.degrees(pathDegrees))
-                    .position(x: x, y: y)
+                ZStack {
+                    LinearGradient(
+                        colors: [
+                            color.opacity(0),
+                            color.opacity(0.28),
+                            color,
+                            color.opacity(0.28),
+                            color.opacity(0),
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing)
+                        .frame(width: bandWidth, height: bandLength)
+                        // Align the band so its thin axis follows the TL→BR path.
+                        .rotationEffect(.degrees(pathDegrees))
+                        // Translate from center via `.offset`: `.position` is a layout
+                        // modifier and would relayout the subtree every frame.
+                        .offset(x: x - width / 2, y: y - height / 2)
+                }
+                .frame(width: width, height: height)
             }
         }
         .allowsHitTesting(false)
