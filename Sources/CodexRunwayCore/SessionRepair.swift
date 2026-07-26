@@ -29,9 +29,11 @@ public struct SessionRepairService: Sendable {
             .filter { $0.value.count > 1 }
             .keys
             .sorted()
+        // Single dictionary pass: `first(where:)` per session made this O(sessions × index).
+        let indexEntryByID = Dictionary(index.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let stale = sessions.filter { session in
-            index.first(where: { $0.id == session.id })?.threadName != nil
-                && index.first(where: { $0.id == session.id })?.threadName != session.threadName
+            guard let indexTitle = indexEntryByID[session.id]?.threadName else { return false }
+            return indexTitle != session.threadName
         }.map(\.id).sorted()
         return SessionRepairReport(
             missingIndexIDs: sessionIDs.subtracting(indexSet).sorted(),

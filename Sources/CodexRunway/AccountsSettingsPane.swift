@@ -155,7 +155,7 @@ struct AccountsSettingsPane: View {
                             .font(.body.weight(.semibold))
                             .lineLimit(1)
                         if account.id == model.activeAccountId {
-                            RunwayTag(l10n.text(.accountsCurrent), tone: .green)
+                            CurrentAccountTag(l10n: l10n)
                         }
                         SubscriptionTierTag(tier: account.subscriptionTier, l10n: l10n)
                     }

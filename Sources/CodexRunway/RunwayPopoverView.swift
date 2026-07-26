@@ -11,6 +11,8 @@ struct RunwayPopoverRootView: View {
     var checkForUpdates: () -> Void
     var openGitHub: () -> Void
     var openControlPanel: (ControlPanelTab) -> Void
+    /// Dev mock renders only: start on a detail page instead of the summary.
+    var initialDetailPage: RunwaySidePanel? = nil
 
     var body: some View {
         RunwayPopoverView(
@@ -18,12 +20,15 @@ struct RunwayPopoverRootView: View {
             settings: settings,
             checkForUpdates: checkForUpdates,
             openGitHub: openGitHub,
-            openControlPanel: openControlPanel)
+            openControlPanel: openControlPanel,
+            initialDetailPage: initialDetailPage)
             .environment(\.runwayPanelVisible, mainPanelVisibility.isVisible)
     }
 }
 
 struct RunwayPopoverView: View {
+    static let panelSize = CGSize(width: 400, height: 584)
+
     @ObservedObject var model: RunwayModel
     @ObservedObject var settings: RunwaySettings
     var checkForUpdates: () -> Void
@@ -35,10 +40,40 @@ struct RunwayPopoverView: View {
     @State private var apiCostDetailRange = ApiCostSummaryRange.today
     private var l10n: L10n { settings.l10n }
 
+    init(
+        model: RunwayModel,
+        settings: RunwaySettings,
+        checkForUpdates: @escaping () -> Void,
+        openGitHub: @escaping () -> Void,
+        openControlPanel: @escaping (ControlPanelTab) -> Void,
+        initialDetailPage: RunwaySidePanel? = nil)
+    {
+        self.model = model
+        self.settings = settings
+        self.checkForUpdates = checkForUpdates
+        self.openGitHub = openGitHub
+        self.openControlPanel = openControlPanel
+        _detailPage = State(initialValue: initialDetailPage)
+        // Mock renders land on the api-cost page without a user tap; current-cycle
+        // is the only range whose data is seeded on the model.
+        if initialDetailPage == .apiCost {
+            _apiCostDetailRange = State(initialValue: .current)
+        }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            detailPage == nil ? AnyView(header) : AnyView(detailHeader)
-            Divider()
+        VStack(alignment: .leading, spacing: 0) {
+            Group {
+                if detailPage == nil {
+                    header
+                } else {
+                    detailHeader
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+            RunwayHairline()
             if let detailPage {
                 DetailPageView(
                     page: detailPage,
@@ -48,19 +83,29 @@ struct RunwayPopoverView: View {
                     onAddAccount: {
                         openControlPanel(.accounts)
                     })
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
             } else {
                 mainContent
-                if let message = model.accountOperationMessage {
-                    Text(message).font(.caption).foregroundStyle(.secondary)
+                    .padding(.horizontal, 16)
+                if model.accountOperationMessage != nil || model.lastError != nil {
+                    VStack(alignment: .leading, spacing: 3) {
+                        if let message = model.accountOperationMessage {
+                            Text(message).font(.caption).foregroundStyle(.secondary)
+                        }
+                        if let error = model.lastError {
+                            Text(error).font(.caption).foregroundStyle(Color(nsColor: .systemRed))
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 6)
                 }
-                if let error = model.lastError {
-                    Text(error).font(.caption).foregroundStyle(.red)
-                }
+                RunwayHairline()
                 footer
             }
         }
-        .padding(16)
-        .frame(width: 390, height: 560, alignment: .topLeading)
+        .frame(width: Self.panelSize.width, height: Self.panelSize.height, alignment: .topLeading)
         .preferredColorScheme(settings.colorScheme)
         .alert(l10n.text(.repairConfirmTitle), isPresented: $confirmRepair) {
             Button(l10n.text(.repair), role: .destructive) { model.repairSessions() }
@@ -72,110 +117,123 @@ struct RunwayPopoverView: View {
 
     private var mainContent: some View {
         PolishedScrollView(verticalPadding: 4) {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 if RunwayDevFlags.showsTierBadgeGallery {
-                    DevTierBadgeGallery(l10n: l10n)
+                    sectionBlock(isFirst: true) {
+                        DevTierBadgeGallery(l10n: l10n)
+                    }
                 }
-                QuotaMetersView(
-                    title: l10n.text(.quota),
-                    meters: model.quotaMeters,
-                    l10n: l10n,
-                    isRefreshing: model.isRefreshing(.quota),
-                    onRefresh: { model.refreshQuota() })
+                sectionBlock(isFirst: !RunwayDevFlags.showsTierBadgeGallery) {
+                    QuotaMetersView(
+                        title: l10n.text(.quota),
+                        meters: model.quotaMeters,
+                        l10n: l10n,
+                        isRefreshing: model.isRefreshing(.quota),
+                        onRefresh: { model.refreshQuota() })
+                }
                 if settings.preferences.showsRateLimitResetToday {
-                    RateLimitResetTodayView(
-                        snapshot: model.rateLimitResetToday,
-                        l10n: l10n,
-                        isRefreshing: model.isRefreshing(.rateLimitResetToday),
-                        onRefresh: { model.refreshRateLimitResetToday(force: true) },
-                        onOpenSource: {
-                            ExternalURLLauncher.open(RateLimitResetTodayClient.siteURL)
-                        },
-                        onOpenTweet: { url in
-                            ExternalURLLauncher.open(url)
-                        })
+                    sectionBlock {
+                        RateLimitResetTodayView(
+                            snapshot: model.rateLimitResetToday,
+                            l10n: l10n,
+                            isRefreshing: model.isRefreshing(.rateLimitResetToday),
+                            onRefresh: { model.refreshRateLimitResetToday(force: true) },
+                            onOpenSource: {
+                                ExternalURLLauncher.open(RateLimitResetTodayClient.siteURL)
+                            },
+                            onOpenTweet: { url in
+                                ExternalURLLauncher.open(url)
+                            })
+                    }
                 }
-                ResetCreditsSummaryView(
-                    summary: model.resetCreditSummary,
-                    l10n: l10n,
-                    isRefreshing: model.isRefreshing(.resetCredits),
-                    onRefresh: { model.refreshResetCredits() },
-                    onDetailsSelect: { detailPage = .resetCredits })
-                if settings.preferences.showsCostSummary {
-                    CostSummaryView(
-                        text: model.costText,
-                        subtitle: model.costSubtitle,
+                sectionBlock {
+                    ResetCreditsSummaryView(
+                        summary: model.resetCreditSummary,
                         l10n: l10n,
-                        isRefreshing: model.isRefreshing(.apiCost),
-                        onRefresh: { model.refreshCost() },
-                        onDetailsSelect: {
-                            apiCostDetailRange = settings.preferences.apiCostSummaryRange
-                            detailPage = .apiCost
-                        })
+                        isRefreshing: model.isRefreshing(.resetCredits),
+                        onRefresh: { model.refreshResetCredits() },
+                        onDetailsSelect: { detailPage = .resetCredits })
+                }
+                if settings.preferences.showsCostSummary {
+                    sectionBlock {
+                        CostSummaryView(
+                            text: model.costText,
+                            subtitle: model.costSubtitle,
+                            l10n: l10n,
+                            isRefreshing: model.isRefreshing(.apiCost),
+                            onRefresh: { model.refreshCost() },
+                            onDetailsSelect: {
+                                apiCostDetailRange = settings.preferences.apiCostSummaryRange
+                                detailPage = .apiCost
+                            })
+                    }
                 }
                 if settings.preferences.showsSessionRepairSummary {
-                    sessionSummary
+                    sectionBlock {
+                        sessionSummary
+                    }
                 }
                 if settings.preferences.showsRecentSessions {
-                    RecentSessionsView(
-                        sessions: model.recentSessions,
-                        l10n: l10n,
-                        isRefreshing: model.isRefreshing(.recentSessions),
-                        onRefresh: { model.refreshRecentSessions() })
+                    sectionBlock {
+                        RecentSessionsView(
+                            sessions: model.recentSessions,
+                            l10n: l10n,
+                            isRefreshing: model.isRefreshing(.recentSessions),
+                            onRefresh: { model.refreshRecentSessions() })
+                    }
                 }
             }
         }
+    }
+
+    /// Ruled section rhythm: an inset hairline above every section except the first.
+    @ViewBuilder
+    private func sectionBlock<Content: View>(
+        isFirst: Bool = false,
+        @ViewBuilder content: () -> Content) -> some View
+    {
+        if !isFirst {
+            RunwayHairline()
+        }
+        content()
+            .padding(.top, isFirst ? 8 : 16)
+            .padding(.bottom, 16)
     }
 
     private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Codex Runway").font(.title3.bold())
-                accountIdentityRow
-                if let expiresAt = model.accountDisplay.subscriptionExpiresAt {
-                    SubscriptionExpiryBadge(expiresAt: expiresAt, l10n: l10n)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 8) {
+                Text("Codex Runway")
+                    .font(.title3.weight(.semibold))
+                Spacer(minLength: 8)
+                HStack(spacing: 2) {
+                    HeaderActionButton(title: l10n.text(.checkForUpdates), action: checkForUpdates) {
+                        BootstrapIconImage(.cloudArrowDown)
+                    }
+                    HeaderActionButton(title: "GitHub", action: openGitHub) {
+                        BootstrapIconImage(.github)
+                    }
+                    HeaderActionButton(title: l10n.text(.refresh), isLoading: model.isRefreshing) {
+                        model.refresh()
+                    } icon: {
+                        Image(systemName: "arrow.clockwise")
+                    }
                 }
             }
-            Spacer(minLength: 8)
-            HStack(spacing: 10) {
-                HeaderActionButton(title: l10n.text(.checkForUpdates), action: checkForUpdates) {
-                    BootstrapIconImage(.cloudArrowDown)
-                }
-                HeaderActionButton(title: "GitHub", action: openGitHub) {
-                    BootstrapIconImage(.github)
-                }
-                HeaderActionButton(title: l10n.text(.refresh)) {
-                    model.refresh()
-                } icon: {
-                    Image(systemName: model.isRefreshingAll ? "hourglass" : "arrow.clockwise")
-                }
+            AccountIdentityRow(
+                tier: model.accountDisplay.subscriptionTier,
+                displayName: accountDisplayName,
+                l10n: l10n)
+            {
+                detailPage = .accounts
+                model.reloadAccountIndex()
+            }
+            .padding(.top, 10)
+            if let expiresAt = model.accountDisplay.subscriptionExpiresAt {
+                SubscriptionExpiryBadge(expiresAt: expiresAt, l10n: l10n)
+                    .padding(.top, 6)
             }
         }
-    }
-
-    /// Plan badge + identity text (same font / metal tint / glyph sheen as the tier, no capsule).
-    private var accountIdentityRow: some View {
-        let tier = model.accountDisplay.subscriptionTier
-        return Button {
-            detailPage = .accounts
-            model.reloadAccountIndex()
-        } label: {
-            HStack(spacing: 6) {
-                SubscriptionBadge(tier: tier, l10n: l10n)
-                SubscriptionTierShimmerText(
-                    tier: tier,
-                    text: accountDisplayName,
-                    truncationMode: .middle)
-                    .frame(maxWidth: 196, alignment: .leading)
-                    .layoutPriority(0)
-                Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(l10n.text(.accounts))
     }
 
     private var accountDisplayName: String {
@@ -186,21 +244,13 @@ struct RunwayPopoverView: View {
     }
 
     private var detailHeader: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(detailTitle(detailPage))
-                    .font(.title3.bold())
-                Text("Codex Runway")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button {
+        HStack(alignment: .center, spacing: 8) {
+            DetailBackButton(title: l10n.text(.back)) {
                 detailPage = nil
-            } label: {
-                Label(l10n.text(.back), systemImage: "chevron.left")
             }
-            .buttonStyle(.borderless)
+            Text(detailTitle(detailPage))
+                .font(.title3.weight(.semibold))
+            Spacer(minLength: 0)
         }
     }
 
@@ -221,44 +271,54 @@ struct RunwayPopoverView: View {
         VStack(alignment: .leading, spacing: 8) {
             RefreshableSectionHeader(
                 title: l10n.text(.sessionRepair),
-                systemImage: "wrench.and.screwdriver",
                 l10n: l10n,
                 isRefreshing: model.isRefreshing(.sessionRepair),
                 onRefresh: { model.refreshSessionReport() })
             Text(model.isRefreshing(.sessionRepair) && model.sessionLines.isEmpty ? l10n.text(.calculating) : model.sessionText)
-                .font(.callout)
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
-            Button { confirmRepair = true } label: {
-                HStack {
-                    Label(l10n.text(.repairIndex), systemImage: "cross.case")
-                    Spacer()
-                }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 10)
-                .background(RunwaySurface.fill, in: RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
-                .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
+            SidePanelDisclosureRow(
+                title: l10n.text(.repairIndex),
+                systemImage: "cross.case",
+                showsChevron: false)
+            {
+                confirmRepair = true
             }
-            .buttonStyle(.plain)
         }
     }
 
     private var footer: some View {
         HStack {
-            Button {
+            FooterGhostButton(
+                title: l10n.text(.settings),
+                systemImage: "slider.horizontal.3",
+                role: .normal,
+                help: l10n.text(.openControlPanel))
+            {
                 openControlPanel(.general)
-            } label: {
-                Label(l10n.text(.settings), systemImage: "slider.horizontal.3")
             }
-            .help(l10n.text(.openControlPanel))
             Spacer()
-            Button {
+            FooterGhostButton(
+                title: l10n.text(.quit),
+                systemImage: "power",
+                role: .destructive,
+                help: l10n.text(.quit))
+            {
                 NSApplication.shared.terminate(nil)
-            } label: {
-                Label(l10n.text(.quit), systemImage: "power")
             }
         }
-        .buttonStyle(.bordered)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+}
+
+/// 1pt hairline rule in the shared stroke token.
+struct RunwayHairline: View {
+    var body: some View {
+        Rectangle()
+            .fill(RunwaySurface.hairline)
+            .frame(height: 1)
     }
 }
 
@@ -273,8 +333,48 @@ private struct SubscriptionBadge: View {
     }
 }
 
-/// Compact capsule under the account row: icon · label · date · optional remaining.
-/// Soft tinted chip (not solid fill) so light mode stays calm next to metallic plan badges.
+/// Header identity row: tier plate + metallic identity text, one hover pill.
+private struct AccountIdentityRow: View {
+    var tier: CodexSubscriptionTier
+    var displayName: String
+    var l10n: L10n
+    var action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                SubscriptionBadge(tier: tier, l10n: l10n)
+                SubscriptionTierShimmerText(
+                    tier: tier,
+                    text: displayName,
+                    truncationMode: .middle)
+                    .frame(maxWidth: 200, alignment: .leading)
+                    .layoutPriority(0)
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(
+                isHovered ? RunwaySurface.hoverNeutral : Color.clear,
+                in: RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+            // Negative inset keeps the badge on the 16pt grid while the pill breathes.
+            .padding(.horizontal, -6)
+            .animation(.easeOut(duration: 0.12), value: isHovered)
+        }
+        .buttonStyle(.plain)
+        .help(l10n.text(.accounts))
+        .pointingHandCursor()
+        .onHover { isHovered = $0 }
+    }
+}
+
+/// Two-segment "boarding pass" chip: tinted status segment with a countdown ring,
+/// neutral mono-digit data segment. Static — the tier badge carries the motion.
 struct SubscriptionExpiryBadge: View {
     var expiresAt: Date
     var l10n: L10n
@@ -282,41 +382,78 @@ struct SubscriptionExpiryBadge: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
+    private var plate: RoundedRectangle {
+        RoundedRectangle(cornerRadius: RunwaySurface.radiusPlate, style: .continuous)
+    }
+
     var body: some View {
         let look = phaseLook
-        HStack(spacing: 5) {
-            Image(systemName: isExpired ? "calendar.badge.exclamationmark" : "calendar")
-                .font(.caption2.weight(.semibold))
-                .imageScale(.small)
-            Text(statusLabel)
-                .font(.caption2.weight(.semibold))
-            separator
-            Text(dateText)
-                .font(.caption2.monospacedDigit().weight(.medium))
-            if let remainingText {
-                separator
-                Text(remainingText)
-                    .font(.caption2.monospacedDigit())
+        HStack(spacing: 0) {
+            HStack(spacing: 5) {
+                if isExpired {
+                    Image(systemName: "calendar.badge.exclamationmark")
+                        .font(.caption2.weight(.semibold))
+                        .imageScale(.small)
+                } else {
+                    countdownRing(tint: look.ring)
+                }
+                Text(statusLabel)
+                    .font(.caption2.weight(.semibold))
             }
+            .foregroundStyle(look.statusForeground)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .frame(maxHeight: .infinity)
+            .background(look.statusFill)
+
+            Rectangle()
+                .fill(look.stroke.opacity(0.5))
+                .frame(width: 1)
+
+            HStack(spacing: 4) {
+                Text(dateText)
+                    .font(.caption2.monospacedDigit().weight(.medium))
+                if let remainingText {
+                    Text("·")
+                        .font(.caption2.weight(.semibold))
+                        .opacity(0.45)
+                    Text(remainingText)
+                        .font(.caption2.monospacedDigit().weight(.medium))
+                }
+            }
+            .foregroundStyle(dataForeground)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .frame(maxHeight: .infinity)
+            .background(RunwaySurface.sunken)
         }
-        .foregroundStyle(look.foreground)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background {
-            Capsule()
-                .fill(
-                    LinearGradient(
-                        colors: look.fill,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing))
-        }
+        .fixedSize()
+        .clipShape(plate)
         .overlay {
-            Capsule()
-                .strokeBorder(look.stroke, lineWidth: colorScheme == .light ? 1.0 : 0.85)
+            plate.strokeBorder(look.stroke, lineWidth: 1)
         }
         .lineLimit(1)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
+    }
+
+    /// Remaining fraction of a 30-day reference window (billing month), drawn as a
+    /// tiny progress ring. Static per render — no animation.
+    private func countdownRing(tint: Color) -> some View {
+        let fraction = max(0, min(1, remainingSeconds / (30 * 24 * 3_600)))
+        return ZStack {
+            Circle()
+                .stroke(tint.opacity(0.25), lineWidth: 2)
+            Circle()
+                .trim(from: 0, to: fraction)
+                .stroke(tint, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: 11, height: 11)
+    }
+
+    private var remainingSeconds: TimeInterval {
+        max(0, SubscriptionDateFormatter.endOfLocalDay(expiresAt).timeIntervalSince(now))
     }
 
     /// Still active through the expiry calendar day in the local timezone.
@@ -332,16 +469,16 @@ struct SubscriptionExpiryBadge: View {
 
     private var phase: Phase {
         if isExpired { return .expired }
-        let endOfDay = SubscriptionDateFormatter.endOfLocalDay(expiresAt)
-        if endOfDay.timeIntervalSince(now) <= 7 * 24 * 3_600 {
+        if remainingSeconds <= 7 * 24 * 3_600 {
             return .expiringSoon
         }
         return .active
     }
 
     private struct Look {
-        var foreground: Color
-        var fill: [Color]
+        var ring: Color
+        var statusForeground: Color
+        var statusFill: Color
         var stroke: Color
     }
 
@@ -349,41 +486,32 @@ struct SubscriptionExpiryBadge: View {
         let light = colorScheme == .light
         switch phase {
         case .active:
-            return softLook(
-                tint: Color(nsColor: .systemGreen),
-                light: light,
-                deep: Color(red: 0.08, green: 0.42, blue: 0.22))
+            let tint = Color(nsColor: .systemGreen)
+            return Look(
+                ring: light ? Color(red: 0.10, green: 0.52, blue: 0.28) : tint,
+                statusForeground: light ? Color(red: 0.08, green: 0.42, blue: 0.22) : tint,
+                statusFill: tint.opacity(light ? 0.16 : 0.26),
+                stroke: tint.opacity(light ? 0.35 : 0.42))
         case .expiringSoon:
-            return softLook(
-                tint: Color(nsColor: .systemOrange),
-                light: light,
-                deep: Color(red: 0.62, green: 0.32, blue: 0.04))
+            let tint = Color(nsColor: .systemOrange)
+            return Look(
+                ring: light ? Color(red: 0.72, green: 0.38, blue: 0.05) : tint,
+                statusForeground: light ? Color(red: 0.62, green: 0.32, blue: 0.04) : tint,
+                statusFill: tint.opacity(light ? 0.18 : 0.26),
+                stroke: tint.opacity(light ? 0.40 : 0.46))
         case .expired:
-            return softLook(
-                tint: Color(nsColor: .systemRed),
-                light: light,
-                deep: Color(red: 0.58, green: 0.10, blue: 0.12))
+            let tint = Color(nsColor: .systemRed)
+            return Look(
+                ring: tint,
+                statusForeground: light ? .white : Color(red: 1.0, green: 0.80, blue: 0.80),
+                // Solid alarm fill deep enough for white AA text in light mode.
+                statusFill: light ? Color(red: 0.78, green: 0.13, blue: 0.11) : tint.opacity(0.42),
+                stroke: tint.opacity(0.55))
         }
     }
 
-    /// Soft wash + tinted label (light); translucent tint chip (dark). Avoids solid “paint blob” fills.
-    private func softLook(tint: Color, light: Bool, deep: Color) -> Look {
-        if light {
-            return Look(
-                foreground: deep,
-                fill: [
-                    tint.opacity(0.14),
-                    tint.opacity(0.08),
-                ],
-                stroke: tint.opacity(0.34))
-        }
-        return Look(
-            foreground: tint,
-            fill: [
-                tint.opacity(0.28),
-                tint.opacity(0.16),
-            ],
-            stroke: tint.opacity(0.42))
+    private var dataForeground: Color {
+        colorScheme == .light ? Color(nsColor: .secondaryLabelColor) : Color.white.opacity(0.78)
     }
 
     private var statusLabel: String {
@@ -403,17 +531,10 @@ struct SubscriptionExpiryBadge: View {
 
     private var remainingText: String? {
         guard !isExpired else { return nil }
-        let endOfDay = SubscriptionDateFormatter.endOfLocalDay(expiresAt)
         return DurationFormatter.localized(
-            max(0, endOfDay.timeIntervalSince(now)),
+            remainingSeconds,
             language: l10n.language,
             includeSeconds: false)
-    }
-
-    private var separator: some View {
-        Text("·")
-            .font(.caption2.weight(.semibold))
-            .opacity(0.55)
     }
 
     private var accessibilityText: String {
@@ -423,6 +544,7 @@ struct SubscriptionExpiryBadge: View {
 
 private struct HeaderActionButton<Icon: View>: View {
     var title: String
+    var isLoading: Bool = false
     var action: () -> Void
     @ViewBuilder var icon: Icon
 
@@ -430,15 +552,118 @@ private struct HeaderActionButton<Icon: View>: View {
 
     var body: some View {
         Button(action: action) {
-            icon.frame(width: 14, height: 14)
-            .foregroundStyle(isHovered ? Color.accentColor : Color.primary)
-            .frame(width: 28, height: 24)
-            .background(isHovered ? Color.accentColor.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
-            .contentShape(RoundedRectangle(cornerRadius: 6))
+            Group {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    icon.frame(width: 14, height: 14)
+                }
+            }
+            .foregroundStyle(isHovered ? Color.primary : Color.secondary)
+            .frame(width: 26, height: 24)
+            .background(
+                isHovered ? RunwaySurface.hoverNeutral : Color.clear,
+                in: RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
         }
         .buttonStyle(.plain)
         .help(title)
         .accessibilityLabel(title)
         .onHover { isHovered = $0 }
+    }
+}
+
+/// Leading back affordance on detail pages (chevron + label, quiet until hovered).
+private struct DetailBackButton: View {
+    var title: String
+    var action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.left")
+                    .font(.caption.weight(.semibold))
+                Text(title)
+                    .font(.callout.weight(.medium))
+            }
+            .foregroundStyle(isHovered ? Color.primary : Color.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                isHovered ? RunwaySurface.hoverNeutral : Color.clear,
+                in: RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+            .padding(.leading, -8)
+            .animation(.easeOut(duration: 0.12), value: isHovered)
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+        .onHover { isHovered = $0 }
+    }
+}
+
+/// Quiet borderless footer button; destructive role surfaces red only on hover.
+private struct FooterGhostButton: View {
+    enum Role {
+        case normal
+        case destructive
+    }
+
+    var title: String
+    var systemImage: String
+    var role: Role
+    var help: String
+    var action: () -> Void
+
+    @State private var isHovered = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.caption.weight(.medium))
+                Text(title)
+                    .font(.callout.weight(.medium))
+            }
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(
+                hoverFill,
+                in: RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+            .animation(.easeOut(duration: 0.12), value: isHovered)
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(title)
+        .pointingHandCursor()
+        .onHover { isHovered = $0 }
+    }
+
+    private var foreground: Color {
+        guard isHovered else { return .secondary }
+        switch role {
+        case .normal:
+            return .primary
+        case .destructive:
+            return colorScheme == .light
+                ? Color(red: 0.75, green: 0.12, blue: 0.15)
+                : Color(nsColor: .systemRed)
+        }
+    }
+
+    private var hoverFill: Color {
+        guard isHovered else { return .clear }
+        switch role {
+        case .normal:
+            return RunwaySurface.hoverNeutral
+        case .destructive:
+            return Color(nsColor: .systemRed).opacity(0.10)
+        }
     }
 }

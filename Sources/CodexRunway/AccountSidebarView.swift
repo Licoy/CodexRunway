@@ -79,28 +79,90 @@ struct AccountsDetailView: View {
 
     private var toolbar: some View {
         HStack(spacing: 8) {
-            Button {
+            ToolbarGhostButton(
+                title: l10n.text(.accountsRefreshAll),
+                systemImage: "arrow.clockwise",
+                isLoading: model.isRefreshingAccountQuotas)
+            {
                 model.refreshAllAccountQuotas()
-            } label: {
-                if model.isRefreshingAccountQuotas {
-                    Label {
-                        Text(l10n.text(.accountsRefreshAll))
-                    } icon: {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                } else {
-                    Label(l10n.text(.accountsRefreshAll), systemImage: "arrow.clockwise")
-                }
             }
-            .disabled(model.isRefreshingAccountQuotas)
             Spacer()
-            Button(action: onAddAccount) {
-                Label(l10n.text(.accountsAdd), systemImage: "plus")
-            }
-            .buttonStyle(.borderedProminent)
+            ToolbarAccentButton(title: l10n.text(.accountsAdd), systemImage: "plus", action: onAddAccount)
         }
-        .controlSize(.small)
+    }
+}
+
+/// Quiet toolbar action: icon + label, transparent at rest, neutral pill on hover.
+private struct ToolbarGhostButton: View {
+    var title: String
+    var systemImage: String
+    var isLoading: Bool = false
+    var action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: systemImage)
+                        .font(.caption.weight(.medium))
+                }
+                Text(title)
+                    .font(.callout.weight(.medium))
+            }
+            .foregroundStyle(isHovered && !isLoading ? Color.primary : Color.secondary)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(
+                isHovered && !isLoading ? RunwaySurface.hoverNeutral : Color.clear,
+                in: RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+            .padding(.leading, -9)
+            .animation(.easeOut(duration: 0.12), value: isHovered)
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+        .help(title)
+        .accessibilityLabel(title)
+        .pointingHandCursor(enabled: !isLoading)
+        .onHover { isHovered = $0 }
+    }
+}
+
+/// Accent CTA matching the Calculate-button chassis.
+private struct ToolbarAccentButton: View {
+    var title: String
+    var systemImage: String
+    var action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.caption.weight(.semibold))
+                Text(title)
+                    .font(.callout.weight(.semibold))
+            }
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 11)
+            .frame(minHeight: 26)
+            .background(
+                isHovered ? Color.accentColor.opacity(0.88) : Color.accentColor,
+                in: RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+            .animation(.easeOut(duration: 0.12), value: isHovered)
+        }
+        .buttonStyle(.plain)
+        .help(title)
+        .accessibilityLabel(title)
+        .pointingHandCursor()
+        .onHover { isHovered = $0 }
     }
 }
 
@@ -114,6 +176,7 @@ private struct AccountDetailCard: View {
     var onRefresh: () -> Void
 
     @State private var isHovered = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -128,9 +191,16 @@ private struct AccountDetailCard: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background {
+            let shape = RoundedRectangle(cornerRadius: RunwaySurface.radiusCard, style: .continuous)
+            if isActive {
+                shape.fill(Color(nsColor: .systemGreen).opacity(colorScheme == .light ? 0.10 : 0.12))
+            } else {
+                shape.fill(isHovered ? RunwaySurface.hoverNeutral : RunwaySurface.raised)
+            }
+        }
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: RunwaySurface.radiusCard, style: .continuous)
                 .strokeBorder(cardStroke, lineWidth: 1))
         .onHover { isHovered = $0 }
     }
@@ -144,7 +214,7 @@ private struct AccountDetailCard: View {
                     .truncationMode(.middle)
                 HStack(spacing: 6) {
                     if isActive {
-                        RunwayTag(l10n.text(.accountsCurrent), tone: .green, horizontalPadding: 6, verticalPadding: 2)
+                        CurrentAccountTag(l10n: l10n)
                     }
                     SubscriptionTierTag(tier: account.subscriptionTier, l10n: l10n)
                     if let email = account.email, email != account.resolvedDisplayName {
@@ -217,8 +287,8 @@ private struct AccountDetailCard: View {
                     .truncationMode(.middle)
                 Spacer()
                 Text("\(remaining)% \(l10n.text(.left))")
-                    .font(.caption2.monospacedDigit().weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .font(.caption2.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(RunwayProgressBar.textColor(for: QuotaMeter.health(forUsedPercent: used)))
             }
             GeometryReader { proxy in
                 let fill = max(3, proxy.size.width * CGFloat(remaining) / 100)
@@ -248,28 +318,18 @@ private struct AccountDetailCard: View {
         }
     }
 
-    private var cardFill: Color {
-        if isActive {
-            return Color(nsColor: .systemGreen).opacity(0.12)
-        }
-        if isHovered {
-            return Color.primary.opacity(0.045)
-        }
-        return RunwaySurface.fill
-    }
-
     private var cardStroke: Color {
         if isActive {
-            return Color(nsColor: .systemGreen).opacity(0.16)
+            return Color(nsColor: .systemGreen).opacity(colorScheme == .light ? 0.28 : 0.35)
         }
-        return Color.clear
+        return colorScheme == .dark ? RunwaySurface.hairline : Color.clear
     }
 
     private var meterTrack: Color {
         if isActive {
-            return Color(nsColor: .systemGreen).opacity(0.14)
+            return Color(nsColor: .systemGreen).opacity(0.12)
         }
-        return RunwaySurface.subtleFill
+        return RunwaySurface.sunken
     }
 }
 
@@ -335,7 +395,7 @@ private struct AccountIconActionButton: View {
                 : Color(nsColor: .systemGreen).opacity(0.10)
         }
         if isDisabled || isLoading { return Color.clear }
-        return isHovered ? Color.accentColor.opacity(0.12) : Color.clear
+        return isHovered ? RunwaySurface.hoverAccent : Color.clear
     }
 }
 

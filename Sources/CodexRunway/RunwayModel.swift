@@ -150,7 +150,11 @@ final class RunwayModel: ObservableObject {
     @Published var costDetail: ApiEquivalentSummary?
     @Published var recentSessions: [SessionActivityItem] = []
     @Published var costScanNote: String?
-    @Published private(set) var costScanProgress: CostScanProgress = .idle
+    /// Scan progress lives on its own observable: it publishes ~10x/sec during a
+    /// scan, and a model-level @Published write would re-layout the whole panel
+    /// (including the PolishedScrollView height probe) on every tick.
+    let costProgress = CostProgressModel()
+    var costScanProgress: CostScanProgress { costProgress.progress }
     @Published var accountDisplay: CodexAccountDisplay
     @Published var managedAccounts: [ManagedAccount] = []
     @Published var activeAccountId: String?
@@ -164,7 +168,7 @@ final class RunwayModel: ObservableObject {
 
     private let services: RunwayModelServices
     private let sessionRepair = SessionRepairService()
-    private let costCacheStore = UsageCostCacheStore()
+    private let costCacheStore: UsageCostCacheStore
     private let alertStore = RunwayAlertStore()
     private let statusExporter = RunwayStatusExporter()
     private let notificationService = RunwayNotificationService()
@@ -183,6 +187,8 @@ final class RunwayModel: ObservableObject {
     private var latestDisplayedCost: ApiEquivalentSummary?
     private var latestDisplayedCostRange: ApiCostSummaryRange?
     private var latestSessionReport: SessionRepairReport?
+    private var lastSessionReportAt: Date?
+    private var lastRecentSessionsAt: Date?
     private var lastCostRefreshCompletedAt: Date?
     private var lastCostCycleIdentity: CostCycleIdentity?
     private var detailCostCache: [String: ApiEquivalentSummary] = [:]
@@ -198,11 +204,13 @@ final class RunwayModel: ObservableObject {
     init(
         settings: RunwaySettings,
         services: RunwayModelServices = .live(),
-        accountStore: AccountStore = AccountStore())
+        accountStore: AccountStore = AccountStore(),
+        costCacheStore: UsageCostCacheStore = UsageCostCacheStore())
     {
         self.settings = settings
         self.services = services
         self.accountStore = accountStore
+        self.costCacheStore = costCacheStore
         self.accountSwitcher = AccountSwitcher(store: accountStore)
         self.accountImporter = AccountImporter(store: accountStore)
         self.accountQuotaRefresher = AccountQuotaRefresher(
@@ -531,11 +539,22 @@ final class RunwayModel: ObservableObject {
         refreshingSections.contains(section)
     }
 
+    /// A hung leg (trickling response, first-time index rebuild) must never pin the
+    /// refresh pipeline: every entry point guards on this state, and RefreshSchedule
+    /// only re-arms via onFullRefreshCompleted.
+    private static let fullRefreshWatchdogSeconds: UInt64 = 120
+
     func refresh(policy: UsageCostRefreshPolicy = .force) {
         guard !isRefreshingAll, refreshingSections.isEmpty else { return }
         isRefreshingAll = true
+        let work = Task { await refreshNow(policy: policy) }
         Task {
-            await refreshNow(policy: policy)
+            let watchdog = Task {
+                try? await Task.sleep(nanoseconds: Self.fullRefreshWatchdogSeconds * 1_000_000_000)
+                work.cancel()
+            }
+            await work.value
+            watchdog.cancel()
             isRefreshingAll = false
             onFullRefreshCompleted?()
         }
@@ -592,17 +611,29 @@ final class RunwayModel: ObservableObject {
         latestQuota?.nextDueReset(after: triggeredReset, now: now)
     }
 
-    func refreshSessionReport() {
+    /// Panel-open refreshes pass force=false: rescanning ~/.codex/sessions is
+    /// O(files) heavy IO, and doing it on every open keeps the section spinners
+    /// running for the whole visit on large session dirs.
+    func refreshSessionReport(force: Bool = true) {
         guard !isRefreshingAll else { return }
+        guard force || isStale(lastSessionReportAt) else { return }
         Task { await refreshSessionReportNow() }
     }
 
-    func refreshRecentSessions() {
+    func refreshRecentSessions(force: Bool = true) {
         guard !isRefreshingAll else { return }
+        guard force || isStale(lastRecentSessionsAt) else { return }
         Task {
             await refreshRecentSessionsNow()
             exportStatusIfNeeded()
         }
+    }
+
+    private static let visibleSectionTTL: TimeInterval = 120
+
+    private func isStale(_ lastSuccess: Date?) -> Bool {
+        guard let lastSuccess else { return true }
+        return Date().timeIntervalSince(lastSuccess) >= Self.visibleSectionTTL
     }
 
     func testNotification() -> String? {
@@ -680,6 +711,7 @@ final class RunwayModel: ObservableObject {
         do {
             let report = try await services.dryRunSessions()
             applySessionReport(report)
+            lastSessionReportAt = Date()
         } catch {
             sessionText = l10n.text(.sessionScanFailed)
             sessionLines = [DetailLine(title: l10n.text(.error), value: error.localizedDescription)]
@@ -711,6 +743,7 @@ final class RunwayModel: ObservableObject {
         do {
             let summary = try await services.scanRecentSessions(5)
             applyRecentSessions(summary.items)
+            lastRecentSessionsAt = Date()
         } catch {
             recentSessions = []
             recentSessionLines = [DetailLine(title: l10n.text(.error), value: error.localizedDescription)]
@@ -1220,13 +1253,13 @@ final class RunwayModel: ObservableObject {
         if costProgressConsumers == 0 {
             publishCostProgress(.finished, force: true)
             // Idle shortly after so UI can clear loading chrome.
-            costScanProgress = .idle
+            costProgress.progress = .idle
         }
     }
 
     private func publishCostProgress(_ progress: CostScanProgress, force: Bool = false) {
         if force || progress.phase != costScanProgress.phase || progress.completedUnits != costScanProgress.completedUnits {
-            costScanProgress = progress
+            costProgress.progress = progress
         }
     }
 
@@ -1589,7 +1622,13 @@ final class RunwayModel: ObservableObject {
 
     private func costSubtitle(for summary: ApiEquivalentSummary, range: ApiCostSummaryRange, now: Date) -> String {
         let pricing = summary.confidence == .tokensOnly ? l10n.text(.tokensOnly) : l10n.text(.apiTokenPricing)
-        let calculated = DurationFormatter.relativePast(since: summary.calculatedAt, now: now, language: l10n.language)
+        // Minute granularity so tick()'s equality guard suppresses per-second
+        // subtitle writes (each write re-layouts the whole panel).
+        let calculated = DurationFormatter.relativePast(
+            since: summary.calculatedAt,
+            now: now,
+            language: l10n.language,
+            includeSeconds: false)
         return "\(costRangeText(range)) · \(pricing) · \(summary.totals.turns) \(l10n.text(.turns)) · \(l10n.text(.calculatedAt)) \(calculated)"
     }
 

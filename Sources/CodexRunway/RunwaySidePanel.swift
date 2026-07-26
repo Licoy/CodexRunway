@@ -9,47 +9,55 @@ enum RunwaySidePanel: Equatable {
     case apiCost
 }
 
+/// Raised interactive row: optional leading icon, title, optional trailing chevron.
+/// Shared chassis for details-disclosure and inline actions (e.g. repair index).
 struct SidePanelDisclosureRow: View {
     var title: String
+    var systemImage: String? = nil
+    var showsChevron: Bool = true
     var action: () -> Void
 
     @State private var isHovered = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Button(action: action) {
-            HStack {
+            HStack(spacing: 8) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
                 Text(title)
+                    .font(.callout.weight(.medium))
                 Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.callout)
-                    .foregroundStyle(isHovered ? Color.accentColor : Color.secondary)
+                if showsChevron {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(isHovered ? Color.accentColor : Color.secondary)
+                }
             }
             .padding(.vertical, 8)
             .padding(.horizontal, 10)
-            .background(rowBackground, in: RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
+            .background(rowBackground, in: RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius)
-                    .strokeBorder(isHovered ? Color.accentColor.opacity(0.28) : Color.clear, lineWidth: 1))
-            .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
+                RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous)
+                    .strokeBorder(
+                        colorScheme == .dark ? RunwaySurface.hairline : Color.clear,
+                        lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
             .animation(.easeOut(duration: 0.12), value: isHovered)
         }
         .buttonStyle(.plain)
-        .onHover { hovering in
-            isHovered = hovering
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
+        .pointingHandCursor()
+        .onHover { isHovered = $0 }
     }
 
-    private var rowBackground: Color {
-        // Default fill is systemGray@0.16; hover must be clearly different in both light and dark mode.
+    private var rowBackground: some ShapeStyle {
         if isHovered {
-            return Color.accentColor.opacity(0.18)
+            return AnyShapeStyle(RunwaySurface.hoverNeutral)
         }
-        return RunwaySurface.fill
+        return AnyShapeStyle(RunwaySurface.raised)
     }
 }
 
@@ -83,9 +91,12 @@ private struct ResetCreditsDetailView: View {
     var l10n: L10n
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             if let summary {
-                header(summary)
+                RunwayPageSummaryRow(
+                    title: l10n.text(.resetCredits),
+                    meta: "\(l10n.text(.lastUpdated)) \(ResetCreditDateFormatter.updatedAt(summary.updatedAt, language: l10n.language))",
+                    figure: "\(summary.availableCount)/\(summary.totalCount)")
                 statGrid(summary)
                 ResetRiskCompositionView(summary: summary, l10n: l10n)
                 creditTable
@@ -96,27 +107,12 @@ private struct ResetCreditsDetailView: View {
         }
     }
 
-    private func header(_ summary: ResetCreditSummary) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(l10n.text(.resetCreditDetails))
-                    .font(.headline)
-                Text("\(l10n.text(.lastUpdated)) \(ResetCreditDateFormatter.updatedAt(summary.updatedAt, language: l10n.language))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Text("\(summary.availableCount)/\(summary.totalCount)")
-                .font(.title3.weight(.semibold))
-        }
-    }
-
     private func statGrid(_ summary: ResetCreditSummary) -> some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-            ResetMetricCard(title: l10n.text(.available), value: "\(summary.availableCount)", color: Color(nsColor: .systemGreen))
-            ResetMetricCard(title: l10n.text(.expiringSoon), value: "\(summary.expiringCount)", color: Color(nsColor: .systemYellow))
-            ResetMetricCard(title: l10n.text(.totalRemaining), value: duration(summary.totalRemainingDuration), color: Color(nsColor: .systemBlue))
-            ResetMetricCard(title: l10n.text(.nextExpiry), value: summary.nextExpiryRemaining.map(duration) ?? "--", color: Color(nsColor: .systemOrange))
+            RunwayStatCard(title: l10n.text(.available), value: "\(summary.availableCount)", color: Color(nsColor: .systemGreen))
+            RunwayStatCard(title: l10n.text(.expiringSoon), value: "\(summary.expiringCount)", color: Color(nsColor: .systemYellow))
+            RunwayStatCard(title: l10n.text(.totalRemaining), value: duration(summary.totalRemainingDuration), color: Color(nsColor: .systemBlue))
+            RunwayStatCard(title: l10n.text(.nextExpiry), value: summary.nextExpiryRemaining.map(duration) ?? "--", color: Color(nsColor: .systemOrange))
         }
     }
 
@@ -130,13 +126,13 @@ private struct ResetCreditsDetailView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
-                VStack(spacing: 0) {
+                RunwayTableContainer {
                     ResetCreditTableHeader(l10n: l10n)
-                    ForEach(details) { credit in
-                        ResetCreditTableRow(credit: credit, l10n: l10n)
+                } rows: {
+                    ForEach(Array(details.enumerated()), id: \.element.id) { index, credit in
+                        ResetCreditTableRow(credit: credit, l10n: l10n, isFirst: index == 0)
                     }
                 }
-                .background(RunwaySurface.subtleFill, in: RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
             }
         }
     }
@@ -146,36 +142,12 @@ private struct ResetCreditsDetailView: View {
     }
 }
 
-private struct ResetMetricCard: View {
-    var title: String
-    var value: String
-    var color: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Circle()
-                .fill(color)
-                .frame(width: 7, height: 7)
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.callout.weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(8)
-        .background(RunwaySurface.fill, in: RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
-    }
-}
-
 private struct ResetRiskCompositionView: View {
     var summary: ResetCreditSummary
     var l10n: L10n
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(l10n.text(.expiryRisk))
                 .font(.headline)
             GeometryReader { proxy in
@@ -185,13 +157,13 @@ private struct ResetRiskCompositionView: View {
                     segment(count: summary.unavailableCount, total: summary.totalCount, color: Color(nsColor: .systemRed), width: proxy.size.width)
                 }
             }
-            .frame(height: 12)
+            .frame(height: 8)
             HStack(spacing: 10) {
                 legend(l10n.text(.available), summary.stableAvailableCount, Color(nsColor: .systemGreen))
                 legend(l10n.text(.expiringSoon), summary.expiringCount, Color(nsColor: .systemYellow))
                 legend(l10n.text(.unavailableCredits), summary.unavailableCount, Color(nsColor: .systemRed))
             }
-            .font(.caption)
+            .font(.caption2)
             .foregroundStyle(.secondary)
         }
     }
@@ -199,7 +171,7 @@ private struct ResetRiskCompositionView: View {
     @ViewBuilder
     private func segment(count: Int, total: Int, color: Color, width: CGFloat) -> some View {
         if count > 0, total > 0 {
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
                 .fill(color)
                 .frame(width: max(8, width * CGFloat(count) / CGFloat(total)))
         }
@@ -207,8 +179,9 @@ private struct ResetRiskCompositionView: View {
 
     private func legend(_ title: String, _ count: Int, _ color: Color) -> some View {
         HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 6, height: 6)
+            Circle().fill(color).frame(width: 5, height: 5)
             Text("\(title) \(count)")
+                .monospacedDigit()
         }
     }
 }
@@ -225,7 +198,7 @@ private struct ResetCreditTableHeader: View {
         }
         .font(.caption2.weight(.semibold))
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
         .padding(.vertical, 7)
     }
 }
@@ -233,6 +206,7 @@ private struct ResetCreditTableHeader: View {
 private struct ResetCreditTableRow: View {
     var credit: ResetCreditDetail
     var l10n: L10n
+    var isFirst: Bool
 
     var body: some View {
         HStack {
@@ -248,11 +222,9 @@ private struct ResetCreditTableRow: View {
                 .foregroundStyle(.secondary)
         }
         .font(.caption.monospacedDigit())
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .overlay(alignment: .top) {
-            Rectangle().fill(.separator.opacity(0.25)).frame(height: 1)
-        }
+        .tableRowRule(isFirst: isFirst)
     }
 
     private var statusText: String {
@@ -273,7 +245,7 @@ private struct StatusPill: View {
     var state: ResetCreditState
 
     var body: some View {
-        RunwayTag(text, tone: tone, font: .caption.weight(.semibold))
+        RunwayTag(text, tone: tone, font: .caption2.weight(.semibold))
     }
 
     private var tone: RunwayTagTone {

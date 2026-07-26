@@ -118,67 +118,14 @@ struct ApiCostDetailView: View {
                 }
             }
         }
+        .padding(2)
         .fixedSize(horizontal: false, vertical: true)
-        .background(RunwaySurface.fill, in: RoundedRectangle(cornerRadius: 8))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .runwayCard(.sunken, cornerRadius: RunwaySurface.radiusRow + 1)
         .frame(maxWidth: .infinity)
     }
 
     private var loadingState: some View {
-        let progress = model.costScanProgress
-        return VStack(spacing: 12) {
-            if let fraction = progress.fraction {
-                ProgressView(value: fraction)
-                    .progressViewStyle(.linear)
-                    .frame(maxWidth: 220)
-            } else {
-                ProgressView()
-                    .controlSize(.regular)
-            }
-            Text(progressTitle(progress))
-                .font(.callout.weight(.medium))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            if let subtitle = progressSubtitle(progress) {
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .padding(.horizontal, 12)
-    }
-
-    private func progressTitle(_ progress: CostScanProgress) -> String {
-        switch progress.phase {
-        case .preparing:
-            return l10n.text(.costScanPreparing)
-        case .refreshingIndex:
-            return l10n.text(.costScanIndexing)
-        case .aggregating:
-            return l10n.text(.costScanAggregating)
-        case .fetchingOnline:
-            return l10n.text(.costScanFetchingOnline)
-        case .failed:
-            return progress.message ?? l10n.text(.costScanFailed)
-        case .idle, .finished:
-            return l10n.text(.calculating)
-        }
-    }
-
-    private func progressSubtitle(_ progress: CostScanProgress) -> String? {
-        var parts: [String] = []
-        if let total = progress.totalUnits, total > 0 {
-            parts.append(String(
-                format: l10n.text(.costScanProgressFiles),
-                progress.completedUnits,
-                total))
-        }
-        if let detail = progress.detail, !detail.isEmpty {
-            parts.append(detail)
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        CostScanLoadingView(costProgress: model.costProgress, l10n: l10n)
     }
 
     private var customControls: some View {
@@ -220,18 +167,10 @@ struct ApiCostDetailView: View {
     }
 
     private func header(_ detail: ApiEquivalentSummary) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(l10n.text(.apiCost))
-                    .font(.headline)
-                Text("\(l10n.text(.calculatedAt)) \(calculatedText(detail.calculatedAt)) · \(detail.pricingVersion) · \(sourceText(detail.source))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Text(detail.estimatedUSD.map(DurationFormatter.money) ?? l10n.text(.tokensOnly))
-                .font(.title3.weight(.semibold))
-        }
+        RunwayPageSummaryRow(
+            title: l10n.text(.apiCost),
+            meta: "\(l10n.text(.calculatedAt)) \(calculatedText(detail.calculatedAt)) · \(detail.pricingVersion) · \(sourceText(detail.source))",
+            figure: detail.estimatedUSD.map(DurationFormatter.money) ?? l10n.text(.tokensOnly))
     }
 
     @ViewBuilder
@@ -251,18 +190,18 @@ struct ApiCostDetailView: View {
 
     private func statGrid(_ detail: ApiEquivalentSummary) -> some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-            UsageStatCard(title: l10n.text(.estimatedAPICost), value: detail.estimatedUSD.map(DurationFormatter.money) ?? "--", color: .green)
-            UsageStatCard(title: l10n.text(.tokens), value: Self.tokenText(detail.totals.totalTokens), color: .blue)
-            UsageStatCard(title: l10n.text(.inputCachedOutput), value: "\(Self.tokenText(detail.totals.uncachedInputTokens)) / \(Self.tokenText(detail.totals.cachedInputTokens)) / \(Self.tokenText(detail.totals.outputTokens))", color: .teal)
-            UsageStatCard(title: l10n.text(.turns), value: "\(detail.totals.turns)", color: .orange)
+            RunwayStatCard(title: l10n.text(.estimatedAPICost), value: detail.estimatedUSD.map(DurationFormatter.money) ?? "--", color: .green)
+            RunwayStatCard(title: l10n.text(.tokens), value: Self.tokenText(detail.totals.totalTokens), color: .blue)
+            RunwayStatCard(title: l10n.text(.inputCachedOutput), value: "\(Self.tokenText(detail.totals.uncachedInputTokens)) / \(Self.tokenText(detail.totals.cachedInputTokens)) / \(Self.tokenText(detail.totals.outputTokens))", color: .teal)
+            RunwayStatCard(title: l10n.text(.turns), value: "\(detail.totals.turns)", color: .orange)
         }
     }
 
     private func tokenParts(_ totals: ApiEquivalentTotals) -> some View {
         HStack(spacing: 8) {
-            UsageStatCard(title: l10n.text(.nonCachedInput), value: Self.tokenText(totals.uncachedInputTokens), color: .blue)
-            UsageStatCard(title: l10n.text(.cachedInput), value: Self.tokenText(totals.cachedInputTokens), color: .green)
-            UsageStatCard(title: l10n.text(.outputTokens), value: Self.tokenText(totals.outputTokens), color: .orange)
+            RunwayStatCard(title: l10n.text(.nonCachedInput), value: Self.tokenText(totals.uncachedInputTokens), color: .blue)
+            RunwayStatCard(title: l10n.text(.cachedInput), value: Self.tokenText(totals.cachedInputTokens), color: .green)
+            RunwayStatCard(title: l10n.text(.outputTokens), value: Self.tokenText(totals.outputTokens), color: .orange)
         }
     }
 
@@ -275,13 +214,13 @@ struct ApiCostDetailView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
-                VStack(spacing: 0) {
+                RunwayTableContainer {
                     UsageTableHeader(l10n: l10n)
-                    ForEach(rows.reversed()) { row in
-                        UsageTableRow(row: row)
+                } rows: {
+                    ForEach(Array(rows.reversed().enumerated()), id: \.element.id) { index, row in
+                        UsageTableRow(row: row, isFirst: index == 0)
                     }
                 }
-                .background(RunwaySurface.subtleFill, in: RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
             }
         }
     }
@@ -391,11 +330,11 @@ struct ApiCostDetailView: View {
                 Text(title)
                     .font(.headline)
                 VStack(spacing: 0) {
-                    ForEach(rows.prefix(8)) { row in
-                        BreakdownRow(row: row)
+                    ForEach(Array(rows.prefix(8).enumerated()), id: \.element.id) { index, row in
+                        BreakdownRow(row: row, isFirst: index == 0)
                     }
                 }
-                .background(RunwaySurface.subtleFill, in: RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
+                .runwayCard(.sunken)
             }
         }
     }
@@ -435,12 +374,82 @@ struct ApiCostDetailView: View {
     }
 }
 
+/// Observes the high-frequency scan progress in isolation, so its ticks only
+/// re-render this small subtree instead of the whole detail page.
+private struct CostScanLoadingView: View {
+    @ObservedObject var costProgress: CostProgressModel
+    var l10n: L10n
+
+    var body: some View {
+        let progress = costProgress.progress
+        VStack(spacing: 12) {
+            if let fraction = progress.fraction {
+                ProgressView(value: fraction)
+                    .progressViewStyle(.linear)
+                    .frame(maxWidth: 220)
+            } else {
+                ProgressView()
+                    .controlSize(.regular)
+            }
+            Text(progressTitle(progress))
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            if let subtitle = progressSubtitle(progress) {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(.horizontal, 12)
+    }
+
+    private func progressTitle(_ progress: CostScanProgress) -> String {
+        switch progress.phase {
+        case .preparing:
+            return l10n.text(.costScanPreparing)
+        case .refreshingIndex:
+            return l10n.text(.costScanIndexing)
+        case .aggregating:
+            return l10n.text(.costScanAggregating)
+        case .fetchingOnline:
+            return l10n.text(.costScanFetchingOnline)
+        case .failed:
+            return progress.message ?? l10n.text(.costScanFailed)
+        case .idle, .finished:
+            return l10n.text(.calculating)
+        }
+    }
+
+    private func progressSubtitle(_ progress: CostScanProgress) -> String? {
+        var parts: [String] = []
+        if let total = progress.totalUnits, total > 0 {
+            parts.append(String(
+                format: l10n.text(.costScanProgressFiles),
+                progress.completedUnits,
+                total))
+        }
+        if let detail = progress.detail, !detail.isEmpty {
+            parts.append(detail)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
+/// Native-style segment: a raised thumb marks the selection instead of an accent slab.
 private struct ApiCostRangeTabButton: View {
     var title: String
     var isSelected: Bool
     var action: () -> Void
 
     @State private var isHovered = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var thumb: RoundedRectangle {
+        RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous)
+    }
 
     var body: some View {
         Button(action: action) {
@@ -449,35 +458,37 @@ private struct ApiCostRangeTabButton: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 7)
+                .padding(.vertical, 5)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(isSelected ? Color.white : Color.primary)
-        .background(backgroundFill)
+        .foregroundStyle(isSelected ? Color.white : Color.secondary)
+        .background(thumbFill)
         // Expand only horizontally so the full tab width is clickable; keep compact height.
         .frame(maxWidth: .infinity)
         .fixedSize(horizontal: false, vertical: true)
         .contentShape(Rectangle())
-        .onHover { hovering in
-            isHovered = hovering
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
+        .pointingHandCursor()
+        .onHover { isHovered = $0 }
         .help(title)
     }
 
-    private var backgroundFill: Color {
+    @ViewBuilder
+    private var thumbFill: some View {
         if isSelected {
-            return Color.accentColor
+            // Accent thumb reads as the app's theme in both schemes.
+            if colorScheme == .light {
+                thumb
+                    .fill(Color.accentColor)
+                    .shadow(color: Color.accentColor.opacity(0.35), radius: 2.5, y: 1)
+            } else {
+                thumb.fill(Color.accentColor)
+            }
+        } else if isHovered {
+            thumb.fill(Color.primary.opacity(0.05))
+        } else {
+            Color.clear
         }
-        if isHovered {
-            return Color.primary.opacity(0.08)
-        }
-        return Color.clear
     }
 }
 
@@ -539,6 +550,7 @@ private struct FullWidthDateField: View {
 
     @State private var isPresented = false
     @State private var isHovered = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Button {
@@ -559,26 +571,20 @@ private struct FullWidthDateField: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
-            .background(fieldBackground, in: RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
+            .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+            .background(fieldBackground, in: RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius)
-                    .strokeBorder(isPresented ? Color.accentColor.opacity(0.45) : Color.clear, lineWidth: 1))
-            .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
+                RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous)
+                    .strokeBorder(fieldStroke, lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
             .animation(.easeOut(duration: 0.12), value: isActive)
         }
         .buttonStyle(.plain)
         .help(title)
         .accessibilityLabel("\(title), \(formattedDate)")
         .frame(maxWidth: .infinity)
-        .onHover { hovering in
-            isHovered = hovering
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
+        .pointingHandCursor()
+        .onHover { isHovered = $0 }
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(title)
@@ -598,12 +604,19 @@ private struct FullWidthDateField: View {
 
     private var fieldBackground: Color {
         if isPresented {
-            return Color.accentColor.opacity(0.14)
+            return Color.accentColor.opacity(0.10)
         }
         if isHovered {
-            return Color.primary.opacity(0.12)
+            return RunwaySurface.hoverNeutral
         }
-        return RunwaySurface.fill
+        return RunwaySurface.raised
+    }
+
+    private var fieldStroke: Color {
+        if isPresented {
+            return Color.accentColor.opacity(0.5)
+        }
+        return colorScheme == .dark ? RunwaySurface.hairline : Color.clear
     }
 
     private var formattedDate: String {
@@ -730,49 +743,19 @@ private struct CustomRangeCalculateButton: View {
                 .foregroundStyle(Color.white)
                 .lineLimit(1)
                 .padding(.horizontal, 14)
-                .frame(minWidth: 68, minHeight: 32)
+                .frame(minWidth: 68, minHeight: 30)
                 .background(
                     (isHovered && !isLoading ? Color.accentColor.opacity(0.88) : Color.accentColor),
-                    in: RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
-                .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
+                    in: RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
                 .animation(.easeOut(duration: 0.12), value: isHovered)
         }
         .buttonStyle(.plain)
         .disabled(isLoading)
         .opacity(isLoading ? 0.72 : 1)
         .fixedSize(horizontal: true, vertical: false)
-        .onHover { hovering in
-            isHovered = hovering
-            if hovering, !isLoading {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
-    }
-}
-
-private struct UsageStatCard: View {
-    var title: String
-    var value: String
-    var color: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Circle()
-                .fill(color)
-                .frame(width: 7, height: 7)
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.callout.weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(8)
-        .background(RunwaySurface.fill, in: RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
+        .pointingHandCursor(enabled: !isLoading)
+        .onHover { isHovered = $0 }
     }
 }
 
@@ -788,13 +771,14 @@ private struct UsageTableHeader: View {
         }
         .font(.caption2.weight(.semibold))
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
         .padding(.vertical, 7)
     }
 }
 
 private struct UsageTableRow: View {
     var row: ApiEquivalentDailyRow
+    var isFirst: Bool
 
     var body: some View {
         HStack {
@@ -804,11 +788,9 @@ private struct UsageTableRow: View {
             Text("\(row.totals.turns)").frame(width: 42, alignment: .trailing)
         }
         .font(.caption.monospacedDigit())
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .overlay(alignment: .top) {
-            Rectangle().fill(.separator.opacity(0.25)).frame(height: 1)
-        }
+        .tableRowRule(isFirst: isFirst)
     }
 
     private static func tokenText(_ value: Int) -> String {
@@ -820,6 +802,7 @@ private struct UsageTableRow: View {
 
 private struct BreakdownRow: View {
     var row: ApiEquivalentBreakdownRow
+    var isFirst: Bool
 
     var body: some View {
         HStack {
@@ -832,11 +815,9 @@ private struct BreakdownRow: View {
                 .frame(width: 82, alignment: .trailing)
         }
         .font(.caption.monospacedDigit())
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .overlay(alignment: .top) {
-            Rectangle().fill(.separator.opacity(0.25)).frame(height: 1)
-        }
+        .tableRowRule(isFirst: isFirst)
     }
 
     private static func tokenText(_ value: Int) -> String {

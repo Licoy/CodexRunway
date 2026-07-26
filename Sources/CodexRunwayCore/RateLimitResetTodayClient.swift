@@ -10,7 +10,7 @@ public struct RateLimitResetTodayClient: Sendable {
     public var devMockKind: RateLimitResetTodaySnapshot.DevMockKind?
 
     public init(
-        session: URLSession = .shared,
+        session: URLSession = RunwayNetwork.session,
         statusURL: URL = RateLimitResetTodayClient.statusURL,
         devMockKind: RateLimitResetTodaySnapshot.DevMockKind? = RateLimitResetTodayClient.resolveDevMockKind())
     {

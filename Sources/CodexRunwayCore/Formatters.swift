@@ -41,8 +41,20 @@ public enum DurationFormatter {
         return "$" + String(format: "%.4f", number.doubleValue)
     }
 
-    public static func relativePast(since date: Date, now: Date = Date(), language: ResolvedLanguage) -> String {
-        let text = localized(now.timeIntervalSince(date), language: language)
+    public static func relativePast(
+        since date: Date,
+        now: Date = Date(),
+        language: ResolvedLanguage,
+        includeSeconds: Bool = true)
+        -> String
+    {
+        let interval = now.timeIntervalSince(date)
+        // Minute granularity: callers that re-render on a timer use this so the
+        // string only changes once per minute instead of every second.
+        if !includeSeconds, interval < 60 {
+            return language == .simplifiedChinese ? "刚刚" : "just now"
+        }
+        let text = localized(interval, language: language, includeSeconds: includeSeconds)
         return language == .simplifiedChinese ? "\(text)之前" : "\(text) ago"
     }
 

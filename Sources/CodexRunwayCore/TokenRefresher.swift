@@ -5,7 +5,7 @@ public struct TokenRefresher: Sendable {
     public var tokenURL: URL
 
     public init(
-        session: URLSession = .shared,
+        session: URLSession = RunwayNetwork.session,
         tokenURL: URL = URL(string: "https://auth.openai.com/oauth/token")!)
     {
         self.session = session

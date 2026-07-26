@@ -3,7 +3,7 @@ import CodexRunwayCore
 import SwiftUI
 
 @MainActor
-final class StatusController: NSObject, NSPopoverDelegate {
+final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     let statusBarView = StatusBarContentView(frame: .zero)
     private let popover = NSPopover()
@@ -49,7 +49,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
         popover.behavior = .applicationDefined
         popover.animates = false
         popover.delegate = self
-        popover.contentSize = NSSize(width: 390, height: 560)
+        popover.contentSize = NSSize(width: RunwayPopoverView.panelSize.width, height: RunwayPopoverView.panelSize.height)
         // No hosting yet: showPopover builds a fresh tree per open, and while hidden no
         // SwiftUI tree stays alive subscribed to model publishes.
         resignActiveObserver = NotificationCenter.default.addObserver(
@@ -385,13 +385,16 @@ final class StatusController: NSObject, NSPopoverDelegate {
     private func showDetailsWindow() {
         let isNew = detailsWindow == nil
         let window = detailsWindow ?? NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 390, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: RunwayPopoverView.panelSize.width, height: RunwayPopoverView.panelSize.height),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false)
         window.title = "Codex Runway"
         window.level = .floating
         window.isReleasedWhenClosed = false
+        // Title-bar close must run the same teardown as outside-clicks, or the
+        // hosted tree (and its 30fps sheen timers) survives behind a closed window.
+        window.delegate = self
         window.contentViewController = NSHostingController(rootView: popoverRootView())
         detailsWindow = window
         mainPanelVisibility.isVisible = true
@@ -445,6 +448,17 @@ final class StatusController: NSObject, NSPopoverDelegate {
         return true
     }
 
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        if window === detailsWindow {
+            stopPopoverCloseMonitors()
+            destroyMainPanelPresentation()
+        } else if window === controlPanelWindow {
+            // Drop the hosted settings tree; showControlPanel rebuilds it per open.
+            controlPanelWindow?.contentViewController = nil
+        }
+    }
+
     private func closeDetailsWindow() {
         guard let detailsWindow, detailsWindow.isVisible else {
             stopPopoverCloseMonitors()
@@ -461,11 +475,13 @@ final class StatusController: NSObject, NSPopoverDelegate {
         if settings.preferences.showsCostSummary {
             model.refreshCost(policy: .ifChanged)
         }
+        // force:false — panel opens skip the heavy session-dir rescan while the
+        // last successful scan is fresh; manual section refreshes stay forced.
         if settings.preferences.showsSessionRepairSummary {
-            model.refreshSessionReport()
+            model.refreshSessionReport(force: false)
         }
         if settings.preferences.showsRecentSessions {
-            model.refreshRecentSessions()
+            model.refreshRecentSessions(force: false)
         }
     }
 
@@ -477,6 +493,7 @@ final class StatusController: NSObject, NSPopoverDelegate {
             defer: false)
         window.title = settings.l10n.text(.controlPanel)
         window.isReleasedWhenClosed = false
+        window.delegate = self
         window.setContentSize(NSSize(width: 546, height: 662))
         // Rebuild hosting view so initial tab selection is applied every open.
         window.contentViewController = NSHostingController(rootView: ControlPanelView(
@@ -489,13 +506,21 @@ final class StatusController: NSObject, NSPopoverDelegate {
         NSApp.activate(ignoringOtherApps: true)
         centerControlPanel(window)
         window.makeKeyAndOrderFront(nil)
+        // SwiftUI hosting can settle its size one runloop turn after ordering front,
+        // which nudges the frame off center — re-center once the layout is final.
+        DispatchQueue.main.async { [weak self, weak window] in
+            guard let self, let window else { return }
+            self.centerControlPanel(window)
+        }
     }
 
     private func centerControlPanel(_ window: NSWindow) {
-        let visibleFrame = (statusItem.button?.window?.screen ?? NSScreen.main)?.visibleFrame ?? window.frame
+        guard let screen = statusItem.button?.window?.screen ?? NSScreen.main else { return }
+        // Horizontal: true center of the display (visibleFrame shifts when the Dock
+        // sits on a side edge). Vertical: center of the usable area.
         let origin = NSPoint(
-            x: visibleFrame.midX - window.frame.width / 2,
-            y: visibleFrame.midY - window.frame.height / 2)
+            x: screen.frame.midX - window.frame.width / 2,
+            y: screen.visibleFrame.midY - window.frame.height / 2)
         window.setFrameOrigin(origin)
     }
 

@@ -5,7 +5,7 @@ public struct QuotaClient: Sendable {
     public var baseURL: URL
 
     public init(
-        session: URLSession = .shared,
+        session: URLSession = RunwayNetwork.session,
         baseURL: URL = URL(string: "https://chatgpt.com/backend-api")!)
     {
         self.session = session

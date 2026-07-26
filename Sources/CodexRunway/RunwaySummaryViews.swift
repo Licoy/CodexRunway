@@ -10,43 +10,52 @@ struct QuotaMetersView: View {
     var onRefresh: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             RefreshableSectionHeader(
                 title: title,
-                systemImage: "speedometer",
                 l10n: l10n,
                 isRefreshing: isRefreshing,
                 onRefresh: onRefresh)
             if meters.isEmpty {
-                Text(l10n.text(isRefreshing ? .calculating : .notLoaded)).foregroundStyle(.secondary)
+                Text(l10n.text(isRefreshing ? .calculating : .notLoaded))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             } else {
-                ForEach(meters) { meter in
-                    quotaRow(meter)
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(meters) { meter in
+                        quotaRow(meter)
+                    }
                 }
             }
         }
     }
 
     private func quotaRow(_ meter: QuotaMeter) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(meter.title).font(.headline)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(meter.title)
+                    .font(.callout.weight(.semibold))
+                Spacer(minLength: 8)
+                Text("\(meter.remainingPercent)% \(l10n.text(.left))")
+                    .font(.callout.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(RunwayProgressBar.textColor(for: meter.health))
+            }
             RunwayProgressBar(meter: meter)
                 .frame(height: RunwayProgressBar.barHeight)
             HStack(alignment: .firstTextBaseline) {
-                Text("\(meter.remainingPercent)% \(l10n.text(.left))")
-                Spacer()
+                if let projection = meter.projection {
+                    Text(projectionText(projection))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
                 if let resetsAt = meter.resetsAt {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         Text(resetText(until: resetsAt, now: context.date))
+                            .font(.caption.monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
                 }
-            }
-            .font(.callout)
-            if let projection = meter.projection {
-                Text(projectionText(projection))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -68,7 +77,7 @@ struct QuotaMetersView: View {
 }
 
 struct RunwayProgressBar: View {
-    static let barHeight: CGFloat = 6
+    static let barHeight: CGFloat = 5
 
     var meter: QuotaMeter
     @Environment(\.runwayPanelVisible) private var panelVisible
@@ -78,7 +87,7 @@ struct RunwayProgressBar: View {
         GeometryReader { proxy in
             let fillWidth = max(4, proxy.size.width * CGFloat(meter.remainingPercent) / 100)
             ZStack(alignment: .leading) {
-                Capsule().fill(RunwaySurface.subtleFill)
+                Capsule().fill(RunwaySurface.sunken)
                 Capsule()
                     .fill(color)
                     .frame(width: fillWidth)
@@ -106,11 +115,12 @@ struct RunwayProgressBar: View {
         // Pause when the status panel is hidden. Normal compositing only: `.plusLighter`
         // forces an offscreen pass per frame per bar, which starves the main thread.
         return TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !panelVisible)) { context in
-            let cycle = 1.85
-            let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: cycle) / cycle
+            // Shared sheen rhythm: during the rest phase t parks at 1, the band sits
+            // fully outside the clip, and identical frames skip the repaint.
+            let t = RunwaySheen.progress(at: context.date)
             // Travel fully across the fill, including overshoot so the band exits cleanly.
             let travel = fillWidth + bandWidth
-            let x = CGFloat(t) * travel - bandWidth
+            let x = t * travel - bandWidth
             LinearGradient(
                 colors: [
                     Color.white.opacity(0),
@@ -126,7 +136,11 @@ struct RunwayProgressBar: View {
     }
 
     var color: Color {
-        switch meter.health {
+        Self.color(for: meter.health)
+    }
+
+    static func color(for health: QuotaHealth) -> Color {
+        switch health {
         case .green:
             return Color(nsColor: .systemGreen)
         case .yellow:
@@ -134,6 +148,25 @@ struct RunwayProgressBar: View {
         case .red:
             return Color(nsColor: .systemRed)
         }
+    }
+
+    /// Text-safe variant of the bar palette: the bar fills stay system colors, but
+    /// labels need deeper ink in light mode (systemYellow on white is ~1.5:1).
+    static func textColor(for health: QuotaHealth) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            let base: NSColor
+            switch health {
+            case .green:
+                base = .systemGreen
+            case .yellow:
+                base = dark ? .systemYellow : .systemOrange
+            case .red:
+                base = .systemRed
+            }
+            if dark { return base }
+            return base.blended(withFraction: 0.35, of: .black) ?? base
+        })
     }
 }
 
@@ -147,28 +180,29 @@ struct RecentSessionsView: View {
         VStack(alignment: .leading, spacing: 8) {
             RefreshableSectionHeader(
                 title: l10n.text(.recentSessions),
-                systemImage: "terminal",
                 l10n: l10n,
                 isRefreshing: isRefreshing,
                 onRefresh: onRefresh)
             if sessions.isEmpty {
-                Text(l10n.text(isRefreshing ? .calculating : .notLoaded)).foregroundStyle(.secondary)
+                Text(l10n.text(isRefreshing ? .calculating : .notLoaded))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(sessions.prefix(5)) { session in
-                        row(session)
+                    ForEach(Array(sessions.prefix(5).enumerated()), id: \.element.id) { index, session in
+                        row(session, isFirst: index == 0)
                     }
                 }
-                .background(RunwaySurface.subtleFill, in: RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
+                .runwayCard(.sunken)
             }
         }
     }
 
-    private func row(_ session: SessionActivityItem) -> some View {
+    private func row(_ session: SessionActivityItem, isFirst: Bool) -> some View {
         HStack(spacing: 8) {
             Circle()
                 .fill(color(for: session.state))
-                .frame(width: 7, height: 7)
+                .frame(width: 6, height: 6)
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.title)
                     .font(.callout.weight(.medium))
@@ -178,15 +212,20 @@ struct RecentSessionsView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            Spacer()
+            Spacer(minLength: 6)
             Text(session.estimatedUSD.map(DurationFormatter.money) ?? "--")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .overlay(alignment: .top) {
-            Rectangle().fill(.separator.opacity(0.25)).frame(height: 1)
+            if !isFirst {
+                Rectangle()
+                    .fill(RunwaySurface.hairlineFaint)
+                    .frame(height: 1)
+                    .padding(.horizontal, 10)
+            }
         }
     }
 
@@ -219,7 +258,7 @@ struct RecentSessionsView: View {
     }
 }
 
-/// Compact reset status: large Yes/No, tight rows for tweet + timestamps.
+/// Reset status card: flat raised surface, hairline-ruled zones, one 28pt hero answer.
 struct RateLimitResetTodayView: View {
     var snapshot: RateLimitResetTodaySnapshot?
     var l10n: L10n
@@ -231,11 +270,10 @@ struct RateLimitResetTodayView: View {
     @State private var showsSourceInfo = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 RefreshableSectionHeader(
                     title: l10n.text(.rateLimitResetToday),
-                    systemImage: "sparkles",
                     l10n: l10n,
                     isRefreshing: isRefreshing,
                     onRefresh: onRefresh,
@@ -244,34 +282,29 @@ struct RateLimitResetTodayView: View {
                     infoHelp: l10n.text(.rateLimitResetTodaySourceTitle))
             }
 
-            VStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
                 hero
                 if hasNextResetCountdown {
+                    zoneRule
                     nextResetCountdownRow
                 }
                 if hasTweetRow {
+                    zoneRule
                     tweetRow
                 }
                 if let footerText = footerMetaText {
+                    zoneRule
                     Text(footerText)
                         .font(.caption2)
-                        .foregroundStyle(Color(nsColor: .secondaryLabelColor))
-                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.tertiary)
                         .lineLimit(2)
-                        .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 8)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 10)
+            .padding(12)
             .frame(maxWidth: .infinity)
-            .background {
-                heroBackground
-                    .clipShape(RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius)
-                    .strokeBorder(heroColor.opacity(0.16), lineWidth: 1)
-            }
+            .runwayCard(.raised)
         }
         .sheet(isPresented: $showsSourceInfo) {
             RateLimitResetTodaySourceSheet(
@@ -284,19 +317,26 @@ struct RateLimitResetTodayView: View {
         }
     }
 
+    private var zoneRule: some View {
+        Rectangle()
+            .fill(RunwaySurface.hairlineFaint)
+            .frame(height: 1)
+            .padding(.top, 8)
+    }
+
     /// Large answer on the left, hint on the right — one row instead of a tall centered stack.
     private var hero: some View {
         HStack(alignment: .center, spacing: 12) {
             Text(heroTitle)
-                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .font(.system(size: 28, weight: .semibold, design: .rounded))
                 .foregroundStyle(heroColor)
                 .minimumScaleFactor(0.75)
                 .lineLimit(1)
                 .layoutPriority(1)
 
             Text(heroSubtitle)
-                .font(.callout.weight(.medium))
-                .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                .font(.callout)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.leading)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -313,53 +353,48 @@ struct RateLimitResetTodayView: View {
     private var nextResetCountdownRow: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let remaining = snapshot?.nextResetRemaining(now: context.date)
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: "timer")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(heroColor)
 
                 Text(l10n.text(.nextResetIn))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 Spacer(minLength: 4)
 
                 Text(remaining.map { DurationFormatter.localized($0, language: l10n.language) } ?? "—")
-                    .font(.callout.monospacedDigit().weight(.semibold))
+                    .font(.callout.weight(.semibold).monospacedDigit())
                     .foregroundStyle(heroColor)
                     .lineLimit(1)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 7)
-            .background(heroColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
+            .padding(.top, 8)
         }
     }
 
     private var tweetRow: some View {
         Group {
             if let url = snapshot?.tweetURL, let onOpenTweet {
-                Button {
-                    onOpenTweet(url)
-                } label: {
+                TweetRowButton(action: { onOpenTweet(url) }, help: l10n.text(.rateLimitResetTodayOpenTweet)) {
                     tweetRowContent
                 }
-                .buttonStyle(.plain)
-                .help(l10n.text(.rateLimitResetTodayOpenTweet))
             } else {
                 tweetRowContent
             }
         }
+        .padding(.top, 8)
     }
 
     private var tweetRowContent: some View {
         HStack(spacing: 6) {
             Image(systemName: "bubble.left")
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(heroColor.opacity(0.9))
+                .foregroundStyle(.secondary)
 
             Text(tweetLineText)
                 .font(.caption)
-                .foregroundStyle(Color(nsColor: .labelColor).opacity(0.88))
+                .foregroundStyle(.primary.opacity(0.85))
                 .lineLimit(1)
                 .truncationMode(.tail)
 
@@ -368,13 +403,9 @@ struct RateLimitResetTodayView: View {
             if snapshot?.tweetURL != nil {
                 Image(systemName: "arrow.up.right")
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                    .foregroundStyle(.tertiary)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(RunwaySurface.fill.opacity(0.65), in: RoundedRectangle(cornerRadius: 6))
-        .contentShape(RoundedRectangle(cornerRadius: 6))
     }
 
     private func lastFetchedCaption(now: Date) -> String? {
@@ -455,16 +486,33 @@ struct RateLimitResetTodayView: View {
             return Color(nsColor: .secondaryLabelColor)
         }
     }
+}
 
-    private var heroBackground: some View {
-        LinearGradient(
-            colors: [
-                heroColor.opacity(0.12),
-                Color(nsColor: .systemBlue).opacity(0.05),
-                RunwaySurface.subtleFill,
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing)
+/// Hoverable wrapper for the tweet line (quiet pill highlight, no chrome at rest).
+private struct TweetRowButton<Content: View>: View {
+    var action: () -> Void
+    var help: String
+    @ViewBuilder var content: () -> Content
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            content()
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(
+                    isHovered ? RunwaySurface.hoverNeutral : Color.clear,
+                    in: RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+                .padding(.horizontal, -6)
+                .padding(.vertical, -3)
+                .animation(.easeOut(duration: 0.12), value: isHovered)
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .pointingHandCursor()
+        .onHover { isHovered = $0 }
     }
 }
 
@@ -479,27 +527,34 @@ struct ResetCreditsSummaryView: View {
         VStack(alignment: .leading, spacing: 8) {
             RefreshableSectionHeader(
                 title: l10n.text(.resetCredits),
-                systemImage: "clock.arrow.circlepath",
                 l10n: l10n,
                 isRefreshing: isRefreshing,
                 onRefresh: onRefresh)
             if let summary {
-                Text("\(summary.availableCount) \(l10n.text(.available)) / \(summary.totalCount) \(l10n.text(.total))")
-                    .font(.title3)
-                HStack {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("\(summary.availableCount)")
+                        .font(.title3.weight(.semibold).monospacedDigit())
+                    Text("\(l10n.text(.available)) / \(summary.totalCount) \(l10n.text(.total))")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                HStack(alignment: .firstTextBaseline) {
                     Text("\(l10n.text(.totalRemaining)): \(duration(summary.totalRemainingDuration))")
-                    Spacer()
+                    Spacer(minLength: 8)
                     if let remaining = summary.nextExpiryRemaining {
                         Text("\(l10n.text(.left)) \(duration(remaining))")
-                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
                     }
                 }
-                .font(.callout)
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 SidePanelDisclosureRow(
                     title: "\(summary.availableCount) \(l10n.text(.availableResets))",
                     action: onDetailsSelect)
             } else {
-                Text(l10n.text(isRefreshing ? .calculating : .notLoaded)).foregroundStyle(.secondary)
+                Text(l10n.text(isRefreshing ? .calculating : .notLoaded))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -518,10 +573,9 @@ struct CostSummaryView: View {
     var onDetailsSelect: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             RefreshableSectionHeader(
                 title: l10n.text(.apiCost),
-                systemImage: "dollarsign.circle",
                 l10n: l10n,
                 isRefreshing: isRefreshing,
                 onRefresh: onRefresh)
@@ -532,7 +586,7 @@ struct CostSummaryView: View {
                     .textSelection(.enabled)
                 if !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .textSelection(.enabled)
                 }
@@ -542,9 +596,10 @@ struct CostSummaryView: View {
     }
 }
 
+/// Typographic section header: title, optional trailing caption, info + refresh
+/// controls with monochrome hover.
 struct RefreshableSectionHeader: View {
     var title: String
-    var systemImage: String
     var l10n: L10n
     var isRefreshing: Bool
     var onRefresh: () -> Void
@@ -558,13 +613,13 @@ struct RefreshableSectionHeader: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 6) {
-            Label(title, systemImage: systemImage)
+            Text(title)
                 .font(.headline)
             Spacer(minLength: 0)
             if let trailingCaption, !trailingCaption.isEmpty {
                 Text(trailingCaption)
                     .font(.caption2)
-                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                    .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(-1)
@@ -575,14 +630,8 @@ struct RefreshableSectionHeader: View {
                     isHovered: isInfoHovered,
                     help: infoHelp ?? l10n.text(.rateLimitResetTodaySourceTitle),
                     action: onInfo)
-                .onHover { hovering in
-                    isInfoHovered = hovering
-                    if hovering {
-                        NSCursor.pointingHand.push()
-                    } else {
-                        NSCursor.pop()
-                    }
-                }
+                .pointingHandCursor()
+                .onHover { isInfoHovered = $0 }
             }
             Button(action: onRefresh) {
                 Group {
@@ -591,27 +640,22 @@ struct RefreshableSectionHeader: View {
                             .controlSize(.small)
                     } else {
                         Image(systemName: "arrow.clockwise")
+                            .font(.callout.weight(.medium))
                     }
                 }
-                .foregroundStyle(isRefreshHovered && !isRefreshing ? Color.accentColor : Color.primary)
+                .foregroundStyle(isRefreshHovered && !isRefreshing ? Color.primary : Color.secondary)
                 .frame(width: 24, height: 24)
                 .background(
-                    isRefreshHovered && !isRefreshing ? Color.accentColor.opacity(0.12) : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 6))
-                .contentShape(RoundedRectangle(cornerRadius: 6))
+                    isRefreshHovered && !isRefreshing ? RunwaySurface.hoverNeutral : Color.clear,
+                    in: RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
             }
             .buttonStyle(.plain)
             .disabled(isRefreshing)
             .help(l10n.text(.refresh))
             .accessibilityLabel(l10n.text(.refresh))
-            .onHover { hovering in
-                isRefreshHovered = hovering
-                if hovering, !isRefreshing {
-                    NSCursor.pointingHand.push()
-                } else {
-                    NSCursor.pop()
-                }
-            }
+            .pointingHandCursor(enabled: !isRefreshing)
+            .onHover { isRefreshHovered = $0 }
         }
     }
 
@@ -623,13 +667,13 @@ struct RefreshableSectionHeader: View {
     {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.body)
-                .foregroundStyle(isHovered ? Color.accentColor : Color.secondary)
+                .font(.callout.weight(.medium))
+                .foregroundStyle(isHovered ? Color.primary : Color.secondary)
                 .frame(width: 24, height: 24)
                 .background(
-                    isHovered ? Color.accentColor.opacity(0.12) : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 6))
-                .contentShape(RoundedRectangle(cornerRadius: 6))
+                    isHovered ? RunwaySurface.hoverNeutral : Color.clear,
+                    in: RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
         }
         .buttonStyle(.plain)
         .help(help)

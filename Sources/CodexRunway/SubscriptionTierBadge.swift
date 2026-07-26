@@ -2,12 +2,39 @@ import AppKit
 import CodexRunwayCore
 import SwiftUI
 
-/// Metallic / plain look for a subscription tier capsule (and identity gradient text).
+/// Shared sheen rhythm for the badge plate and identity text: the band travels
+/// during the first `travel` seconds of each cycle, then rests — deliberate
+/// sweeps instead of a continuous loop. Pure timing math; both consumers remain
+/// transform/mask-only animations.
+enum RunwaySheen {
+    static let cycle: TimeInterval = 3.6
+    static let travel: TimeInterval = 2.4
+
+    /// 0…1 while the band travels, parked at 1 (fully exited) while resting.
+    static func progress(at date: Date) -> CGFloat {
+        let t = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: cycle)
+        return CGFloat(min(t / travel, 1))
+    }
+}
+
+// NOTE: no custom TimelineSchedule here on purpose. A hand-rolled schedule that
+// "sleeps" through the rest phase by advancing `cycle - phase` can compute an
+// advance below Double resolution at Date magnitudes (~0.24µs at 2026 epoch),
+// yielding a non-advancing entries iterator and a main-thread hang inside
+// TimelineView. The stock `.animation(minimumInterval:paused:)` schedule ticks
+// through the rest phase, but parked frames produce identical view values, so
+// SwiftUI skips the repaint — the residual cost is one tiny body closure.
+
+/// Metallic / plain look for a subscription tier plate (and identity gradient text).
 struct SubscriptionTierLook: Equatable {
     var foreground: Color
     /// 1–3 stop fill; single color for plain tiers.
     var fill: [Color]
     var stroke: Color
+    /// Machined-edge lighting: top edge catches light, bottom edge falls into shadow.
+    /// Nil for plain tiers (flat stroke only).
+    var bevelTop: Color?
+    var bevelBottom: Color?
     var shimmer: Color?
     var shimmerEnabled: Bool
     /// Readable gradient stops for plain identity text (not capsule fill colors).
@@ -56,6 +83,12 @@ struct SubscriptionTierLook: Equatable {
                 stroke: light
                     ? Color(red: 0.58, green: 0.61, blue: 0.66).opacity(0.85)
                     : Color(red: 0.82, green: 0.84, blue: 0.88).opacity(0.55),
+                bevelTop: light
+                    ? Color(red: 0.97, green: 0.98, blue: 1.0).opacity(0.9)
+                    : Color(red: 0.80, green: 0.82, blue: 0.86).opacity(0.6),
+                bevelBottom: light
+                    ? Color(red: 0.55, green: 0.58, blue: 0.63).opacity(0.9)
+                    : Color(red: 0.28, green: 0.30, blue: 0.34).opacity(0.7),
                 shimmer: Color.white.opacity(light ? 0.72 : 0.55),
                 shimmerEnabled: true,
                 textGradient: textGradient)
@@ -92,11 +125,17 @@ struct SubscriptionTierLook: Equatable {
                 stroke: light
                     ? Color(red: 0.62, green: 0.44, blue: 0.10).opacity(0.9)
                     : Color(red: 0.95, green: 0.78, blue: 0.35).opacity(0.55),
+                bevelTop: light
+                    ? Color(red: 1.0, green: 0.92, blue: 0.55).opacity(0.9)
+                    : Color(red: 0.92, green: 0.74, blue: 0.32).opacity(0.6),
+                bevelBottom: light
+                    ? Color(red: 0.58, green: 0.42, blue: 0.10).opacity(0.9)
+                    : Color(red: 0.36, green: 0.26, blue: 0.06).opacity(0.7),
                 shimmer: Color(red: 1.0, green: 0.96, blue: 0.78).opacity(light ? 0.78 : 0.62),
                 shimmerEnabled: true,
                 textGradient: textGradient)
         case .pro20x:
-            // Black-gold identity text uses bright gold gradient (not the dark capsule fill).
+            // Obsidian plate with gold edge lighting — flagship tier.
             let textGradient: [Color] = light
                 ? [
                     Color(red: 0.42, green: 0.30, blue: 0.06),
@@ -124,6 +163,8 @@ struct SubscriptionTierLook: Equatable {
                         Color(red: 0.06, green: 0.05, blue: 0.05),
                     ],
                 stroke: Color(red: 0.78, green: 0.62, blue: 0.24).opacity(light ? 0.92 : 0.75),
+                bevelTop: Color(red: 0.95, green: 0.78, blue: 0.36).opacity(0.9),
+                bevelBottom: Color(red: 0.30, green: 0.22, blue: 0.08).opacity(0.9),
                 shimmer: Color(red: 1.0, green: 0.88, blue: 0.48).opacity(0.70),
                 shimmerEnabled: true,
                 textGradient: textGradient)
@@ -188,6 +229,8 @@ struct SubscriptionTierLook: Equatable {
             foreground: foreground,
             fill: [fill],
             stroke: stroke,
+            bevelTop: nil,
+            bevelBottom: nil,
             shimmer: nil,
             shimmerEnabled: false,
             textGradient: textGradient)
@@ -226,6 +269,10 @@ struct SubscriptionTierLook: Equatable {
         let stroke = light
             ? Color(red: base.0, green: base.1, blue: base.2).opacity(0.85)
             : Color(red: highlight.0, green: highlight.1, blue: highlight.2).opacity(0.45)
+        let bevelTop = Color(red: highlight.0, green: highlight.1, blue: highlight.2)
+            .opacity(light ? 0.9 : 0.6)
+        let bevelBottom = Color(red: shadow.0 * 0.85, green: shadow.1 * 0.85, blue: shadow.2 * 0.85)
+            .opacity(light ? 0.9 : 0.7)
         let shimmer = Color.white.opacity(light ? 0.55 : 0.42)
         // Identity text gradient: deep → mid → bright → mid (readable metal wash).
         let textGradient: [Color]
@@ -248,44 +295,111 @@ struct SubscriptionTierLook: Equatable {
             foreground: foreground,
             fill: fill,
             stroke: stroke,
+            bevelTop: bevelTop,
+            bevelBottom: bevelBottom,
             shimmer: shimmer,
             shimmerEnabled: true,
             textGradient: textGradient)
     }
 }
 
-/// Compact capsule for plan tiers with optional metallic sheen.
+/// Compact metal plate for plan tiers: delegates to the shared plate chassis
+/// with the tier's resolved look.
 struct SubscriptionTierBadge: View {
     var tier: CodexSubscriptionTier
     var label: String
-    var font: Font = .caption2.weight(.semibold)
-    var horizontalPadding: CGFloat = 7
+    var font: Font = .caption2.weight(.bold)
+    var horizontalPadding: CGFloat = 8
+    var verticalPadding: CGFloat = 3
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        MetalPlateChip(
+            look: SubscriptionTierLook.resolve(tier, colorScheme: colorScheme),
+            label: label,
+            font: font,
+            horizontalPadding: horizontalPadding,
+            verticalPadding: verticalPadding)
+    }
+}
+
+/// "Current account" marker: flat green chip in the badges' plate geometry —
+/// same radius, height and baseline, but no metal relief (it marks state, not
+/// identity, and an embossed look next to the tier plates read as noise).
+struct CurrentAccountTag: View {
+    var l10n: L10n
+    var horizontalPadding: CGFloat = 5
+    var verticalPadding: CGFloat = 1
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let colors = RunwayTagColors.resolve(.green, colorScheme: colorScheme)
+        let plate = RoundedRectangle(cornerRadius: RunwaySurface.radiusPlate, style: .continuous)
+        Text(l10n.text(.accountsCurrent))
+            .font(.caption2.weight(.semibold))
+            .lineLimit(1)
+            .foregroundStyle(colors.foreground)
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, verticalPadding)
+            .background(colors.background, in: plate)
+            .overlay(plate.strokeBorder(colors.stroke, lineWidth: colorScheme == .light ? 1.0 : 0.8))
+            .accessibilityLabel(l10n.text(.accountsCurrent))
+    }
+}
+
+/// Shared machined-plate chassis. Layer stack (bottom→top): base gradient, glass
+/// dome, ground shadow, bevel edge stroke — all static, rendered once — then the
+/// optional traveling sheen band (transform-only, panel-visibility paused).
+struct MetalPlateChip: View {
+    var look: SubscriptionTierLook
+    var label: String
+    var font: Font = .caption2.weight(.bold)
+    var horizontalPadding: CGFloat = 8
     var verticalPadding: CGFloat = 3
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private var plate: RoundedRectangle {
+        RoundedRectangle(cornerRadius: RunwaySurface.radiusPlate, style: .continuous)
+    }
+
     var body: some View {
-        let look = SubscriptionTierLook.resolve(tier, colorScheme: colorScheme)
-        Text(label)
-            .font(font)
-            .foregroundStyle(look.foreground)
-            .lineLimit(1)
+        styledLabel
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, verticalPadding)
             .background {
-                metallicFill(look)
+                metallicFill
             }
             .overlay {
-                Capsule()
-                    .strokeBorder(look.stroke, lineWidth: colorScheme == .light ? 1.0 : 0.85)
+                if let top = look.bevelTop, let bottom = look.bevelBottom {
+                    plate.strokeBorder(
+                        LinearGradient(
+                            colors: [top, bottom],
+                            startPoint: .top,
+                            endPoint: .bottom),
+                        lineWidth: 1)
+                } else {
+                    plate.strokeBorder(look.stroke, lineWidth: colorScheme == .light ? 1.0 : 0.85)
+                }
             }
             .accessibilityLabel(label)
     }
 
+    private var styledLabel: some View {
+        // Kerning sells the machined-plate look on Latin labels but breaks CJK rhythm.
+        let base = Text(label).font(font)
+        let kerned = label.allSatisfy(\.isASCII) ? base.kerning(0.4) : base
+        return kerned
+            .lineLimit(1)
+            .foregroundStyle(look.foreground)
+    }
+
     @ViewBuilder
-    private func metallicFill(_ look: SubscriptionTierLook) -> some View {
-        let shape = Capsule()
+    private var metallicFill: some View {
+        let shape = plate
         ZStack {
             if look.fill.count >= 2 {
                 shape.fill(
@@ -297,6 +411,27 @@ struct SubscriptionTierBadge: View {
                 shape.fill(only)
             } else {
                 shape.fill(Color(nsColor: .systemGray).opacity(0.16))
+            }
+
+            if look.bevelTop != nil {
+                // Glass dome: bright top half falling to clear.
+                LinearGradient(
+                    stops: [
+                        .init(color: Color.white.opacity(colorScheme == .light ? 0.30 : 0.22), location: 0),
+                        .init(color: Color.white.opacity(0), location: 0.48),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom)
+                    .clipShape(shape)
+                // Ground shadow anchoring the plate.
+                LinearGradient(
+                    stops: [
+                        .init(color: Color.black.opacity(0), location: 0.7),
+                        .init(color: Color.black.opacity(colorScheme == .light ? 0.10 : 0.22), location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom)
+                    .clipShape(shape)
             }
 
             if look.shimmerEnabled, let shimmer = look.shimmer, !reduceMotion {
@@ -366,21 +501,20 @@ struct SubscriptionTierShimmerText: View {
                     let height = max(proxy.size.height, 1)
                     let bandWidth = max(24, width * 0.3)
                     TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !panelVisible)) { context in
-                        let cycle = 2.4
-                        let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: cycle) / cycle
+                        let t = RunwaySheen.progress(at: context.date)
                         // Travel with overshoot so the tilted band fully enters/exits.
                         let travel = width + bandWidth * 2
                         LinearGradient(
                             colors: [
                                 peak.opacity(0),
-                                peak.opacity(0.85),
+                                peak.opacity(colorScheme == .light ? 0.70 : 0.85),
                                 peak.opacity(0),
                             ],
                             startPoint: .leading,
                             endPoint: .trailing)
                             .frame(width: bandWidth, height: height * 2.5)
                             .rotationEffect(.degrees(24))
-                            .offset(x: -bandWidth + CGFloat(t) * travel, y: -height * 0.75)
+                            .offset(x: -bandWidth + t * travel, y: -height * 0.75)
                     }
                 }
                 .mask(styledLabel)
@@ -406,7 +540,8 @@ struct SubscriptionTierShimmerText: View {
     }
 }
 
-/// Metallic slash that travels along the top-leading → bottom-trailing diagonal.
+/// Metallic slash that travels along the top-leading → bottom-trailing diagonal,
+/// sweeping once per RunwaySheen cycle and resting between passes.
 private struct SubscriptionTierFlowingSheen: View {
     var color: Color
     @Environment(\.runwayPanelVisible) private var panelVisible
@@ -421,12 +556,11 @@ private struct SubscriptionTierFlowingSheen: View {
             // Path angle of the host diagonal (TL → BR).
             let pathDegrees = Double(atan2(height, width)) * 180 / .pi
             TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !panelVisible)) { context in
-                let cycle = 2.25
-                let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: cycle) / cycle
+                let t = RunwaySheen.progress(at: context.date)
                 // Parametric travel along TL → BR, with overshoot so the band fully enters/exits.
                 let margin = max(bandWidth, height) * 1.15
-                let x = -margin + CGFloat(t) * (width + margin * 2)
-                let y = -margin + CGFloat(t) * (height + margin * 2)
+                let x = -margin + t * (width + margin * 2)
+                let y = -margin + t * (height + margin * 2)
                 ZStack {
                     LinearGradient(
                         colors: [
