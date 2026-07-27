@@ -13,7 +13,7 @@ final class UsageCostLogParser {
         plainTimestamp = ISO8601DateFormatter()
         plainTimestamp.formatOptions = [.withInternetDateTime]
         dayFormatter = DateFormatter()
-        dayFormatter.calendar = calendar
+        dayFormatter.calendar = Calendar(identifier: .gregorian)
         dayFormatter.locale = Locale(identifier: "en_US_POSIX")
         dayFormatter.timeZone = calendar.timeZone
         dayFormatter.dateFormat = "yyyy-MM-dd"

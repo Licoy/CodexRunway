@@ -90,6 +90,25 @@ struct UsageCostRepositoryAggregationTests {
         #expect(summary.dailyRows.map(\.totals.totalTokens) == [310])
     }
 
+    @Test("local day keys remain Gregorian when the system uses another calendar")
+    func localDayKeysRemainGregorian() async throws {
+        let fixture = try RepositoryFixture()
+        try fixture.write(
+            tokenLine(timestamp: "2026-06-29T18:00:00Z", input: 100) + "\n",
+            basename: "rollout-buddhist-calendar.jsonl")
+        let request = query(
+            id: "local-gregorian-key",
+            start: "2026-06-29T17:00:00Z",
+            end: "2026-06-29T19:00:00Z")
+        var calendar = Calendar(identifier: .buddhist)
+        calendar.timeZone = TimeZone(identifier: "Asia/Singapore")!
+
+        let summary = try #require(try await fixture.repository(calendar: calendar).summaries(
+            for: [request], calculatedAt: fixedNow, policy: .ifChanged)[request.id])
+
+        #expect(summary.dailyRows.map(\.date) == ["2026-06-30"])
+    }
+
     @Test("changing the aggregation time zone rebuilds the derived index")
     func timeZoneChangeRebuildsIndex() async throws {
         let fixture = try RepositoryFixture()
