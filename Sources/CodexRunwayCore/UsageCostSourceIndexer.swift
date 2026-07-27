@@ -7,7 +7,13 @@ struct UsageCostSourceIndexer {
 
     let store: UsageCostIndexStore
     let parserVersion: Int
-    private let stream = UsageCostLogStream()
+    private let stream: UsageCostLogStream
+
+    init(store: UsageCostIndexStore, parserVersion: Int, calendar: Calendar) {
+        self.store = store
+        self.parserVersion = parserVersion
+        stream = UsageCostLogStream(calendar: calendar)
+    }
 
     func rebuild(
         file: UsageCostSourceFile,
@@ -171,7 +177,7 @@ struct UsageCostSourceIndexer {
                     fileID: existing?.id,
                     byteOffset: line.byteOffset,
                     timestamp: record.timestamp,
-                    utcDay: record.utcDay,
+                    dayKey: record.dayKey,
                     model: record.model ?? currentModel,
                     project: currentProject,
                     uncachedInputTokens: uncached,

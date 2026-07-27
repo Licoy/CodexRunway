@@ -4,6 +4,7 @@ struct UsageCostIndexRefresher {
     let codexHome: URL
     let store: UsageCostIndexStore
     let parserVersion: Int
+    let calendar: Calendar
 
     func refresh(
         policy: UsageCostRefreshPolicy,
@@ -22,7 +23,10 @@ struct UsageCostIndexRefresher {
             from: UsageCostSourceInventory.files(in: codexHome),
             indexedByName: indexedByName,
             diagnostics: &diagnostics)
-        let indexer = UsageCostSourceIndexer(store: store, parserVersion: parserVersion)
+        let indexer = UsageCostSourceIndexer(
+            store: store,
+            parserVersion: parserVersion,
+            calendar: calendar)
         var provisionalAnomalies = UsageCostScanAnomalies.zero
         let sources = selection.sources.sorted(by: { $0.file.basename < $1.file.basename })
         let total = sources.count

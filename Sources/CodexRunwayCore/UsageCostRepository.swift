@@ -107,7 +107,8 @@ public actor UsageCostRepository {
             codexHome: codexHome,
             databaseURL: Self.defaultDatabaseURL,
             parserVersion: UsageCostRepositoryWorker.currentParserVersion,
-            priceBook: .current)
+            priceBook: .current,
+            calendar: .autoupdatingCurrent)
         beforeFlight = nil
     }
 
@@ -117,7 +118,8 @@ public actor UsageCostRepository {
             codexHome: codexHome,
             databaseURL: databaseURL,
             parserVersion: UsageCostRepositoryWorker.currentParserVersion,
-            priceBook: .current)
+            priceBook: .current,
+            calendar: .autoupdatingCurrent)
         beforeFlight = nil
     }
 
@@ -126,13 +128,15 @@ public actor UsageCostRepository {
         databaseURL: URL,
         parserVersion: Int,
         priceBook: UsageCostPriceBook,
+        calendar: Calendar = .autoupdatingCurrent,
         beforeFlight: (@Sendable () async -> Void)? = nil)
     {
         worker = UsageCostRepositoryWorker(
             codexHome: codexHome,
             databaseURL: databaseURL,
             parserVersion: parserVersion,
-            priceBook: priceBook)
+            priceBook: priceBook,
+            calendar: calendar)
         self.beforeFlight = beforeFlight
     }
 

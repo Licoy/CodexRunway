@@ -148,8 +148,8 @@ public struct TokenUsageHeatmapSnapshot: Sendable, Equatable {
 
 public enum TokenUsageHeatmapBuilder {
     /// Builds a year-to-date contribution-style grid.
-    /// - Parameter allDevicesTokens: Codex profile activity (all clients / devices).
-    /// - Parameter localTokens: This Mac's local session index only.
+    /// - Parameter allDevicesTokens: Current-account official profile statistics.
+    /// - Parameter localTokens: All session logs indexed on this Mac.
     /// Intensity prefers the official all-devices series when it has any usage.
     public static func make(
         allDevicesTokens: [String: Int],
@@ -169,7 +169,7 @@ public enum TokenUsageHeatmapBuilder {
         let gridStart = startOfWeek(containing: yearStart, calendar: calendar)
         let gridEnd = endOfWeek(containing: today, calendar: calendar)
         let dayKeys = orderedDayKeys(from: yearStart, through: today, calendar: calendar)
-        // Day-level maps (always) — tooltips show the profile activity value for that date.
+        // Keep both day-level sources intact for tooltips; they are not a subset relationship.
         let allDaily = clippedDaily(dayKeys: dayKeys, source: allDevicesTokens)
         let localDaily = clippedDaily(dayKeys: dayKeys, source: localTokens)
         let totalAll = allDaily.values.reduce(0, +)
@@ -698,7 +698,7 @@ public enum TokenUsageHeatmapBuilder {
     }
 
     private static func dayString(_ date: Date, calendar: Calendar) -> String {
-        // Lightweight UTC day key matching session index `utcDay`.
+        // Lightweight calendar day key matching the local session index.
         let components = calendar.dateComponents([.year, .month, .day], from: date)
         let year = components.year ?? 0
         let month = components.month ?? 0

@@ -67,25 +67,55 @@ struct UsageCostRepositoryAggregationTests {
         #expect(diagnostics.indexPasses == 1)
     }
 
-    @Test("fractional Z and offset timestamps group by UTC day")
-    func timestampsPreserveUTCGrouping() async throws {
+    @Test("timestamps group by the configured local calendar day")
+    func timestampsUseLocalCalendarGrouping() async throws {
         let fixture = try RepositoryFixture()
         let contents = [
-            tokenLine(timestamp: "2026-06-29T23:59:59.125Z", input: 100),
+            tokenLine(timestamp: "2026-06-29T18:00:00.125Z", input: 100),
             tokenLine(timestamp: "2026-06-29T23:30:00-02:00", input: 200),
         ].joined(separator: "\n") + "\n"
-        try fixture.write(contents, basename: "rollout-utc-days.jsonl")
+        try fixture.write(contents, basename: "rollout-local-days.jsonl")
         let request = query(
-            id: "utc",
-            start: "2026-06-29T23:00:00Z",
+            id: "local",
+            start: "2026-06-29T17:00:00Z",
             end: "2026-06-30T02:00:00Z")
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Singapore")!
 
-        let summary = try #require(try await fixture.repository().summaries(
+        let summary = try #require(try await fixture.repository(calendar: calendar).summaries(
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)[request.id])
 
         #expect(summary.totals.turns == 2)
-        #expect(summary.dailyRows.map(\.date) == ["2026-06-29", "2026-06-30"])
-        #expect(summary.dailyRows.map(\.totals.totalTokens) == [105, 205])
+        #expect(summary.dailyRows.map(\.date) == ["2026-06-30"])
+        #expect(summary.dailyRows.map(\.totals.totalTokens) == [310])
+    }
+
+    @Test("changing the aggregation time zone rebuilds the derived index")
+    func timeZoneChangeRebuildsIndex() async throws {
+        let fixture = try RepositoryFixture()
+        try fixture.write(
+            tokenLine(timestamp: "2026-06-29T18:00:00Z", input: 100) + "\n",
+            basename: "rollout-time-zone-change.jsonl")
+        let request = query(
+            id: "time-zone",
+            start: "2026-06-29T17:00:00Z",
+            end: "2026-06-29T19:00:00Z")
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0)!
+        let utcRepository = fixture.repository(calendar: utc)
+        let utcSummary = try #require(try await utcRepository.summaries(
+            for: [request], calculatedAt: fixedNow, policy: .ifChanged)[request.id])
+        #expect(utcSummary.dailyRows.map(\.date) == ["2026-06-29"])
+
+        var singapore = Calendar(identifier: .gregorian)
+        singapore.timeZone = TimeZone(identifier: "Asia/Singapore")!
+        let localRepository = fixture.repository(calendar: singapore)
+        let localSummary = try #require(try await localRepository.summaries(
+            for: [request], calculatedAt: fixedNow, policy: .ifChanged)[request.id])
+        let diagnostics = await localRepository.diagnosticsSnapshot()
+
+        #expect(localSummary.dailyRows.map(\.date) == ["2026-06-30"])
+        #expect(diagnostics.databaseRebuilds == 1)
     }
 
     @Test("invalid token counts are reported and skipped")

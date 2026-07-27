@@ -163,9 +163,9 @@ struct UsageCostRepositoryCorruptionTests {
             try external.execute(
                 """
                 INSERT INTO usage_events
-                    (file_id, byte_offset, timestamp, utc_day, model, project,
+                    (file_id, byte_offset, timestamp, day_key, model, project,
                      uncached_input_tokens, cached_input_tokens, output_tokens)
-                SELECT file_id, byte_offset + 1, timestamp, utc_day, model, project,
+                SELECT file_id, byte_offset + 1, timestamp, day_key, model, project,
                        9223372036854775807, 0, 0
                 FROM usage_events LIMIT 1
                 """,

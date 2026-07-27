@@ -3,6 +3,7 @@ import Foundation
 enum UsageCostIndexStoreError: Error, Equatable {
     case schemaVersionMismatch(expected: Int, actual: Int?)
     case parserVersionMismatch(expected: Int, actual: Int?)
+    case timeZoneMismatch(expected: String, actual: String?)
     case missingSourceID(basename: String)
     case sourceIdentityMismatch(basename: String)
     case integerOverflow(field: String)
@@ -37,7 +38,7 @@ struct UsageCostIndexedEvent: Sendable, Equatable {
     var fileID: Int64?
     var byteOffset: UInt64
     var timestamp: Date
-    var utcDay: String
+    var dayKey: String
     var model: String
     var project: String
     var uncachedInputTokens: Int
@@ -103,13 +104,14 @@ struct UsageCostCachedFullHash: Sendable, Hashable {
 }
 
 enum UsageCostIndexSchema {
-    static let version = 1
+    static let version = 2
 
     static let create = """
         CREATE TABLE index_metadata (
             singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
             schema_version INTEGER NOT NULL,
-            parser_version INTEGER NOT NULL
+            parser_version INTEGER NOT NULL,
+            aggregation_time_zone TEXT NOT NULL
         );
         CREATE TABLE source_files (
             id INTEGER PRIMARY KEY,
@@ -140,7 +142,7 @@ enum UsageCostIndexSchema {
             file_id INTEGER NOT NULL,
             byte_offset INTEGER NOT NULL CHECK (byte_offset >= 0),
             timestamp REAL NOT NULL,
-            utc_day TEXT NOT NULL,
+            day_key TEXT NOT NULL,
             model TEXT NOT NULL,
             project TEXT NOT NULL,
             uncached_input_tokens INTEGER NOT NULL CHECK (uncached_input_tokens >= 0),

@@ -7,15 +7,15 @@ final class UsageCostLogParser {
     private let plainTimestamp: ISO8601DateFormatter
     private let dayFormatter: DateFormatter
 
-    init() {
+    init(calendar: Calendar = .autoupdatingCurrent) {
         fractionalTimestamp = ISO8601DateFormatter()
         fractionalTimestamp.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         plainTimestamp = ISO8601DateFormatter()
         plainTimestamp.formatOptions = [.withInternetDateTime]
         dayFormatter = DateFormatter()
-        dayFormatter.calendar = Calendar(identifier: .gregorian)
+        dayFormatter.calendar = calendar
         dayFormatter.locale = Locale(identifier: "en_US_POSIX")
-        dayFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        dayFormatter.timeZone = calendar.timeZone
         dayFormatter.dateFormat = "yyyy-MM-dd"
     }
 
@@ -30,7 +30,7 @@ final class UsageCostLogParser {
             : turnContext?.model
         return UsageCostLogRecord(
             timestamp: timestamp,
-            utcDay: parsedTimestamp?.utcDay ?? dayFormatter.string(from: timestamp),
+            dayKey: parsedTimestamp?.dayKey ?? dayFormatter.string(from: timestamp),
             model: turnContext?.model ?? payload?.model,
             contextModel: contextModel,
             sessionCWD: payload?.cwd ?? turnContext?.cwd,
@@ -42,12 +42,12 @@ final class UsageCostLogParser {
         if let date = Self.parseZuluTimestamp(bytes) {
             return ParsedTimestamp(
                 date: date,
-                utcDay: String(decoding: bytes[0..<10], as: UTF8.self))
+                dayKey: dayFormatter.string(from: date))
         }
         guard let date = fractionalTimestamp.date(from: text) ?? plainTimestamp.date(from: text) else {
             return nil
         }
-        return ParsedTimestamp(date: date, utcDay: dayFormatter.string(from: date))
+        return ParsedTimestamp(date: date, dayKey: dayFormatter.string(from: date))
     }
 
     private static func parseZuluTimestamp(_ bytes: [UInt8]) -> Date? {
@@ -111,7 +111,7 @@ final class UsageCostLogParser {
 
 private struct ParsedTimestamp {
     var date: Date
-    var utcDay: String
+    var dayKey: String
 }
 
 private struct EncodedUsageCostRecord: Decodable {
@@ -161,15 +161,14 @@ private struct EncodedTokenUsage: Decodable {
         guard input >= 0, cached >= 0, output >= 0, reasoning >= 0, cached <= input else {
             throw UsageCostLogParserError.invalidTokenUsage
         }
-        let (combinedOutput, outputOverflow) = output.addingReportingOverflow(reasoning)
-        let (_, totalOverflow) = input.addingReportingOverflow(combinedOutput)
-        guard !outputOverflow, !totalOverflow else {
+        let (_, totalOverflow) = input.addingReportingOverflow(output)
+        guard !totalOverflow else {
             throw UsageCostLogParserError.invalidTokenUsage
         }
         return TokenUsage(
             inputTokens: input,
             cachedInputTokens: cached,
-            outputTokens: combinedOutput)
+            outputTokens: output)
     }
 
     enum CodingKeys: String, CodingKey {

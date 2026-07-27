@@ -26,7 +26,10 @@ struct RunwayModelRefreshTests {
                 Self.costSummary(window: window, calculatedAt: now)
             },
             fetchCodexProfileTokenUsage: { _ in
-                CodexProfileTokenUsage(dailyTokens: expected)
+                CodexProfileTokenUsage(
+                    dailyTokens: expected,
+                    statsAsOf: "2026-07-27",
+                    generatedAt: Date(timeIntervalSince1970: 1_785_139_420))
             },
             dryRunSessions: {
                 SessionRepairReport(
@@ -45,6 +48,8 @@ struct RunwayModelRefreshTests {
 
         #expect(model.tokenHeatmapAllDevicesTokens == expected)
         #expect(model.tokenHeatmapLocalTokens.isEmpty)
+        #expect(model.tokenHeatmapOfficialStatsAsOf == "2026-07-27")
+        #expect(model.tokenHeatmapOfficialGeneratedAt == Date(timeIntervalSince1970: 1_785_139_420))
     }
 
     @Test("account changes clear and immediately reload token heatmap state")
@@ -92,6 +97,8 @@ struct RunwayModelRefreshTests {
         #expect(model.tokenHeatmapAllDevicesTokens.isEmpty)
         #expect(model.tokenHeatmapLocalTokens.isEmpty)
         #expect(model.tokenHeatmapCalculatedAt == nil)
+        #expect(model.tokenHeatmapOfficialStatsAsOf == nil)
+        #expect(model.tokenHeatmapOfficialGeneratedAt == nil)
 
         model.refreshTokenHeatmap(policy: .ifChanged)
         try await waitForTokenHeatmapRefresh(in: model)
@@ -542,7 +549,9 @@ struct RunwayModelRefreshTests {
         for _ in 0..<100 {
             if model.tokenHeatmapAllDevicesTokens.isEmpty,
                model.tokenHeatmapLocalTokens.isEmpty,
-               model.tokenHeatmapCalculatedAt == nil
+               model.tokenHeatmapCalculatedAt == nil,
+               model.tokenHeatmapOfficialStatsAsOf == nil,
+               model.tokenHeatmapOfficialGeneratedAt == nil
             {
                 return
             }

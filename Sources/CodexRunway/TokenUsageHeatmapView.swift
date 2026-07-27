@@ -2,12 +2,122 @@ import AppKit
 import CodexRunwayCore
 import SwiftUI
 
+struct TokenUsageTooltipContent: Equatable {
+    var date: String
+    var primary: String
+    var secondary: String
+    var note: String?
+
+    static func make(
+        date: String,
+        officialTokens: Int,
+        localTokens: Int,
+        l10n: L10n
+    ) -> Self {
+        let tokensLabel = l10n.text(.tokens)
+        let official = TokenUsageHeatmapBuilder.compactTokenCount(
+            officialTokens,
+            language: l10n.language)
+        let local = TokenUsageHeatmapBuilder.compactTokenCount(
+            localTokens,
+            language: l10n.language)
+        return Self(
+            date: date,
+            primary: "\(l10n.text(.heatmapAllDevices)) \(official) \(tokensLabel)",
+            secondary: "\(l10n.text(.heatmapLocalDevice)) \(local) \(tokensLabel)",
+            note: localTokens > officialTokens
+                ? l10n.text(.heatmapSourceMismatch)
+                : nil)
+    }
+}
+
+enum TokenUsageSourcePresentation {
+    static func asOfText(
+        statsAsOf: String?,
+        generatedAt: Date?,
+        l10n: L10n
+    ) -> String? {
+        let date = normalized(statsAsOf) ?? generatedAt.map(utcDay)
+        return date.map { String(format: l10n.text(.heatmapOfficialAsOf), $0) }
+    }
+
+    static func disclosure(l10n: L10n) -> String {
+        l10n.text(.heatmapSourceDisclosure)
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty
+        else { return nil }
+        return trimmed
+    }
+
+    private static func utcDay(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+}
+
+private enum TokenUsageTooltipLayout {
+    static func size(for content: TokenUsageTooltipContent, containerWidth: CGFloat) -> CGSize {
+        let preferredWidth = min(260, max(180, containerWidth * 0.42))
+        return CGSize(
+            width: min(containerWidth, preferredWidth),
+            height: content.note == nil ? 60 : 80)
+    }
+}
+
+private struct TokenUsageTooltipCard: View {
+    var content: TokenUsageTooltipContent
+    var size: CGSize
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(content.date)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Text(content.primary)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(content.secondary)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            if let note = content.note {
+                Text(note)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(2)
+            }
+        }
+        .minimumScaleFactor(0.8)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1))
+        .shadow(color: Color.black.opacity(0.18), radius: 5, y: 2)
+    }
+}
+
 struct TokenUsageHeatmapView: View {
-    /// Codex profile activity — all clients / devices.
+    /// Current-account profile statistics from the official service.
     var allDevicesTokens: [String: Int]
-    /// This Mac only — local session index.
+    /// All session logs present on this Mac; historical logs may span accounts.
     var localTokens: [String: Int]
     var calculatedAt: Date?
+    var officialStatsAsOf: String?
+    var officialGeneratedAt: Date?
     @Binding var chartStyle: TokenUsageChartStyle
     var l10n: L10n
     var isRefreshing: Bool
@@ -24,7 +134,8 @@ struct TokenUsageHeatmapView: View {
         let allTotal = allDevicesTokens.values.reduce(0, +)
         let localTotal = localTokens.values.reduce(0, +)
         let stamp = calculatedAt?.timeIntervalSince1970 ?? 0
-        return "\(mode.rawValue)|\(chartStyle.rawValue)|\(stamp)|\(allDevicesTokens.count)|\(allTotal)|\(localTokens.count)|\(localTotal)|\(l10n.language)"
+        let officialStamp = officialGeneratedAt?.timeIntervalSince1970 ?? 0
+        return "\(mode.rawValue)|\(chartStyle.rawValue)|\(stamp)|\(officialStatsAsOf ?? "")|\(officialStamp)|\(allDevicesTokens.count)|\(allTotal)|\(localTokens.count)|\(localTotal)|\(l10n.language)"
     }
 
     var body: some View {
@@ -104,11 +215,27 @@ struct TokenUsageHeatmapView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 8) {
-            Text(l10n.text(.tokenUsageHeatmap))
-                .font(.headline)
-                .lineLimit(1)
-            Spacer(minLength: 8)
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 5) {
+                    Text(l10n.text(.tokenUsageHeatmap))
+                        .font(.headline)
+                        .lineLimit(1)
+                    Image(systemName: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .help(TokenUsageSourcePresentation.disclosure(l10n: l10n))
+                        .accessibilityLabel(TokenUsageSourcePresentation.disclosure(l10n: l10n))
+                }
+                if let officialAsOfText {
+                    Text(officialAsOfText)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            Spacer(minLength: 4)
             HStack(spacing: 4) {
                 Picker("", selection: $mode) {
                     Text(l10n.text(.heatmapDaily)).tag(TokenUsageHeatmapMode.daily)
@@ -147,6 +274,13 @@ struct TokenUsageHeatmapView: View {
                 .pointingHandCursor()
             }
         }
+    }
+
+    private var officialAsOfText: String? {
+        TokenUsageSourcePresentation.asOfText(
+            statsAsOf: officialStatsAsOf,
+            generatedAt: officialGeneratedAt,
+            l10n: l10n)
     }
 
     private var modeThirdSegmentTitle: String {
@@ -240,11 +374,10 @@ struct TokenUsageHeatmapView: View {
         {
             let cell = snapshot.weeks[week][day]
             if cell.isInRange {
-                let lines = tooltipLines(for: cell)
-                let preferredWidth = min(230, max(168, containerSize.width * 0.38))
-                let tooltipSize = CGSize(
-                    width: min(containerSize.width, preferredWidth),
-                    height: 60)
+                let content = tooltipContent(for: cell)
+                let tooltipSize = TokenUsageTooltipLayout.size(
+                    for: content,
+                    containerWidth: containerSize.width)
                 let cellRect = CGRect(
                     x: CGFloat(week) * (metrics.cellSize + metrics.columnSpacing),
                     y: CGFloat(day) * (metrics.cellSize + metrics.rowSpacing),
@@ -255,36 +388,9 @@ struct TokenUsageHeatmapView: View {
                     tooltipSize: tooltipSize,
                     containerSize: containerSize)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(lines.date)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
-                    Text(lines.primary)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                    if let secondary = lines.secondary {
-                        Text(secondary)
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .frame(
-                    width: tooltipSize.width,
-                    height: tooltipSize.height,
-                    alignment: .topLeading)
-                .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color(nsColor: .controlBackgroundColor)))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1))
-                .shadow(color: Color.black.opacity(0.18), radius: 5, y: 2)
-                .offset(x: origin.x, y: origin.y)
-                .accessibilityHidden(true)
+                TokenUsageTooltipCard(content: content, size: tooltipSize)
+                    .offset(x: origin.x, y: origin.y)
+                    .accessibilityHidden(true)
             }
         }
     }
@@ -304,21 +410,14 @@ struct TokenUsageHeatmapView: View {
         }
     }
 
-    private struct TooltipLines: Equatable {
-        var date: String
-        var primary: String
-        var secondary: String?
-    }
-
-    private func tooltipLines(for cell: TokenUsageHeatmapCell) -> TooltipLines {
+    private func tooltipContent(for cell: TokenUsageHeatmapCell) -> TokenUsageTooltipContent {
         // Always that calendar day's totals (not weekly/cumulative aggregates).
         let date = Self.tooltipDateFormatter(language: l10n.language).string(from: cell.date)
-        let tokensLabel = l10n.text(.tokens)
-        let allText =
-            "\(l10n.text(.heatmapAllDevices)) \(TokenUsageHeatmapBuilder.compactTokenCount(cell.allDevicesTokens, language: l10n.language)) \(tokensLabel)"
-        let localText =
-            "\(l10n.text(.heatmapLocalDevice)) \(TokenUsageHeatmapBuilder.compactTokenCount(cell.localTokens, language: l10n.language)) \(tokensLabel)"
-        return TooltipLines(date: date, primary: allText, secondary: localText)
+        return TokenUsageTooltipContent.make(
+            date: date,
+            officialTokens: cell.allDevicesTokens,
+            localTokens: cell.localTokens,
+            l10n: l10n)
     }
 
     private func monthTitle(_ month: Int) -> String {
@@ -865,11 +964,10 @@ private struct TokenUsageTrendChartView: View {
     private func hoverTooltip(layout: TrendLayoutMetrics, containerSize: CGSize) -> some View {
         if let index = hover.index, series.points.indices.contains(index) {
             let point = series.points[index]
-            let lines = tooltipLines(for: point)
-            let preferredWidth = min(230, max(168, containerSize.width * 0.38))
-            let tooltipSize = CGSize(
-                width: min(containerSize.width, preferredWidth),
-                height: 60)
+            let content = tooltipContent(for: point)
+            let tooltipSize = TokenUsageTooltipLayout.size(
+                for: content,
+                containerWidth: containerSize.width)
             let x = layout.xPosition(for: index)
             let y = layout.yPosition(for: point.tokens)
             let cellRect = CGRect(x: x - 4, y: y - 4, width: 8, height: 8)
@@ -878,50 +976,19 @@ private struct TokenUsageTrendChartView: View {
                 tooltipSize: tooltipSize,
                 containerSize: containerSize)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(lines.date)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text(lines.primary)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                if let secondary = lines.secondary {
-                    Text(secondary)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .frame(width: tooltipSize.width, height: tooltipSize.height, alignment: .topLeading)
-            .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor)))
-            .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1))
-            .shadow(color: Color.black.opacity(0.18), radius: 5, y: 2)
-            .offset(x: origin.x, y: origin.y)
-            .accessibilityHidden(true)
+            TokenUsageTooltipCard(content: content, size: tooltipSize)
+                .offset(x: origin.x, y: origin.y)
+                .accessibilityHidden(true)
         }
     }
 
-    private struct TooltipLines: Equatable {
-        var date: String
-        var primary: String
-        var secondary: String?
-    }
-
-    private func tooltipLines(for point: TokenUsageChartPoint) -> TooltipLines {
+    private func tooltipContent(for point: TokenUsageChartPoint) -> TokenUsageTooltipContent {
         let date = tooltipDateFormatter.string(from: point.date)
-        let tokensLabel = l10n.text(.tokens)
-        let allText =
-            "\(l10n.text(.heatmapAllDevices)) \(TokenUsageHeatmapBuilder.compactTokenCount(point.allDevicesTokens, language: l10n.language)) \(tokensLabel)"
-        let localText =
-            "\(l10n.text(.heatmapLocalDevice)) \(TokenUsageHeatmapBuilder.compactTokenCount(point.localTokens, language: l10n.language)) \(tokensLabel)"
-        return TooltipLines(date: date, primary: allText, secondary: localText)
+        return TokenUsageTooltipContent.make(
+            date: date,
+            officialTokens: point.allDevicesTokens,
+            localTokens: point.localTokens,
+            l10n: l10n)
     }
 
     private var tooltipDateFormatter: DateFormatter {

@@ -271,8 +271,7 @@ private func tokenUsage(from payload: [String: Any]?, key: String) throws -> Tok
     guard input >= 0, cached >= 0, output >= 0, reasoning >= 0, cached <= input else {
         throw UsageCostArithmeticError.invalidValue(field: "session token usage")
     }
-    let combinedOutput = try checkedAdd(output, reasoning, field: "session output tokens")
-    return TokenUsage(inputTokens: input, cachedInputTokens: cached, outputTokens: combinedOutput)
+    return TokenUsage(inputTokens: input, cachedInputTokens: cached, outputTokens: output)
 }
 
 private func tokenInteger(_ usage: [String: Any], key: String) throws -> Int {

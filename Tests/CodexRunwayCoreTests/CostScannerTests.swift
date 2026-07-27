@@ -23,7 +23,7 @@ struct CostScannerTests {
 
         #expect(summary.totals.inputTokens == 1_500)
         #expect(summary.totals.cachedInputTokens == 200)
-        #expect(summary.totals.outputTokens == 85)
+        #expect(summary.totals.outputTokens == 75)
         #expect(summary.estimatedUSD > 0)
         #expect(summary.unknownModels == ["unknown-model"])
     }
@@ -121,7 +121,7 @@ struct CostScannerTests {
         #expect(summary.confidence == .priced)
         #expect(summary.totals.uncachedInputTokens == 1_300)
         #expect(summary.totals.cachedInputTokens == 200)
-        #expect(summary.totals.outputTokens == 85)
+        #expect(summary.totals.outputTokens == 75)
         #expect(summary.totals.turns == 2)
         #expect(summary.dailyRows.map(\.date) == ["2026-06-25", "2026-06-29"])
         #expect(summary.dailyRows[0].estimatedUSD != summary.estimatedUSD)
@@ -208,7 +208,7 @@ struct CostScannerTests {
 
         #expect(report.summary.totals.uncachedInputTokens == 80)
         #expect(report.summary.totals.cachedInputTokens == 20)
-        #expect(report.summary.totals.outputTokens == 7)
+        #expect(report.summary.totals.outputTokens == 5)
         #expect(report.summary.totals.turns == 1)
         #expect(report.diagnostics.bytesRead == contents.utf8.count)
     }
@@ -257,7 +257,7 @@ struct CostScannerTests {
                 start: ISO8601DateFormatter().date(from: "2026-06-29T00:00:00Z")!,
                 end: ISO8601DateFormatter().date(from: "2026-06-30T00:00:00Z")!))
 
-        #expect(report.summary.totals.totalTokens == 107)
+        #expect(report.summary.totals.totalTokens == 105)
         #expect(report.summary.totals.turns == 1)
         #expect(report.diagnostics.malformedCandidateLines == 3)
         #expect(report.diagnostics.decodedLines == 1)
@@ -389,7 +389,7 @@ struct CostScannerTests {
         {"timestamp":"2026-06-29T00:00:00Z","type":"session_meta","payload":{"id":"\(sessionID)","cwd":"/Users/me/dev/codex-runway"}}
         {"timestamp":"2026-06-29T00:01:00Z","type":"event_msg","payload":{"type":"message","role":"user","content":"Fix the status bar"}}
         {"timestamp":"2026-06-29T00:02:00Z","type":"event_msg","payload":{"type":"approval_request"}}
-        {"timestamp":"2026-06-29T00:03:00Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000,"cached_input_tokens":100,"output_tokens":50,"reasoning_output_tokens":0}}},"turn_context":{"model":"gpt-5.5"}}
+        {"timestamp":"2026-06-29T00:03:00Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000,"cached_input_tokens":100,"output_tokens":50,"reasoning_output_tokens":10}}},"turn_context":{"model":"gpt-5.5"}}
         """.write(to: sessionDir.appending(path: "rollout-\(sessionID).jsonl"), atomically: true, encoding: .utf8)
 
         let summary = try SessionActivityScanner(codexHome: root.url).scan(limit: 5)
@@ -536,7 +536,7 @@ struct CostScannerTests {
         {"timestamp":"2026-06-29T00:01:00Z","type":"event_msg","payload":{"type":"message","role":"user","content":"Large edge scan"}}
         {"timestamp":"2026-06-29T00:02:00Z","type":"event_msg","payload":{"type":"message","role":"assistant","content":"\(filler)"}}
         {"timestamp":"2026-07-01T00:00:00Z","type":"event_msg","payload":{"type":"approval_request"}}
-        {"timestamp":"2026-07-01T00:01:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":50,"reasoning_output_tokens":25,"total_tokens":1075}}},"turn_context":{"model":"gpt-5.5"}}
+        {"timestamp":"2026-07-01T00:01:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":50,"reasoning_output_tokens":25,"total_tokens":1050}}},"turn_context":{"model":"gpt-5.5"}}
         """.write(to: sessionDir.appending(path: "rollout-2026-06-29T00-00-00-\(sessionID).jsonl"), atomically: true, encoding: .utf8)
 
         let summary = try SessionActivityScanner(codexHome: root.url).scan(limit: 1)
@@ -546,9 +546,9 @@ struct CostScannerTests {
         #expect(session.title == "Large edge scan")
         #expect(session.projectName == "codex-runway")
         #expect(session.state == .needsAttention)
-        #expect(session.totals.totalTokens == 1_075)
+        #expect(session.totals.totalTokens == 1_050)
         #expect(session.totals.cachedInputTokens == 200)
-        #expect(session.totals.outputTokens == 75)
+        #expect(session.totals.outputTokens == 50)
     }
 
     @Test("session activity scanner ignores stale large files outside recent candidates")

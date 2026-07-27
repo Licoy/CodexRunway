@@ -234,6 +234,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case heatmapEmpty
     case heatmapAllDevices
     case heatmapLocalDevice
+    case heatmapOfficialAsOf
+    case heatmapSourceDisclosure
+    case heatmapSourceMismatch
     case sourceLocalSessions
     case sourceOnlineSupplement
     case staleTitles

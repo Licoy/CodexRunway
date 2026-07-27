@@ -14,7 +14,11 @@ struct TokenUsageHeatmapTests {
               {"start_date":"2026-07-26","tokens":159644197}
             ]
           },
-          "metadata": {"stats_error": null}
+          "metadata": {
+            "generated_at": "2026-07-27T08:03:40.648014Z",
+            "stats_as_of": "2026-07-27",
+            "stats_error": null
+          }
         }
         """.data(using: .utf8)!
 
@@ -22,6 +26,8 @@ struct TokenUsageHeatmapTests {
 
         #expect(usage.dailyTokens["2026-07-25"] == 488_682_728)
         #expect(usage.dailyTokens["2026-07-26"] == 159_644_197)
+        #expect(usage.statsAsOf == "2026-07-27")
+        #expect(usage.generatedAt == RunwayDates.parse("2026-07-27T08:03:40.648014Z"))
     }
 
     @Test("Codex profile daily buckets reject invalid usage")
@@ -35,6 +41,12 @@ struct TokenUsageHeatmapTests {
         let statsError = """
         {"stats":{"daily_usage_buckets":[]},"metadata":{"stats_error":"failed"}}
         """.data(using: .utf8)!
+        let invalidMetadata = """
+        {
+          "stats":{"daily_usage_buckets":[]},
+          "metadata":{"generated_at":"not-a-date","stats_as_of":"2026-02-30"}
+        }
+        """.data(using: .utf8)!
 
         #expect(throws: DecodingError.self) {
             try CodexProfileTokenUsage.decode(from: negative)
@@ -44,6 +56,9 @@ struct TokenUsageHeatmapTests {
         }
         #expect(throws: DecodingError.self) {
             try CodexProfileTokenUsage.decode(from: statsError)
+        }
+        #expect(throws: DecodingError.self) {
+            try CodexProfileTokenUsage.decode(from: invalidMetadata)
         }
     }
 
@@ -202,6 +217,23 @@ struct TokenUsageHeatmapTests {
         #expect(snapshot.hasLocalData)
         #expect(snapshot.totalAllDevicesTokens == 1_600_000_100)
         #expect(snapshot.totalLocalTokens == 1_000_000_050)
+    }
+
+    @Test("local values above official remain independent and are never clamped")
+    func localAboveOfficialPreservesBothSources() {
+        let snapshot = TokenUsageHeatmapBuilder.make(
+            allDevicesTokens: ["2026-01-05": 998_000_000],
+            localTokens: ["2026-01-05": 1_611_000_000],
+            mode: .daily,
+            now: date("2026-01-10"),
+            firstWeekday: 1)
+
+        let cell = snapshot.weeks.flatMap { $0 }.first { $0.dayKey == "2026-01-05" }
+        #expect(cell?.allDevicesTokens == 998_000_000)
+        #expect(cell?.localTokens == 1_611_000_000)
+        #expect(cell?.tokens == 998_000_000)
+        #expect(snapshot.totalAllDevicesTokens == 998_000_000)
+        #expect(snapshot.totalLocalTokens == 1_611_000_000)
     }
 
     @Test("weekly mode colors by week total but tooltip fields stay daily")

@@ -1,9 +1,46 @@
 import CoreGraphics
+import Foundation
 import Testing
 @testable import CodexRunway
+@testable import CodexRunwayCore
 
 @Suite("Token usage heatmap tooltip")
 struct TokenUsageHeatmapViewTests {
+    @Test("tooltip preserves source values and explains an inverted comparison")
+    func tooltipExplainsDifferentSourceScopes() {
+        let l10n = L10n(language: .simplifiedChinese)
+        let content = TokenUsageTooltipContent.make(
+            date: "2026年7月25日",
+            officialTokens: 998_000_000,
+            localTokens: 1_611_000_000,
+            l10n: l10n)
+
+        #expect(content.primary == "官方统计（多端） 9.98亿 Tokens")
+        #expect(content.secondary == "本机日志（全部本机会话） 16.11亿 Tokens")
+        #expect(content.note == "数据源口径不同，不能作为包含关系比较")
+
+        let ordinary = TokenUsageTooltipContent.make(
+            date: "Jul 25, 2026",
+            officialTokens: 1_611_000_000,
+            localTokens: 998_000_000,
+            l10n: L10n(language: .english))
+        #expect(ordinary.primary == "Official stats (all devices) 1.61B Tokens")
+        #expect(ordinary.secondary == "Local logs (all sessions) 998M Tokens")
+        #expect(ordinary.note == nil)
+    }
+
+    @Test("official source caption exposes the backend statistics date")
+    func officialSourceCaptionUsesStatsDate() {
+        #expect(TokenUsageSourcePresentation.asOfText(
+            statsAsOf: "2026-07-27",
+            generatedAt: nil,
+            l10n: L10n(language: .simplifiedChinese)) == "官方截至 2026-07-27")
+        #expect(TokenUsageSourcePresentation.asOfText(
+            statsAsOf: nil,
+            generatedAt: Date(timeIntervalSince1970: 1_785_139_420),
+            l10n: L10n(language: .english)) == "Official through 2026-07-27")
+    }
+
     @Test("tooltip stays beside cells near either horizontal edge")
     func horizontalPlacementAvoidsHoveredCell() {
         let container = CGSize(width: 720, height: 89)

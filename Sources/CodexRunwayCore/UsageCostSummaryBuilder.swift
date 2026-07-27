@@ -60,12 +60,12 @@ enum UsageCostSummaryBuilder {
                 event.project,
                 default: .zero
             ].adding(totals)
-            result.byDay[event.utcDay, default: .zero] = try result.byDay[
-                event.utcDay,
+            result.byDay[event.dayKey, default: .zero] = try result.byDay[
+                event.dayKey,
                 default: .zero
             ].adding(totals)
-            result.byDayModel[event.utcDay, default: [:]][event.model, default: .zero] =
-                try result.byDayModel[event.utcDay, default: [:]][event.model, default: .zero]
+            result.byDayModel[event.dayKey, default: [:]][event.model, default: .zero] =
+                try result.byDayModel[event.dayKey, default: [:]][event.model, default: .zero]
                     .adding(totals)
         }
         return result

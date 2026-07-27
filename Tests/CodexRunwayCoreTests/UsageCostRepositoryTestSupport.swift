@@ -32,6 +32,7 @@ final class RepositoryFixture {
     func repository(
         parserVersion: Int = 1,
         priceBook: UsageCostPriceBook = .current,
+        calendar: Calendar = utcCalendar(),
         beforeFlight: (@Sendable () async -> Void)? = nil) -> UsageCostRepository
     {
         UsageCostRepository(
@@ -39,6 +40,7 @@ final class RepositoryFixture {
             databaseURL: databaseURL,
             parserVersion: parserVersion,
             priceBook: priceBook,
+            calendar: calendar,
             beforeFlight: beforeFlight)
     }
 
@@ -150,4 +152,10 @@ func parseDate(_ text: String) -> Date {
         preconditionFailure("Invalid test timestamp: \(text)")
     }
     return date
+}
+
+func utcCalendar() -> Calendar {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    return calendar
 }

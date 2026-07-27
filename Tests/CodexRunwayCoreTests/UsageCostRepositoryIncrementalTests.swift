@@ -68,7 +68,10 @@ struct UsageCostRepositoryIncrementalTests {
         try append(padding, to: file)
         _ = try await repository.summaries(
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
-        let expanded = try UsageCostIndexStore(url: fixture.databaseURL, parserVersion: 1)
+        let expanded = try UsageCostIndexStore(
+            url: fixture.databaseURL,
+            parserVersion: 1,
+            timeZoneIdentifier: utcCalendar().timeZone.identifier)
         let source = try #require(expanded.sourceRows().first)
         #expect(source.firstHashLength == Int(UsageCostSourceIndexer.hashWindowBytes))
         let beforeRewrite = await repository.diagnosticsSnapshot()

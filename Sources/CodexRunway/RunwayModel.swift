@@ -160,11 +160,13 @@ final class RunwayModel: ObservableObject {
     @Published var resetCreditDetails: [ResetCreditDetail] = []
     @Published var rateLimitResetToday: RateLimitResetTodaySnapshot?
     @Published var costDetail: ApiEquivalentSummary?
-    /// Codex profile activity (all devices) — day → product-displayed tokens.
+    /// Current-account official profile statistics — day → product-displayed tokens.
     @Published var tokenHeatmapAllDevicesTokens: [String: Int] = [:]
-    /// This Mac only — local session index day → total tokens.
+    /// All session logs on this Mac; historical entries may span accounts.
     @Published var tokenHeatmapLocalTokens: [String: Int] = [:]
     @Published var tokenHeatmapCalculatedAt: Date?
+    @Published var tokenHeatmapOfficialStatsAsOf: String?
+    @Published var tokenHeatmapOfficialGeneratedAt: Date?
     @Published var recentSessions: [SessionActivityItem] = []
     @Published var costScanNote: String?
     /// Scan progress lives on its own observable: it publishes ~10x/sec during a
@@ -1225,6 +1227,8 @@ final class RunwayModel: ObservableObject {
     private func applyTokenHeatmap(
         allDevices: [String: Int],
         local: [String: Int],
+        officialStatsAsOf: String?,
+        officialGeneratedAt: Date?,
         now: Date
     ) {
         if allDevices != tokenHeatmapAllDevicesTokens {
@@ -1233,6 +1237,8 @@ final class RunwayModel: ObservableObject {
         if local != tokenHeatmapLocalTokens {
             tokenHeatmapLocalTokens = local
         }
+        tokenHeatmapOfficialStatsAsOf = officialStatsAsOf
+        tokenHeatmapOfficialGeneratedAt = officialGeneratedAt
         tokenHeatmapCalculatedAt = now
     }
 
@@ -1494,6 +1500,8 @@ final class RunwayModel: ObservableObject {
         tokenHeatmapAllDevicesTokens = [:]
         tokenHeatmapLocalTokens = [:]
         tokenHeatmapCalculatedAt = nil
+        tokenHeatmapOfficialStatsAsOf = nil
+        tokenHeatmapOfficialGeneratedAt = nil
         quotaMeters = []
         quotaLines = []
         resetCreditSummary = nil
@@ -1684,6 +1692,8 @@ final class RunwayModel: ObservableObject {
         applyTokenHeatmap(
             allDevices: profileUsage.dailyTokens,
             local: request.localTokens,
+            officialStatsAsOf: profileUsage.statsAsOf,
+            officialGeneratedAt: profileUsage.generatedAt,
             now: request.calculatedAt)
     }
 

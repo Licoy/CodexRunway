@@ -225,6 +225,12 @@ enum MainPanelMockRender {
         model.tokenHeatmapAllDevicesTokens = heatmap.mapValues { Int(Double($0) * 1.6) }
         model.tokenHeatmapLocalTokens = heatmap
         model.tokenHeatmapCalculatedAt = now
+        model.tokenHeatmapOfficialStatsAsOf = String(
+            format: "%04d-%02d-%02d",
+            utc.component(.year, from: now),
+            utc.component(.month, from: now),
+            utc.component(.day, from: now))
+        model.tokenHeatmapOfficialGeneratedAt = now
 
         let credits = RunwayPreviewFixtures.resetCredits(now: now)
         model.resetCreditSummary = ResetCreditSummary(snapshot: credits)

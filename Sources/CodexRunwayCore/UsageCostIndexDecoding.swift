@@ -63,7 +63,7 @@ func decodeUsageCostAggregate(
         fileID: nil, byteOffset: 0,
         timestamp: Date(timeIntervalSince1970: try requiredDouble(
             row, column: 0, field: "event timestamp")),
-        utcDay: try requiredString(row, column: 1, field: "event utc day"),
+        dayKey: try requiredString(row, column: 1, field: "event day key"),
         model: try requiredString(row, column: 2, field: "event model"),
         project: try requiredString(row, column: 3, field: "event project"),
         uncachedInputTokens: try nonnegativeInt(row, column: 4, field: "uncached tokens"),
@@ -90,7 +90,7 @@ func decodeUsageCostCachedFullHash(
         digest: try requiredHash(row, column: 6, field: "cached full hash"))
 }
 
-private func requiredString(
+func requiredString(
     _ row: SQLiteStatement,
     column: Int32,
     field: String

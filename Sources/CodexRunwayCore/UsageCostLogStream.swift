@@ -4,7 +4,7 @@ import Foundation
 
 struct UsageCostLogRecord: Sendable {
     var timestamp: Date
-    var utcDay: String
+    var dayKey: String
     var model: String?
     var contextModel: String?
     var sessionCWD: String?
@@ -44,13 +44,15 @@ struct UsageCostLogStream {
         data: Data("usage-cost-content-fingerprint-v2".utf8)))
 
     private let reader: UsageCostLogReader
-    private let parser = UsageCostLogParser()
+    private let parser: UsageCostLogParser
 
     init(
         chunkSize: Int = UsageCostLogStream.chunkSize,
-        maximumLineBytes: Int = UsageCostLogStream.maximumLineBytes)
+        maximumLineBytes: Int = UsageCostLogStream.maximumLineBytes,
+        calendar: Calendar = .autoupdatingCurrent)
     {
         reader = UsageCostLogReader(chunkSize: chunkSize, maximumLineBytes: maximumLineBytes)
+        parser = UsageCostLogParser(calendar: calendar)
     }
 
     func read(

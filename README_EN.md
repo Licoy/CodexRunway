@@ -87,15 +87,15 @@ The self-check prints local diagnostics with tokens redacted.
 - Invalid or mock credentials are never written back to official `~/.codex/auth.json`.
 - Access tokens, refresh tokens, ID tokens, and API keys must not be written to logs, README files, issue templates, or self-check output.
 - API-equivalent cost is computed from local session JSONL logs by default, with derived data such as a local incremental index under `~/.codex-runway/`. Session contents are not uploaded.
-- Online usage supplements API-equivalent cost only when local token data is unavailable; the heatmap’s all-devices series comes from official Codex profile stats.
+- Online usage supplements API-equivalent cost only when local token data is unavailable. The chart’s “Official stats (all devices)” series comes from current-account profile statistics and may lag or be revised; “Local logs (all sessions)” scans the sessions present on this Mac and historical entries may span accounts. The two series are not a subset relationship and should not be subtracted.
 - Session repair only touches `~/.codex/session_index.jsonl`, creates a backup before writing, and never deletes session files.
 - Update checks request only version information. Codex account and session data are not uploaded.
 
 ## Data sources
 
 - **Reset today?**: Status comes from the public third-party site [hascodexratelimitreset.today](https://hascodexratelimitreset.today/) and its `api/status` endpoint. Codex Runway only fetches the published result and never attaches Codex accounts or tokens. Treat it as advisory — this app does not control or guarantee that source’s accuracy or availability.
-- **Quota / reset credits / heatmap all-devices / some online usage**: When signed in, requests use your local credentials against official ChatGPT / Codex backend APIs; the heatmap uses the official profile-statistics token definition.
-- **API-equivalent cost and recent sessions**: Computed by default from local `~/.codex` session logs and the local index.
+- **Quota / reset credits / official token usage / some online usage**: When signed in, requests use your local credentials against official ChatGPT / Codex backend APIs. Official token usage belongs to the current account and shows the backend statistics date.
+- **Local-log token usage / API-equivalent cost / recent sessions**: Computed by default from local `~/.codex` session logs and the local index. Historical local logs have no reliable account attribution, so they may include multiple accounts.
 
 ## Development and Contribution
 

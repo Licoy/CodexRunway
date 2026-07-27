@@ -2,12 +2,13 @@ import Foundation
 import SQLite3
 
 actor UsageCostRepositoryWorker {
-    static let currentParserVersion = 2
+    static let currentParserVersion = 3
 
     private let codexHome: URL
     private let databaseURL: URL
     private let parserVersion: Int
     private let priceBook: UsageCostPriceBook
+    private let calendar: Calendar
     private var store: UsageCostIndexStore?
     private var diagnostics = UsageCostRepositoryDiagnostics()
     private var activeScans = 0
@@ -16,12 +17,14 @@ actor UsageCostRepositoryWorker {
         codexHome: URL,
         databaseURL: URL,
         parserVersion: Int,
-        priceBook: UsageCostPriceBook)
+        priceBook: UsageCostPriceBook,
+        calendar: Calendar)
     {
         self.codexHome = codexHome
         self.databaseURL = databaseURL
         self.parserVersion = parserVersion
         self.priceBook = priceBook
+        self.calendar = calendar
     }
 
     func summaries(
@@ -70,7 +73,8 @@ actor UsageCostRepositoryWorker {
         let refreshWarnings = try UsageCostIndexRefresher(
             codexHome: codexHome,
             store: opened.store,
-            parserVersion: parserVersion)
+            parserVersion: parserVersion,
+            calendar: calendar)
             .refresh(policy: policy, diagnostics: &diagnostics, progress: progress)
         try opened.store.validateEventStorage()
         let warnings = opened.warnings + refreshWarnings
@@ -96,12 +100,22 @@ actor UsageCostRepositoryWorker {
     }
 
     private func openStore() throws -> (store: UsageCostIndexStore, warnings: [String]) {
-        if let store { return (store, []) }
+        let currentTimeZoneIdentifier = calendar.timeZone.identifier
+        if let store {
+            guard store.timeZoneIdentifier != currentTimeZoneIdentifier else {
+                return (store, [])
+            }
+            self.store = nil
+            return try rebuildStore(reason: "time-zone")
+        }
         try FileManager.default.createDirectory(
             at: databaseURL.deletingLastPathComponent(),
             withIntermediateDirectories: true)
         do {
-            let opened = try UsageCostIndexStore(url: databaseURL, parserVersion: parserVersion)
+            let opened = try UsageCostIndexStore(
+                url: databaseURL,
+                parserVersion: parserVersion,
+                timeZoneIdentifier: currentTimeZoneIdentifier)
             store = opened
             return (opened, [])
         } catch let error as UsageCostIndexStoreError {
@@ -110,6 +124,8 @@ actor UsageCostRepositoryWorker {
                 return try rebuildStore(reason: "schema-version")
             case .parserVersionMismatch:
                 return try rebuildStore(reason: "parser-version")
+            case .timeZoneMismatch:
+                return try rebuildStore(reason: "time-zone")
             case .corruptRow:
                 return try rebuildStore(reason: "database-corrupt")
             default:
@@ -125,7 +141,10 @@ actor UsageCostRepositoryWorker {
         for url in databaseFiles() where FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.removeItem(at: url)
         }
-        let rebuilt = try UsageCostIndexStore(url: databaseURL, parserVersion: parserVersion)
+        let rebuilt = try UsageCostIndexStore(
+            url: databaseURL,
+            parserVersion: parserVersion,
+            timeZoneIdentifier: calendar.timeZone.identifier)
         store = rebuilt
         diagnostics.databaseRebuilds += 1
         return (rebuilt, ["usage-index-rebuilt:\(reason)"])
@@ -134,7 +153,7 @@ actor UsageCostRepositoryWorker {
     private func shouldRebuild(after error: any Error) throws -> Bool {
         if let storeError = error as? UsageCostIndexStoreError {
             switch storeError {
-            case .schemaVersionMismatch, .parserVersionMismatch, .corruptRow:
+            case .schemaVersionMismatch, .parserVersionMismatch, .timeZoneMismatch, .corruptRow:
                 return true
             default:
                 return false

@@ -20,9 +20,14 @@ struct UsageCostScanReport<Summary> {
 
 public struct UsageCostScanner: Sendable {
     public var codexHome: URL
+    public var calendar: Calendar
 
-    public init(codexHome: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex")) {
+    public init(
+        codexHome: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex"),
+        calendar: Calendar = .autoupdatingCurrent)
+    {
         self.codexHome = codexHome
+        self.calendar = calendar
     }
 
     public func scan(window: DateInterval) throws -> UsageCostSummary {
@@ -33,7 +38,7 @@ public struct UsageCostScanner: Sendable {
         var byModel: [String: TokenUsage] = [:]
         var unknown = Set<String>()
         let files = jsonlFiles(window: window)
-        let stream = UsageCostLogStream()
+        let stream = UsageCostLogStream(calendar: calendar)
         var diagnostics = UsageCostScanDiagnostics(candidateFiles: files.count)
         for file in files {
             try scan(
@@ -76,7 +81,7 @@ public struct UsageCostScanner: Sendable {
         var byDayModel: [String: [String: ApiEquivalentTotals]] = [:]
         var unknown = Set<String>()
         let files = jsonlFiles(window: window)
-        let stream = UsageCostLogStream()
+        let stream = UsageCostLogStream(calendar: calendar)
         var diagnostics = UsageCostScanDiagnostics(candidateFiles: files.count)
         for file in files {
             try scanAPIEquivalent(
@@ -186,7 +191,7 @@ public struct UsageCostScanner: Sendable {
             guard let usage = record.lastTokenUsage else { return }
             let model = record.model ?? currentModel
             let totals = try ApiEquivalentTotals(validating: usage, turns: 1, threads: 0)
-            let day = record.utcDay
+            let day = record.dayKey
             byModel[model, default: .zero] = try byModel[model, default: .zero].adding(totals)
             byProject[currentProject, default: .zero] = try byProject[currentProject, default: .zero]
                 .adding(totals)

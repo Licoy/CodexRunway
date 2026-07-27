@@ -2,9 +2,17 @@ import Foundation
 
 public struct CodexProfileTokenUsage: Sendable, Equatable {
     public var dailyTokens: [String: Int]
+    public var statsAsOf: String?
+    public var generatedAt: Date?
 
-    public init(dailyTokens: [String: Int]) {
+    public init(
+        dailyTokens: [String: Int],
+        statsAsOf: String? = nil,
+        generatedAt: Date? = nil)
+    {
         self.dailyTokens = dailyTokens
+        self.statsAsOf = statsAsOf
+        self.generatedAt = generatedAt
     }
 
     public static func decode(from data: Data) throws -> Self {
@@ -28,7 +36,26 @@ public struct CodexProfileTokenUsage: Sendable, Equatable {
                 throw invalid("Codex profile daily usage contains a duplicate date")
             }
         }
-        return Self(dailyTokens: dailyTokens)
+        let statsAsOf = normalized(response.metadata?.statsAsOf)
+        if let statsAsOf, !isValidDayKey(statsAsOf) {
+            throw invalid("Codex profile stats date is invalid")
+        }
+        let generatedAtText = normalized(response.metadata?.generatedAt)
+        let generatedAt = generatedAtText.flatMap(RunwayDates.parse)
+        if generatedAtText != nil, generatedAt == nil {
+            throw invalid("Codex profile generation timestamp is invalid")
+        }
+        return Self(
+            dailyTokens: dailyTokens,
+            statsAsOf: statsAsOf,
+            generatedAt: generatedAt)
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty
+        else { return nil }
+        return trimmed
     }
 
     private static func isValidDayKey(_ value: String) -> Bool {
@@ -70,9 +97,13 @@ private struct ProfileStats: Decodable {
 
 private struct ProfileMetadata: Decodable {
     var statsError: String?
+    var statsAsOf: String?
+    var generatedAt: String?
 
     enum CodingKeys: String, CodingKey {
         case statsError = "stats_error"
+        case statsAsOf = "stats_as_of"
+        case generatedAt = "generated_at"
     }
 }
 

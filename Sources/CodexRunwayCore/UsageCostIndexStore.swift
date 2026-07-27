@@ -4,11 +4,13 @@ import SQLite3
 final class UsageCostIndexStore {
     typealias EventEmitter = (UsageCostIndexedEvent) throws -> Void
     let database: SQLiteDatabase
+    let timeZoneIdentifier: String
     private let parserVersion: Int
 
-    init(url: URL, parserVersion: Int) throws {
+    init(url: URL, parserVersion: Int, timeZoneIdentifier: String) throws {
         database = try SQLiteDatabase(url: url)
         self.parserVersion = parserVersion
+        self.timeZoneIdentifier = timeZoneIdentifier
         try initializeSchema()
     }
 
@@ -80,12 +82,12 @@ final class UsageCostIndexStore {
 
     func events(in window: DateInterval) throws -> [UsageCostIndexedEvent] {
         let sql = """
-            SELECT MIN(timestamp), utc_day, model, project,
+            SELECT MIN(timestamp), day_key, model, project,
                    SUM(uncached_input_tokens), SUM(cached_input_tokens),
                    SUM(output_tokens), COUNT(*),
                    MAX(CASE WHEN
                        typeof(timestamp) NOT IN ('real', 'integer') OR
-                       typeof(utc_day) != 'text' OR typeof(model) != 'text' OR
+                       typeof(day_key) != 'text' OR typeof(model) != 'text' OR
                        typeof(project) != 'text' OR
                        typeof(uncached_input_tokens) != 'integer' OR
                        typeof(cached_input_tokens) != 'integer' OR
@@ -93,8 +95,8 @@ final class UsageCostIndexStore {
                    THEN 1 ELSE 0 END)
             FROM usage_events
             WHERE timestamp >= ? AND timestamp <= ?
-            GROUP BY utc_day, model, project
-            ORDER BY utc_day, model, project
+            GROUP BY day_key, model, project
+            ORDER BY day_key, model, project
             """
         return try database.withStatement(sql, operation: "query usage events") { statement in
             try statement.bind(window.start.timeIntervalSince1970, at: 1)
@@ -117,7 +119,7 @@ final class UsageCostIndexStore {
                OR byte_offset < 0
                OR typeof(timestamp) NOT IN ('real', 'integer')
                OR timestamp NOT BETWEEN -1.7976931348623157e308 AND 1.7976931348623157e308
-               OR typeof(utc_day) != 'text'
+               OR typeof(day_key) != 'text'
                OR typeof(model) != 'text'
                OR typeof(project) != 'text'
                OR typeof(uncached_input_tokens) != 'integer'
@@ -145,24 +147,29 @@ final class UsageCostIndexStore {
             try createSchema()
             return
         }
-        let versions: (schema: Int?, parser: Int?)
+        let metadata: (schema: Int?, parser: Int?, timeZone: String?)
         do {
-            versions = try storedVersions()
+            metadata = try storedMetadata()
         } catch let error as SQLiteError {
             guard Self.isSchemaError(error) else { throw error }
             throw UsageCostIndexStoreError.schemaVersionMismatch(
                 expected: UsageCostIndexSchema.version,
                 actual: nil)
         }
-        guard versions.schema == UsageCostIndexSchema.version else {
+        guard metadata.schema == UsageCostIndexSchema.version else {
             throw UsageCostIndexStoreError.schemaVersionMismatch(
                 expected: UsageCostIndexSchema.version,
-                actual: versions.schema)
+                actual: metadata.schema)
         }
-        guard versions.parser == parserVersion else {
+        guard metadata.parser == parserVersion else {
             throw UsageCostIndexStoreError.parserVersionMismatch(
                 expected: parserVersion,
-                actual: versions.parser)
+                actual: metadata.parser)
+        }
+        guard metadata.timeZone == timeZoneIdentifier else {
+            throw UsageCostIndexStoreError.timeZoneMismatch(
+                expected: timeZoneIdentifier,
+                actual: metadata.timeZone)
         }
         do {
             try validateStorage()
@@ -170,7 +177,7 @@ final class UsageCostIndexStore {
             guard Self.isSchemaError(error) else { throw error }
             throw UsageCostIndexStoreError.schemaVersionMismatch(
                 expected: UsageCostIndexSchema.version,
-                actual: versions.schema)
+                actual: metadata.schema)
         }
     }
 
@@ -178,10 +185,15 @@ final class UsageCostIndexStore {
         try database.transaction {
             try database.execute(UsageCostIndexSchema.create, operation: "create usage cost schema")
             try database.withStatement(
-                "INSERT INTO index_metadata(singleton, schema_version, parser_version) VALUES (1, ?, ?)",
+                """
+                INSERT INTO index_metadata(
+                    singleton, schema_version, parser_version, aggregation_time_zone
+                ) VALUES (1, ?, ?, ?)
+                """,
                 operation: "prepare index metadata") { statement in
                 try statement.bind(Int64(UsageCostIndexSchema.version), at: 1)
                 try statement.bind(Int64(parserVersion), at: 2)
+                try statement.bind(timeZoneIdentifier, at: 3)
                 _ = try statement.step()
             }
         }
@@ -202,14 +214,21 @@ final class UsageCostIndexStore {
             operation: "inspect database tables") { try $0.step() }
     }
 
-    private func storedVersions() throws -> (schema: Int?, parser: Int?) {
+    private func storedMetadata() throws -> (schema: Int?, parser: Int?, timeZone: String?) {
         try database.withStatement(
-            "SELECT schema_version, parser_version FROM index_metadata WHERE singleton = 1",
+            """
+            SELECT schema_version, parser_version, aggregation_time_zone
+            FROM index_metadata WHERE singleton = 1
+            """,
             operation: "read index metadata") { statement in
-            guard try statement.step() else { return (nil, nil) }
+            guard try statement.step() else { return (nil, nil, nil) }
             let schema = try requiredInt64(statement, column: 0, field: "schema version")
             let parser = try requiredInt64(statement, column: 1, field: "parser version")
-            return (Int(exactly: schema), Int(exactly: parser))
+            let timeZone = try requiredString(
+                statement,
+                column: 2,
+                field: "aggregation time zone")
+            return (Int(exactly: schema), Int(exactly: parser), timeZone)
         }
     }
 
@@ -276,7 +295,7 @@ final class UsageCostIndexStore {
         try statement.bind(fileID, at: 1)
         try statement.bind(sqliteInteger(event.byteOffset, field: "event byte offset"), at: 2)
         try statement.bind(event.timestamp.timeIntervalSince1970, at: 3)
-        try statement.bind(event.utcDay, at: 4)
+        try statement.bind(event.dayKey, at: 4)
         try statement.bind(event.model, at: 5)
         try statement.bind(event.project, at: 6)
         try statement.bind(Int64(event.uncachedInputTokens), at: 7)
@@ -288,11 +307,11 @@ final class UsageCostIndexStore {
 
     private static let insertEventSQL = """
         INSERT INTO usage_events(
-            file_id, byte_offset, timestamp, utc_day, model, project,
+            file_id, byte_offset, timestamp, day_key, model, project,
             uncached_input_tokens, cached_input_tokens, output_tokens)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(file_id, byte_offset) DO UPDATE SET
-            timestamp = excluded.timestamp, utc_day = excluded.utc_day,
+            timestamp = excluded.timestamp, day_key = excluded.day_key,
             model = excluded.model, project = excluded.project,
             uncached_input_tokens = excluded.uncached_input_tokens,
             cached_input_tokens = excluded.cached_input_tokens,

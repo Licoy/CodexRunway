@@ -87,15 +87,15 @@ swift run CodexRunway --self-check
 - 无效或 mock 凭据不会写回官方 `~/.codex/auth.json`。
 - access token、refresh token、id token、API key 不会写入日志、README、issue 模板或自检输出。
 - API 等价成本默认来自本机会话 JSONL 日志，并在 `~/.codex-runway/` 下维护本地增量索引等派生数据；不上传会话内容。
-- API 等价成本的在线用量只在本地没有可用 token 数据时作为补全；热力图的“全部设备”数据来自官方 Codex 资料统计。
+- API 等价成本的在线用量只在本地没有可用 token 数据时作为补全。Token 图表的“官方统计（多端）”来自当前账号的官方资料统计，可能延迟或后续修订；“本机日志（全部本机会话）”扫描本机现有会话，历史记录可能跨账号。两者口径不同，不能视为包含关系或直接相减。
 - 会话修复只处理 `~/.codex/session_index.jsonl`，写入前会创建备份，不删除会话文件。
 - 更新检测只访问版本信息，不上传 Codex 账号或会话数据。
 
 ## 数据来源
 
 - **今日是否重置**：状态来自第三方公开站点 [hascodexratelimitreset.today](https://hascodexratelimitreset.today/) 及其 `api/status` 接口。Codex Runway 仅拉取公开结果，不附带任何 Codex 账号或 token；结果仅供参考，应用不控制也不保证该数据源的准确性与可用性。
-- **配额 / reset credits / 热力图全部设备 / 部分在线用量**：在你已登录的前提下，通过本机凭据访问官方 ChatGPT / Codex 后端接口；热力图使用官方资料统计口径。
-- **API 等价成本与最近会话**：默认基于本机 `~/.codex` 会话日志与本地索引计算。
+- **配额 / reset credits / Token 用量官方统计 / 部分在线用量**：在你已登录的前提下，通过本机凭据访问官方 ChatGPT / Codex 后端接口；官方 Token 统计仅对应当前账号，并显示服务端统计截至日期。
+- **Token 用量本机日志 / API 等价成本 / 最近会话**：默认基于本机 `~/.codex` 会话日志与本地索引计算。本机历史日志没有可靠的账号归属，因此可能包含多个账号的数据。
 
 ## 开发与贡献
 
