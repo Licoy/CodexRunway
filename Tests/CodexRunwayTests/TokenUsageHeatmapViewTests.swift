@@ -109,4 +109,38 @@ struct TokenUsageHeatmapViewTests {
         #expect(frame.minY >= 0 && frame.maxY <= container.height)
         #expect(!frame.intersects(middleCell))
     }
+
+    @Test("bilingual trend mismatch tooltips avoid a centered line or bar point")
+    func bilingualTrendMismatchTooltipsFit() {
+        let container = CGSize(width: 368, height: 98)
+        let middlePoint = CGRect(x: 180, y: 35, width: 8, height: 8)
+        let contents = [
+            TokenUsageTooltipContent.make(
+                date: "Dec 25, 2026",
+                officialTokens: 998_000_000,
+                localTokens: 1_611_000_000,
+                l10n: L10n(language: .english)),
+            TokenUsageTooltipContent.make(
+                date: "2026年12月25日",
+                officialTokens: 998_000_000,
+                localTokens: 1_611_000_000,
+                l10n: L10n(language: .simplifiedChinese)),
+        ]
+
+        for content in contents {
+            let tooltip = TokenUsageTooltipLayout.size(
+                for: content,
+                cellRect: middlePoint,
+                containerSize: container)
+            let origin = HeatmapTooltipPlacement.origin(
+                cellRect: middlePoint,
+                tooltipSize: tooltip,
+                containerSize: container)
+            let frame = CGRect(origin: origin, size: tooltip)
+
+            #expect(frame.minX >= 0 && frame.maxX <= container.width)
+            #expect(frame.minY >= 0 && frame.maxY <= container.height)
+            #expect(!frame.intersects(middlePoint))
+        }
+    }
 }

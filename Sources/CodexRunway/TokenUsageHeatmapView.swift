@@ -867,16 +867,17 @@ private struct TokenUsageTrendChartView: View {
                                 .frame(width: plotWidth, height: plotHeight)
                             hoverMarker(layout: layout)
                                 .allowsHitTesting(false)
-                            hoverTooltip(layout: layout, containerSize: CGSize(
-                                width: plotWidth,
-                                height: outerHeight))
-                                .allowsHitTesting(false)
                         }
                         .frame(width: plotWidth, height: plotHeight)
                         monthAxis(layout: layout)
                             .frame(width: plotWidth, height: labelHeight, alignment: .leading)
                     }
                 }
+                hoverTooltip(
+                    layout: layout,
+                    containerSize: CGSize(width: proxy.size.width, height: outerHeight),
+                    xOffset: yAxisWidth)
+                    .allowsHitTesting(false)
             }
             .frame(width: proxy.size.width, height: outerHeight, alignment: .topLeading)
         }
@@ -977,11 +978,15 @@ private struct TokenUsageTrendChartView: View {
     }
 
     @ViewBuilder
-    private func hoverTooltip(layout: TrendLayoutMetrics, containerSize: CGSize) -> some View {
+    private func hoverTooltip(
+        layout: TrendLayoutMetrics,
+        containerSize: CGSize,
+        xOffset: CGFloat
+    ) -> some View {
         if let index = hover.index, series.points.indices.contains(index) {
             let point = series.points[index]
             let content = tooltipContent(for: point)
-            let x = layout.xPosition(for: index)
+            let x = xOffset + layout.xPosition(for: index)
             let y = layout.yPosition(for: point.tokens)
             let cellRect = CGRect(x: x - 4, y: y - 4, width: 8, height: 8)
             let tooltipSize = TokenUsageTooltipLayout.size(
