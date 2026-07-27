@@ -78,6 +78,7 @@ struct PreferencesTests {
         #expect(store.load().showsRecentSessions)
         #expect(store.load().showsSessionRepairSummary == false)
         #expect(store.load().showsRateLimitResetToday)
+        #expect(store.load().showsTokenUsageHeatmap)
         #expect(store.load().rateLimitResetTodayRefreshIntervalSeconds == 3_600)
         #expect(store.load().automaticallyChecksForUpdates == false)
         #expect(store.load().quotaAlertsEnabled)
@@ -101,6 +102,22 @@ struct PreferencesTests {
 
         #expect(preferences.showsRateLimitResetToday)
         #expect(preferences.rateLimitResetTodayRefreshIntervalSeconds == 3_600)
+        #expect(preferences.showsTokenUsageHeatmap)
+    }
+
+    @Test("old preferences default token usage heatmap on")
+    func oldPreferencesDefaultTokenUsageHeatmap() throws {
+        let data = """
+        {
+          "language": "english",
+          "appearance": "dark",
+          "refreshIntervalSeconds": 300,
+          "showsCostSummary": true
+        }
+        """.data(using: .utf8)!
+
+        let preferences = try JSONDecoder().decode(RunwayPreferences.self, from: data)
+        #expect(preferences.showsTokenUsageHeatmap)
     }
 
     @Test("old preferences use new status bar defaults")

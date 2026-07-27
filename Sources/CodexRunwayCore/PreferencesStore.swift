@@ -61,6 +61,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     public var showsRecentSessions: Bool
     public var showsSessionRepairSummary: Bool
     public var showsRateLimitResetToday: Bool
+    public var showsTokenUsageHeatmap: Bool
     public var rateLimitResetTodayRefreshIntervalSeconds: Int
     public var automaticallyChecksForUpdates: Bool
     public var quotaAlertsEnabled: Bool
@@ -83,6 +84,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         showsRecentSessions: Bool = false,
         showsSessionRepairSummary: Bool = true,
         showsRateLimitResetToday: Bool = true,
+        showsTokenUsageHeatmap: Bool = true,
         rateLimitResetTodayRefreshIntervalSeconds: Int = RunwayPreferences.defaultRateLimitResetTodayRefreshIntervalSeconds,
         automaticallyChecksForUpdates: Bool = true,
         quotaAlertsEnabled: Bool = false,
@@ -101,6 +103,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         self.showsRecentSessions = showsRecentSessions
         self.showsSessionRepairSummary = showsSessionRepairSummary
         self.showsRateLimitResetToday = showsRateLimitResetToday
+        self.showsTokenUsageHeatmap = showsTokenUsageHeatmap
         self.rateLimitResetTodayRefreshIntervalSeconds = Self.clampRateLimitResetTodayRefreshInterval(
             rateLimitResetTodayRefreshIntervalSeconds)
         self.automaticallyChecksForUpdates = automaticallyChecksForUpdates
@@ -126,6 +129,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         case showsRecentSessions
         case showsSessionRepairSummary
         case showsRateLimitResetToday
+        case showsTokenUsageHeatmap
         case rateLimitResetTodayRefreshIntervalSeconds
         case automaticallyChecksForUpdates
         case quotaAlertsEnabled
@@ -147,6 +151,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         showsRecentSessions = try container.decodeIfPresent(Bool.self, forKey: .showsRecentSessions) ?? false
         showsSessionRepairSummary = try container.decodeIfPresent(Bool.self, forKey: .showsSessionRepairSummary) ?? true
         showsRateLimitResetToday = try container.decodeIfPresent(Bool.self, forKey: .showsRateLimitResetToday) ?? true
+        showsTokenUsageHeatmap = try container.decodeIfPresent(Bool.self, forKey: .showsTokenUsageHeatmap) ?? true
         rateLimitResetTodayRefreshIntervalSeconds = Self.clampRateLimitResetTodayRefreshInterval(
             try container.decodeIfPresent(Int.self, forKey: .rateLimitResetTodayRefreshIntervalSeconds)
                 ?? Self.defaultRateLimitResetTodayRefreshIntervalSeconds)

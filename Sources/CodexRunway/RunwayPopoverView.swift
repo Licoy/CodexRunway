@@ -131,6 +131,17 @@ struct RunwayPopoverView: View {
                         isRefreshing: model.isRefreshing(.quota),
                         onRefresh: { model.refreshQuota() })
                 }
+                if settings.preferences.showsTokenUsageHeatmap {
+                    sectionBlock {
+                        TokenUsageHeatmapView(
+                            allDevicesTokens: model.tokenHeatmapAllDevicesTokens,
+                            localTokens: model.tokenHeatmapLocalTokens,
+                            calculatedAt: model.tokenHeatmapCalculatedAt,
+                            l10n: l10n,
+                            isRefreshing: model.isRefreshing(.tokenHeatmap),
+                            onRefresh: { model.refreshTokenHeatmap(policy: .force) })
+                    }
+                }
                 if settings.preferences.showsRateLimitResetToday {
                     sectionBlock {
                         RateLimitResetTodayView(

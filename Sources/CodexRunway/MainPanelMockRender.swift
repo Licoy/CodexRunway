@@ -153,6 +153,7 @@ enum MainPanelMockRender {
             fetchRateLimitResetToday: { throw URLError(.unsupportedURL) },
             scanAPIEquivalent: { _, _, _, _ in throw URLError(.unsupportedURL) },
             fetchDailyWorkspaceUsage: { _, _, _, _, _ in throw URLError(.unsupportedURL) },
+            fetchCodexProfileTokenUsage: { _ in throw URLError(.unsupportedURL) },
             dryRunSessions: { throw URLError(.unsupportedURL) },
             scanRecentSessions: { _ in throw URLError(.unsupportedURL) })
         let model = RunwayModel(
@@ -196,6 +197,34 @@ enum MainPanelMockRender {
         ]
 
         model.rateLimitResetToday = RateLimitResetTodaySnapshot.devMock(kind: .yesCountdown, now: now)
+
+        // Synthetic YTD token series so the heatmap renders in mock shots.
+        var heatmap: [String: Int] = [:]
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0)!
+        let year = utc.component(.year, from: now)
+        if let start = utc.date(from: DateComponents(year: year, month: 1, day: 1)) {
+            var cursor = start
+            let today = utc.startOfDay(for: now)
+            var index = 0
+            while cursor <= today {
+                let key = String(
+                    format: "%04d-%02d-%02d",
+                    utc.component(.year, from: cursor),
+                    utc.component(.month, from: cursor),
+                    utc.component(.day, from: cursor))
+                if index % 3 != 0 {
+                    heatmap[key] = (index % 7 + 1) * 12_000 + (index % 5) * 1_500
+                }
+                guard let next = utc.date(byAdding: .day, value: 1, to: cursor) else { break }
+                cursor = next
+                index += 1
+            }
+        }
+        // All-devices series slightly higher than local (simulates multi-client usage).
+        model.tokenHeatmapAllDevicesTokens = heatmap.mapValues { Int(Double($0) * 1.6) }
+        model.tokenHeatmapLocalTokens = heatmap
+        model.tokenHeatmapCalculatedAt = now
 
         let credits = RunwayPreviewFixtures.resetCredits(now: now)
         model.resetCreditSummary = ResetCreditSummary(snapshot: credits)

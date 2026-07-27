@@ -219,6 +219,16 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case showRateLimitResetToday
     case showRecentSessions
     case showSessionRepairSummary
+    case showTokenUsageHeatmap
+    case tokenUsageHeatmap
+    case tokenUsageHeatmapDescription
+    case tokenUsageHeatmapUnavailable
+    case heatmapDaily
+    case heatmapWeekly
+    case heatmapCumulative
+    case heatmapEmpty
+    case heatmapAllDevices
+    case heatmapLocalDevice
     case sourceLocalSessions
     case sourceOnlineSupplement
     case staleTitles

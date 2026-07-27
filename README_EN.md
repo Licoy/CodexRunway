@@ -21,6 +21,7 @@ Codex Runway is a native macOS menu bar app for checking Codex quota, whether ra
 - Show the current account, subscription tier, and expiration.
 - View reset credit count, status, and expiration time.
 - View API-equivalent cost and token usage for today, the current cycle, the previous cycle, this month, or a custom range; the default range is configurable in settings.
+- Show a year-to-date token usage heatmap under quota on the main panel (daily / weekly / cumulative); can be turned off in settings.
 - Use a local incremental session index for faster cost scans.
 - View recent Codex sessions, projects, status, and usage summaries.
 - Repair the local session index.
@@ -86,14 +87,14 @@ The self-check prints local diagnostics with tokens redacted.
 - Invalid or mock credentials are never written back to official `~/.codex/auth.json`.
 - Access tokens, refresh tokens, ID tokens, and API keys must not be written to logs, README files, issue templates, or self-check output.
 - API-equivalent cost is computed from local session JSONL logs by default, with derived data such as a local incremental index under `~/.codex-runway/`. Session contents are not uploaded.
-- Online usage data is used only when local token data is unavailable.
+- Online usage supplements API-equivalent cost only when local token data is unavailable; the heatmap’s all-devices series comes from official Codex profile stats.
 - Session repair only touches `~/.codex/session_index.jsonl`, creates a backup before writing, and never deletes session files.
 - Update checks request only version information. Codex account and session data are not uploaded.
 
 ## Data sources
 
 - **Reset today?**: Status comes from the public third-party site [hascodexratelimitreset.today](https://hascodexratelimitreset.today/) and its `api/status` endpoint. Codex Runway only fetches the published result and never attaches Codex accounts or tokens. Treat it as advisory — this app does not control or guarantee that source’s accuracy or availability.
-- **Quota / reset credits / some online usage**: When you are signed in, requests use your local credentials against the official ChatGPT / Codex backend APIs.
+- **Quota / reset credits / heatmap all-devices / some online usage**: When signed in, requests use your local credentials against official ChatGPT / Codex backend APIs; the heatmap uses the official profile-statistics token definition.
 - **API-equivalent cost and recent sessions**: Computed by default from local `~/.codex` session logs and the local index.
 
 ## Development and Contribution

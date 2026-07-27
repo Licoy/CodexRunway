@@ -6,6 +6,148 @@ import Testing
 @Suite("Runway model refresh")
 @MainActor
 struct RunwayModelRefreshTests {
+    @Test("token heatmap uses official profile daily buckets")
+    func tokenHeatmapUsesCodexProfileDailyUsage() async throws {
+        let settings = RunwaySettings(store: PreferencesStore(defaults: scopedDefaults()))
+        let expected = ["2026-07-26": 159_644_197]
+        let services = RunwayModelServices(
+            loadValidAuth: { _, _ in Self.auth() },
+            fetchQuota: { _ in Self.quotaSnapshot() },
+            fetchResetCredits: { _ in ResetCreditsSnapshot(availableCount: 0, credits: [], updatedAt: Date()) },
+            fetchRateLimitResetToday: {
+                RateLimitResetTodaySnapshot(state: .no, fetchedAt: Date())
+            },
+            scanAPIEquivalent: { queries, now, _, _ in
+                Dictionary(uniqueKeysWithValues: queries.map {
+                    ($0.id, ApiEquivalentSummary.unavailable(window: $0.window, calculatedAt: now))
+                })
+            },
+            fetchDailyWorkspaceUsage: { _, _, _, window, now in
+                Self.costSummary(window: window, calculatedAt: now)
+            },
+            fetchCodexProfileTokenUsage: { _ in
+                CodexProfileTokenUsage(dailyTokens: expected)
+            },
+            dryRunSessions: {
+                SessionRepairReport(
+                    missingIndexIDs: [],
+                    orphanIndexIDs: [],
+                    duplicateIndexIDs: [],
+                    staleTitleIDs: [],
+                    backupPath: nil,
+                    plannedEntries: 0)
+            },
+            scanRecentSessions: { _ in SessionActivitySummary(items: []) })
+        let model = makeModel(settings: settings, services: services)
+
+        model.refreshTokenHeatmap()
+        try await waitForTokenHeatmapRefresh(in: model)
+
+        #expect(model.tokenHeatmapAllDevicesTokens == expected)
+        #expect(model.tokenHeatmapLocalTokens.isEmpty)
+    }
+
+    @Test("account changes clear and immediately reload token heatmap state")
+    func accountChangeClearsTokenHeatmapState() async throws {
+        let provider = MutableAuthProvider(Self.auth(accountId: "acct-a"))
+        let settings = RunwaySettings(store: PreferencesStore(defaults: scopedDefaults()))
+        let services = RunwayModelServices(
+            loadValidAuth: { _, _ in await provider.load() },
+            fetchQuota: { _ in Self.quotaSnapshot() },
+            fetchResetCredits: { _ in ResetCreditsSnapshot(availableCount: 0, credits: [], updatedAt: Date()) },
+            fetchRateLimitResetToday: {
+                RateLimitResetTodaySnapshot(state: .no, fetchedAt: Date())
+            },
+            scanAPIEquivalent: { queries, now, _, _ in
+                Dictionary(uniqueKeysWithValues: queries.map {
+                    ($0.id, ApiEquivalentSummary.unavailable(window: $0.window, calculatedAt: now))
+                })
+            },
+            fetchDailyWorkspaceUsage: { _, _, _, window, now in
+                Self.costSummary(window: window, calculatedAt: now)
+            },
+            fetchCodexProfileTokenUsage: { auth in
+                let value = auth.tokens.accountId == "acct-a" ? 100 : 200
+                return CodexProfileTokenUsage(dailyTokens: ["2026-07-26": value])
+            },
+            dryRunSessions: {
+                SessionRepairReport(
+                    missingIndexIDs: [],
+                    orphanIndexIDs: [],
+                    duplicateIndexIDs: [],
+                    staleTitleIDs: [],
+                    backupPath: nil,
+                    plannedEntries: 0)
+            },
+            scanRecentSessions: { _ in SessionActivitySummary(items: []) })
+        let model = makeModel(settings: settings, services: services)
+
+        model.refreshTokenHeatmap()
+        try await waitForTokenHeatmapRefresh(in: model)
+        #expect(model.tokenHeatmapAllDevicesTokens["2026-07-26"] == 100)
+
+        await provider.set(Self.auth(accountId: "acct-b"))
+        model.refreshQuota()
+        try await waitForTokenHeatmapClear(in: model)
+        #expect(model.tokenHeatmapAllDevicesTokens.isEmpty)
+        #expect(model.tokenHeatmapLocalTokens.isEmpty)
+        #expect(model.tokenHeatmapCalculatedAt == nil)
+
+        model.refreshTokenHeatmap(policy: .ifChanged)
+        try await waitForTokenHeatmapRefresh(in: model)
+        #expect(model.tokenHeatmapAllDevicesTokens["2026-07-26"] == 200)
+    }
+
+    @Test("switching accounts cancels an in-flight old-account heatmap")
+    func accountSwitchCancelsInFlightHeatmap() async throws {
+        let firstAuth = Self.auth(accountId: "acct-a")
+        let secondAuth = Self.auth(accountId: "acct-b")
+        let store = isolatedAccountStore()
+        _ = try store.upsert(auth: firstAuth, makeActive: true)
+        let secondAccount = try store.upsert(auth: secondAuth, makeActive: false)
+        let profileService = BlockingProfileUsageService()
+        let settings = RunwaySettings(store: PreferencesStore(defaults: scopedDefaults()))
+        let services = RunwayModelServices(
+            loadValidAuth: { _, cached in cached ?? firstAuth },
+            fetchQuota: { _ in Self.quotaSnapshot() },
+            fetchResetCredits: { _ in ResetCreditsSnapshot(availableCount: 0, credits: [], updatedAt: Date()) },
+            fetchRateLimitResetToday: {
+                RateLimitResetTodaySnapshot(state: .no, fetchedAt: Date())
+            },
+            scanAPIEquivalent: { queries, now, _, _ in
+                Dictionary(uniqueKeysWithValues: queries.map {
+                    ($0.id, ApiEquivalentSummary.unavailable(window: $0.window, calculatedAt: now))
+                })
+            },
+            fetchDailyWorkspaceUsage: { _, _, _, window, now in
+                Self.costSummary(window: window, calculatedAt: now)
+            },
+            fetchCodexProfileTokenUsage: { auth in
+                await profileService.fetch(accountId: auth.tokens.accountId)
+            },
+            dryRunSessions: {
+                SessionRepairReport(
+                    missingIndexIDs: [],
+                    orphanIndexIDs: [],
+                    duplicateIndexIDs: [],
+                    staleTitleIDs: [],
+                    backupPath: nil,
+                    plannedEntries: 0)
+            },
+            scanRecentSessions: { _ in SessionActivitySummary(items: []) })
+        let model = RunwayModel(settings: settings, services: services, accountStore: store)
+
+        model.refreshTokenHeatmap()
+        try await profileService.waitUntilFirstRequest()
+        model.switchAccount(id: secondAccount.id, restartCodex: false)
+        try await waitForActiveAccount(secondAccount.id, in: store)
+        await profileService.releaseFirstRequest()
+        try await waitForAccountSwitch(secondAccount.id, in: model)
+
+        #expect(model.tokenHeatmapAllDevicesTokens["2026-07-26"] == 200)
+        #expect(!model.tokenHeatmapAllDevicesTokens.values.contains(100))
+    }
+
     @Test("full refresh starts independent popover sections without waiting for API cost")
     func fullRefreshStartsIndependentSectionsWithoutWaitingForAPICost() async throws {
         let recorder = RefreshEventRecorder()
@@ -40,6 +182,9 @@ struct RunwayModelRefreshTests {
             },
             fetchDailyWorkspaceUsage: { _, _, _, window, now in
                 Self.costSummary(window: window, calculatedAt: now)
+            },
+            fetchCodexProfileTokenUsage: { _ in
+                CodexProfileTokenUsage(dailyTokens: [:])
             },
             dryRunSessions: {
                 await recorder.record("repair-start")
@@ -198,6 +343,9 @@ struct RunwayModelRefreshTests {
             fetchDailyWorkspaceUsage: { _, _, _, _, _ in
                 throw URLError(.badServerResponse)
             },
+            fetchCodexProfileTokenUsage: { _ in
+                CodexProfileTokenUsage(dailyTokens: [:])
+            },
             dryRunSessions: {
                 SessionRepairReport(
                     missingIndexIDs: [],
@@ -275,6 +423,9 @@ struct RunwayModelRefreshTests {
             },
             fetchDailyWorkspaceUsage: { _, _, _, window, now in
                 Self.costSummary(window: window, calculatedAt: now)
+            },
+            fetchCodexProfileTokenUsage: { _ in
+                CodexProfileTokenUsage(dailyTokens: [:])
             },
             dryRunSessions: {
                 SessionRepairReport(
@@ -387,12 +538,54 @@ struct RunwayModelRefreshTests {
         Issue.record("Timed out waiting for quota refresh")
     }
 
+    private func waitForTokenHeatmapClear(in model: RunwayModel) async throws {
+        for _ in 0..<100 {
+            if model.tokenHeatmapAllDevicesTokens.isEmpty,
+               model.tokenHeatmapLocalTokens.isEmpty,
+               model.tokenHeatmapCalculatedAt == nil
+            {
+                return
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("Timed out waiting for account-scoped token heatmap clear")
+    }
+
+    private func waitForActiveAccount(_ id: String, in store: AccountStore) async throws {
+        for _ in 0..<100 {
+            if try store.loadIndex().activeAccountId == id { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("Timed out waiting for account store switch")
+    }
+
+    private func waitForAccountSwitch(_ id: String, in model: RunwayModel) async throws {
+        for _ in 0..<200 {
+            if model.activeAccountId == id,
+               !model.isSwitchingAccount,
+               model.tokenHeatmapAllDevicesTokens["2026-07-26"] == 200
+            {
+                return
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("Timed out waiting for switched-account heatmap")
+    }
+
     private func waitForCostRefresh(in model: RunwayModel) async throws {
         for _ in 0..<100 {
             if !model.isRefreshing(.apiCost) { return }
             try await Task.sleep(for: .milliseconds(10))
         }
         Issue.record("Timed out waiting for API cost refresh")
+    }
+
+    private func waitForTokenHeatmapRefresh(in model: RunwayModel) async throws {
+        for _ in 0..<100 {
+            if !model.isRefreshing(.tokenHeatmap) { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("Timed out waiting for token heatmap refresh")
     }
 
     nonisolated private static func quotaSnapshot(primaryMinutes: Int = 300, secondaryReset: Date? = nil) -> QuotaSnapshot {
@@ -406,13 +599,13 @@ struct RunwayModelRefreshTests {
             updatedAt: now)
     }
 
-    nonisolated private static func auth() -> CodexAuth {
+    nonisolated private static func auth(accountId: String = "acct-test") -> CodexAuth {
         // Long JWT + refresh so loginUsability stays .usable (must never mirror into real ~/.codex).
         let access = jwt(payload: [
             "exp": 4_100_000_000,
             "email": "test@example.com",
             "https://api.openai.com/auth": [
-                "chatgpt_account_id": "acct-test",
+                "chatgpt_account_id": accountId,
                 "chatgpt_plan_type": "pro",
             ],
         ])
@@ -421,8 +614,8 @@ struct RunwayModelRefreshTests {
             tokens: .init(
                 idToken: access,
                 accessToken: access,
-                refreshToken: "test-refresh-token-not-for-production-use",
-                accountId: "acct-test"),
+                refreshToken: "test-refresh-token-\(accountId)-not-for-production-use",
+                accountId: accountId),
             lastRefresh: nil)
     }
 
@@ -456,6 +649,9 @@ struct RunwayModelRefreshTests {
             },
             fetchDailyWorkspaceUsage: { _, _, _, window, now in
                 Self.costSummary(window: window, calculatedAt: now)
+            },
+            fetchCodexProfileTokenUsage: { _ in
+                CodexProfileTokenUsage(dailyTokens: [:])
             },
             dryRunSessions: {
                 SessionRepairReport(
@@ -538,5 +734,50 @@ private actor RefreshEventRecorder {
             try await Task.sleep(for: .milliseconds(20))
         }
         Issue.record("Timed out waiting for \(event); events: \(events)")
+    }
+}
+
+private actor MutableAuthProvider {
+    private var auth: CodexAuth
+
+    init(_ auth: CodexAuth) {
+        self.auth = auth
+    }
+
+    func load() -> CodexAuth {
+        auth
+    }
+
+    func set(_ auth: CodexAuth) {
+        self.auth = auth
+    }
+}
+
+private actor BlockingProfileUsageService {
+    private var firstRequestStarted = false
+    private var firstRequestContinuation: CheckedContinuation<Void, Never>?
+
+    func fetch(accountId: String?) async -> CodexProfileTokenUsage {
+        if accountId == "acct-a", !firstRequestStarted {
+            firstRequestStarted = true
+            await withCheckedContinuation { continuation in
+                firstRequestContinuation = continuation
+            }
+            return CodexProfileTokenUsage(dailyTokens: ["2026-07-26": 100])
+        }
+        return CodexProfileTokenUsage(dailyTokens: ["2026-07-26": 200])
+    }
+
+    func waitUntilFirstRequest() async throws {
+        for _ in 0..<100 {
+            if firstRequestStarted { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("Timed out waiting for first profile usage request")
+    }
+
+    func releaseFirstRequest() {
+        firstRequestContinuation?.resume()
+        firstRequestContinuation = nil
     }
 }

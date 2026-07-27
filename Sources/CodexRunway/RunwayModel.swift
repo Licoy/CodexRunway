@@ -12,6 +12,7 @@ enum RunwayRefreshSection: CaseIterable, Hashable {
     case resetCredits
     case rateLimitResetToday
     case apiCost
+    case tokenHeatmap
     case sessionRepair
     case recentSessions
 }
@@ -32,6 +33,7 @@ struct RunwayModelServices: Sendable {
         CostScanProgressReporter?
     ) async throws -> [String: ApiEquivalentSummary]
     var fetchDailyWorkspaceUsage: @Sendable (CodexAuth, String, String, DateInterval, Date) async throws -> ApiEquivalentSummary
+    var fetchCodexProfileTokenUsage: @Sendable (CodexAuth) async throws -> CodexProfileTokenUsage
     var dryRunSessions: @Sendable () async throws -> SessionRepairReport
     var scanRecentSessions: @Sendable (Int) async throws -> SessionActivitySummary
 
@@ -104,6 +106,9 @@ struct RunwayModelServices: Sendable {
                     window: window,
                     calculatedAt: calculatedAt)
             },
+            fetchCodexProfileTokenUsage: { auth in
+                try await quotaClient.fetchCodexProfileTokenUsage(auth: auth)
+            },
             dryRunSessions: {
                 try await Task.detached {
                     try sessionRepair.dryRun()
@@ -130,6 +135,13 @@ final class RunwayModel: ObservableObject {
         var windowMinutes: Int?
     }
 
+    private struct TokenHeatmapRemoteRequest {
+        var auth: CodexAuth
+        var localTokens: [String: Int]
+        var calculatedAt: Date
+        var accountGeneration: Int
+    }
+
     @Published var statusText: String
     @Published var quotaText: String
     @Published var resetCreditsText: String
@@ -148,6 +160,11 @@ final class RunwayModel: ObservableObject {
     @Published var resetCreditDetails: [ResetCreditDetail] = []
     @Published var rateLimitResetToday: RateLimitResetTodaySnapshot?
     @Published var costDetail: ApiEquivalentSummary?
+    /// Codex profile activity (all devices) — day → product-displayed tokens.
+    @Published var tokenHeatmapAllDevicesTokens: [String: Int] = [:]
+    /// This Mac only — local session index day → total tokens.
+    @Published var tokenHeatmapLocalTokens: [String: Int] = [:]
+    @Published var tokenHeatmapCalculatedAt: Date?
     @Published var recentSessions: [SessionActivityItem] = []
     @Published var costScanNote: String?
     /// Scan progress lives on its own observable: it publishes ~10x/sec during a
@@ -199,6 +216,13 @@ final class RunwayModel: ObservableObject {
     private static let currentCostQueryID = "current-cycle"
     private static let selectedCostQueryID = "selected-range"
     private static let detailCostQueryID = "detail-range"
+    private static let tokenHeatmapQueryID = "token-heatmap"
+    private var lastTokenHeatmapRefreshCompletedAt: Date?
+    private var accountStateGeneration = 0
+    private var activeFullRefreshID: UUID?
+    private var fullRefreshWork: Task<Void, Never>?
+    private var activeTokenHeatmapRefreshID: UUID?
+    private var tokenHeatmapRefreshWork: Task<Void, Never>?
     var onFullRefreshCompleted: (() -> Void)?
 
     init(
@@ -287,6 +311,7 @@ final class RunwayModel: ObservableObject {
             }
             do {
                 let result = try await accountSwitcher.switchTo(accountId: id)
+                await cancelAccountScopedRefreshes()
                 // Drop previous account's quota/credits/cost so UI cannot keep showing the old plan.
                 clearAccountScopedState(keepingAuth: result.auth)
                 publishAccountIndex(try accountStore.loadIndex())
@@ -296,6 +321,9 @@ final class RunwayModel: ObservableObject {
                 lastError = nil
                 // Reload main panel data for the new active account (must not reuse prior meters).
                 refresh(policy: .force)
+                if !isRefreshingAll {
+                    refreshTokenHeatmap(policy: .force)
+                }
                 if restartCodex {
                     let restart = await CodexAppRestarter.restart()
                     if restart.relaunched || restart.terminatedCount > 0 {
@@ -546,8 +574,11 @@ final class RunwayModel: ObservableObject {
 
     func refresh(policy: UsageCostRefreshPolicy = .force) {
         guard !isRefreshingAll, refreshingSections.isEmpty else { return }
+        let refreshID = UUID()
+        activeFullRefreshID = refreshID
         isRefreshingAll = true
         let work = Task { await refreshNow(policy: policy) }
+        fullRefreshWork = work
         Task {
             let watchdog = Task {
                 try? await Task.sleep(nanoseconds: Self.fullRefreshWatchdogSeconds * 1_000_000_000)
@@ -555,8 +586,7 @@ final class RunwayModel: ObservableObject {
             }
             await work.value
             watchdog.cancel()
-            isRefreshingAll = false
-            onFullRefreshCompleted?()
+            finishFullRefresh(id: refreshID)
         }
     }
 
@@ -587,6 +617,30 @@ final class RunwayModel: ObservableObject {
             refreshingSections.remove(.apiCost)
             exportStatusIfNeeded()
         }
+    }
+
+    func refreshTokenHeatmap(policy: UsageCostRefreshPolicy = .force) {
+        guard settings.preferences.showsTokenUsageHeatmap else { return }
+        guard !isRefreshingAll,
+              !refreshingSections.contains(.tokenHeatmap),
+              shouldRefreshTokenHeatmap(policy: policy)
+        else { return }
+        let refreshID = UUID()
+        activeTokenHeatmapRefreshID = refreshID
+        refreshingSections.insert(.tokenHeatmap)
+        let work = Task {
+            await refreshTokenHeatmapNow(policy: policy)
+            finishTokenHeatmapRefresh(id: refreshID)
+        }
+        tokenHeatmapRefreshWork = work
+    }
+
+    func tokenHeatmapSnapshot(mode: TokenUsageHeatmapMode) -> TokenUsageHeatmapSnapshot {
+        TokenUsageHeatmapBuilder.make(
+            allDevicesTokens: tokenHeatmapAllDevicesTokens,
+            localTokens: tokenHeatmapLocalTokens,
+            mode: mode,
+            now: tokenHeatmapCalculatedAt ?? Date())
     }
 
     func tick(now: Date = Date()) {
@@ -804,14 +858,32 @@ final class RunwayModel: ObservableObject {
             async let quotaResultTask = refreshQuotaForFullRefresh(auth: auth)
             async let resetErrorTask = refreshResetCreditsForFullRefresh(auth: auth)
             let quotaResult = await quotaResultTask
-            if case .success(let quotaSnapshot) = quotaResult,
-               settings.preferences.showsCostSummary,
-               shouldRefreshCost(policy: policy, quota: quotaSnapshot)
-            {
-                await withRefresh([.apiCost]) {
-                    await scanCost(quotaSnapshot, auth: auth, policy: policy)
+            if case .success(let quotaSnapshot) = quotaResult {
+                let needsCost =
+                    settings.preferences.showsCostSummary
+                    && shouldRefreshCost(policy: policy, quota: quotaSnapshot)
+                let needsHeatmap =
+                    settings.preferences.showsTokenUsageHeatmap
+                    && shouldRefreshTokenHeatmap(policy: policy)
+                if needsCost || needsHeatmap {
+                    var sections = Set<RunwayRefreshSection>()
+                    if needsCost { sections.insert(.apiCost) }
+                    if needsHeatmap { sections.insert(.tokenHeatmap) }
+                    await withRefresh(sections) {
+                        await scanCostAndHeatmap(
+                            quotaSnapshot,
+                            auth: auth,
+                            policy: policy,
+                            includeCost: needsCost,
+                            includeHeatmap: needsHeatmap)
+                        if needsCost {
+                            markCostRefreshCompleted(quota: quotaSnapshot)
+                        }
+                        if needsHeatmap {
+                            markTokenHeatmapRefreshCompleted()
+                        }
+                    }
                 }
-                markCostRefreshCompleted(quota: quotaSnapshot)
             }
             if case .failure(let error) = quotaResult {
                 remoteError = error
@@ -1059,7 +1131,12 @@ final class RunwayModel: ObservableObject {
             let quotaSnapshot = try await services.fetchQuota(auth)
             latestQuota = quotaSnapshot
             applyQuota(quotaSnapshot)
-            await scanCost(quotaSnapshot, auth: auth, policy: policy)
+            await scanCostAndHeatmap(
+                quotaSnapshot,
+                auth: auth,
+                policy: policy,
+                includeCost: true,
+                includeHeatmap: false)
             markCostRefreshCompleted(quota: quotaSnapshot)
             lastError = nil
         } catch {
@@ -1087,6 +1164,76 @@ final class RunwayModel: ObservableObject {
     private func markCostRefreshCompleted(quota: QuotaSnapshot, at completion: Date = Date()) {
         lastCostRefreshCompletedAt = completion
         lastCostCycleIdentity = costCycleIdentity(for: quota)
+    }
+
+    private func shouldRefreshTokenHeatmap(
+        policy: UsageCostRefreshPolicy,
+        now: Date = Date()
+    ) -> Bool {
+        guard policy == .ifChanged, let lastTokenHeatmapRefreshCompletedAt else { return true }
+        let interval = TimeInterval(settings.preferences.refreshIntervalSeconds)
+        return now >= lastTokenHeatmapRefreshCompletedAt.addingTimeInterval(interval)
+    }
+
+    private func markTokenHeatmapRefreshCompleted(at completion: Date = Date()) {
+        lastTokenHeatmapRefreshCompletedAt = completion
+    }
+
+    private func refreshTokenHeatmapNow(policy: UsageCostRefreshPolicy) async {
+        do {
+            let auth = try await loadValidAuth(preferCached: true)
+            try await scanTokenHeatmap(auth: auth, policy: policy)
+            markTokenHeatmapRefreshCompleted()
+            lastError = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            // Keep previous grid when a refresh fails; first load stays empty.
+            if tokenHeatmapAllDevicesTokens.isEmpty, tokenHeatmapLocalTokens.isEmpty {
+                tokenHeatmapCalculatedAt = Date()
+            }
+            lastError = l10n.text(.tokenUsageHeatmapUnavailable)
+        }
+    }
+
+    private func scanTokenHeatmap(auth: CodexAuth, policy: UsageCostRefreshPolicy) async throws {
+        let expectedGeneration = accountStateGeneration
+        let now = Date()
+        let window = TokenUsageHeatmapBuilder.yearToDateWindow(now: now)
+        let query = ApiCostQuery(id: Self.tokenHeatmapQueryID, window: window)
+
+        // Collect both independent series. The official profile activity endpoint
+        // has a different token definition from workspace analytics.
+        let local = try await localCostSummaries(queries: [query], now: now, policy: policy)
+        let localMap = local[Self.tokenHeatmapQueryID].map(dailyTokenMap(from:)) ?? [:]
+        try await fetchAndApplyProfileTokenHeatmap(TokenHeatmapRemoteRequest(
+            auth: auth,
+            localTokens: localMap,
+            calculatedAt: now,
+            accountGeneration: expectedGeneration))
+    }
+
+    private func dailyTokenMap(from summary: ApiEquivalentSummary) -> [String: Int] {
+        var map: [String: Int] = [:]
+        map.reserveCapacity(summary.dailyRows.count)
+        for row in summary.dailyRows {
+            map[row.date, default: 0] += max(0, row.totals.totalTokens)
+        }
+        return map
+    }
+
+    private func applyTokenHeatmap(
+        allDevices: [String: Int],
+        local: [String: Int],
+        now: Date
+    ) {
+        if allDevices != tokenHeatmapAllDevicesTokens {
+            tokenHeatmapAllDevicesTokens = allDevices
+        }
+        if local != tokenHeatmapLocalTokens {
+            tokenHeatmapLocalTokens = local
+        }
+        tokenHeatmapCalculatedAt = now
     }
 
     private func costCycleIdentity(for quota: QuotaSnapshot) -> CostCycleIdentity {
@@ -1332,6 +1479,7 @@ final class RunwayModel: ObservableObject {
 
     /// Wipe meters / quota / credits that are bound to the previously active account.
     private func clearAccountScopedState(keepingAuth auth: CodexAuth?) {
+        accountStateGeneration += 1
         latestQuota = nil
         latestResetCredits = nil
         latestCost = nil
@@ -1340,8 +1488,12 @@ final class RunwayModel: ObservableObject {
         latestCurrentCycleFullWindow = nil
         lastCostRefreshCompletedAt = nil
         lastCostCycleIdentity = nil
+        lastTokenHeatmapRefreshCompletedAt = nil
         detailCostCache = [:]
         detailCostCacheOrder = []
+        tokenHeatmapAllDevicesTokens = [:]
+        tokenHeatmapLocalTokens = [:]
+        tokenHeatmapCalculatedAt = nil
         quotaMeters = []
         quotaLines = []
         resetCreditSummary = nil
@@ -1360,6 +1512,11 @@ final class RunwayModel: ObservableObject {
     private func accountIdentityKey(for auth: CodexAuth?) -> String? {
         guard let auth else { return nil }
         return AccountIdentity.matchKey(for: auth)
+    }
+
+    private func isCurrentAccount(_ auth: CodexAuth, generation: Int) -> Bool {
+        generation == accountStateGeneration
+            && accountIdentityKey(for: auth) == accountIdentityKey(for: latestAuth)
     }
 
     private func applyQuota(_ quota: QuotaSnapshot) {
@@ -1418,17 +1575,30 @@ final class RunwayModel: ObservableObject {
         }
     }
 
-    private func scanCost(
+    private func scanCostAndHeatmap(
         _ quota: QuotaSnapshot,
         auth: CodexAuth,
-        policy: UsageCostRefreshPolicy
+        policy: UsageCostRefreshPolicy,
+        includeCost: Bool,
+        includeHeatmap: Bool
     ) async {
+        let expectedGeneration = accountStateGeneration
         let now = Date()
         let range = settings.preferences.apiCostSummaryRange
         let currentWindows = currentCycleWindows(from: quota, now: now)
         latestCurrentCycleFullWindow = currentWindows?.full
         let selectedRange = selectedCostRange(for: range, fullWindow: currentWindows?.full, now: now)
-        let queries = costQueries(currentWindow: currentWindows?.elapsed, selectedRange: selectedRange)
+        var queries: [ApiCostQuery] = []
+        if includeCost {
+            queries.append(contentsOf: costQueries(
+                currentWindow: currentWindows?.elapsed,
+                selectedRange: selectedRange))
+        }
+        let heatmapWindow = TokenUsageHeatmapBuilder.yearToDateWindow(now: now)
+        if includeHeatmap {
+            queries.append(ApiCostQuery(id: Self.tokenHeatmapQueryID, window: heatmapWindow))
+        }
+        guard !queries.isEmpty else { return }
 
         beginCostProgress()
         defer { endCostProgress() }
@@ -1436,38 +1606,112 @@ final class RunwayModel: ObservableObject {
 
         do {
             let local = try await localCostSummaries(queries: queries, now: now, policy: policy)
-            let current = try await resolveCurrentCost(
-                window: currentWindows?.elapsed,
-                local: local[Self.currentCostQueryID],
-                auth: auth,
-                now: now)
-            if let current {
-                applyCurrentCost(current)
-                if let elapsed = currentWindows?.elapsed {
-                    storeDetailCostCache(current, key: Self.detailCacheKey(for: .range(window: elapsed)))
+            if includeCost {
+                let current = try await resolveCurrentCost(
+                    window: currentWindows?.elapsed,
+                    local: local[Self.currentCostQueryID],
+                    auth: auth,
+                    now: now)
+                if let current {
+                    applyCurrentCost(current)
+                    if let elapsed = currentWindows?.elapsed {
+                        storeDetailCostCache(current, key: Self.detailCacheKey(for: .range(window: elapsed)))
+                    }
+                }
+                let summary = try await resolveDisplayedCost(
+                    range: range,
+                    selectedRange: selectedRange,
+                    current: current,
+                    local: local[Self.selectedCostQueryID],
+                    auth: auth,
+                    now: now)
+                try Task.checkCancellation()
+                applyDisplayedCost(summary, range: range, now: now)
+                if let selectedRange {
+                    storeDetailCostCache(summary, key: Self.detailCacheKey(for: selectedRange))
                 }
             }
-            let summary = try await resolveDisplayedCost(
-                range: range,
-                selectedRange: selectedRange,
-                current: current,
-                local: local[Self.selectedCostQueryID],
-                auth: auth,
-                now: now)
-            try Task.checkCancellation()
-            applyDisplayedCost(summary, range: range, now: now)
-            if let selectedRange {
-                storeDetailCostCache(summary, key: Self.detailCacheKey(for: selectedRange))
+            if includeHeatmap {
+                try Task.checkCancellation()
+                let localMap = local[Self.tokenHeatmapQueryID].map(dailyTokenMap(from:)) ?? [:]
+                do {
+                    try await fetchAndApplyProfileTokenHeatmap(TokenHeatmapRemoteRequest(
+                        auth: auth,
+                        localTokens: localMap,
+                        calculatedAt: now,
+                        accountGeneration: expectedGeneration))
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    lastError = l10n.text(.tokenUsageHeatmapUnavailable)
+                    if tokenHeatmapAllDevicesTokens.isEmpty, tokenHeatmapLocalTokens.isEmpty {
+                        tokenHeatmapCalculatedAt = now
+                    }
+                }
             }
         } catch is CancellationError {
             return
         } catch {
-            let text = costQueryErrorText(error)
-            if latestDisplayedCost != nil, latestDisplayedCostRange == range {
-                noteCostScanFailure(text)
-            } else {
-                clearDisplayedCost(text)
+            if includeCost {
+                let text = costQueryErrorText(error)
+                if latestDisplayedCost != nil, latestDisplayedCostRange == range {
+                    noteCostScanFailure(text)
+                } else {
+                    clearDisplayedCost(text)
+                }
             }
+            if includeHeatmap,
+               tokenHeatmapAllDevicesTokens.isEmpty,
+               tokenHeatmapLocalTokens.isEmpty
+            {
+                tokenHeatmapCalculatedAt = now
+            }
+            if includeHeatmap {
+                lastError = l10n.text(.tokenUsageHeatmapUnavailable)
+            }
+        }
+    }
+
+    private func fetchAndApplyProfileTokenHeatmap(
+        _ request: TokenHeatmapRemoteRequest
+    ) async throws {
+        publishCostProgress(.fetchingOnline, force: true)
+        let profileUsage = try await services.fetchCodexProfileTokenUsage(request.auth)
+        try Task.checkCancellation()
+        guard isCurrentAccount(request.auth, generation: request.accountGeneration) else {
+            throw CancellationError()
+        }
+        applyTokenHeatmap(
+            allDevices: profileUsage.dailyTokens,
+            local: request.localTokens,
+            now: request.calculatedAt)
+    }
+
+    private func finishFullRefresh(id: UUID) {
+        guard activeFullRefreshID == id else { return }
+        activeFullRefreshID = nil
+        fullRefreshWork = nil
+        isRefreshingAll = false
+        onFullRefreshCompleted?()
+    }
+
+    private func finishTokenHeatmapRefresh(id: UUID) {
+        guard activeTokenHeatmapRefreshID == id else { return }
+        activeTokenHeatmapRefreshID = nil
+        tokenHeatmapRefreshWork = nil
+        refreshingSections.remove(.tokenHeatmap)
+    }
+
+    private func cancelAccountScopedRefreshes() async {
+        if let id = activeFullRefreshID, let work = fullRefreshWork {
+            work.cancel()
+            await work.value
+            finishFullRefresh(id: id)
+        }
+        if let id = activeTokenHeatmapRefreshID, let work = tokenHeatmapRefreshWork {
+            work.cancel()
+            await work.value
+            finishTokenHeatmapRefresh(id: id)
         }
     }
 

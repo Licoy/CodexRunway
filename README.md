@@ -21,6 +21,7 @@ Codex Runway 是一个原生 macOS 状态栏应用，帮你在菜单栏查看 Co
 - 显示当前账号、订阅类型与到期信息。
 - 查看 reset credits 数量、状态和到期时间。
 - 查看 API 等价成本与 token 用量：今日、本周期、上周期、本月或自定义范围；设置可改主弹窗默认范围。
+- 主弹窗配额下方显示本年 token 用量热力图（每日 / 每周 / 累计），设置中可关闭。
 - 本机会话增量索引，加速成本扫描。
 - 查看最近 Codex 会话、项目、状态和用量摘要。
 - 修复本机会话索引。
@@ -86,14 +87,14 @@ swift run CodexRunway --self-check
 - 无效或 mock 凭据不会写回官方 `~/.codex/auth.json`。
 - access token、refresh token、id token、API key 不会写入日志、README、issue 模板或自检输出。
 - API 等价成本默认来自本机会话 JSONL 日志，并在 `~/.codex-runway/` 下维护本地增量索引等派生数据；不上传会话内容。
-- 在线用量数据只在本地没有可用 token 数据时作为补全来源。
+- API 等价成本的在线用量只在本地没有可用 token 数据时作为补全；热力图的“全部设备”数据来自官方 Codex 资料统计。
 - 会话修复只处理 `~/.codex/session_index.jsonl`，写入前会创建备份，不删除会话文件。
 - 更新检测只访问版本信息，不上传 Codex 账号或会话数据。
 
 ## 数据来源
 
 - **今日是否重置**：状态来自第三方公开站点 [hascodexratelimitreset.today](https://hascodexratelimitreset.today/) 及其 `api/status` 接口。Codex Runway 仅拉取公开结果，不附带任何 Codex 账号或 token；结果仅供参考，应用不控制也不保证该数据源的准确性与可用性。
-- **配额 / reset credits / 部分在线用量**：在你已登录的前提下，通过本机凭据访问官方 ChatGPT / Codex 后端接口。
+- **配额 / reset credits / 热力图全部设备 / 部分在线用量**：在你已登录的前提下，通过本机凭据访问官方 ChatGPT / Codex 后端接口；热力图使用官方资料统计口径。
 - **API 等价成本与最近会话**：默认基于本机 `~/.codex` 会话日志与本地索引计算。
 
 ## 开发与贡献

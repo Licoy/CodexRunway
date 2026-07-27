@@ -149,6 +149,10 @@ struct ControlPanelView: View {
                     }
                 }
                 PreferenceToggleRow(
+                    title: l10n.text(.showTokenUsageHeatmap),
+                    subtitle: l10n.text(.tokenUsageHeatmapDescription),
+                    binding: tokenUsageHeatmapBinding)
+                PreferenceToggleRow(
                     title: l10n.text(.showCostSummary),
                     subtitle: l10n.text(.apiEquivalent),
                     binding: costSummaryBinding)
@@ -293,6 +297,17 @@ struct ControlPanelView: View {
 
     private var costSummaryBinding: Binding<Bool> {
         Binding(get: { settings.preferences.showsCostSummary }, set: { settings.updateShowsCostSummary($0) })
+    }
+
+    private var tokenUsageHeatmapBinding: Binding<Bool> {
+        Binding(
+            get: { settings.preferences.showsTokenUsageHeatmap },
+            set: { enabled in
+                settings.updateShowsTokenUsageHeatmap(enabled)
+                if enabled {
+                    model.refreshTokenHeatmap(policy: .force)
+                }
+            })
     }
 
     private var rateLimitResetTodayBinding: Binding<Bool> {

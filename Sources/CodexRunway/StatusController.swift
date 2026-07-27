@@ -475,6 +475,9 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         if settings.preferences.showsCostSummary {
             model.refreshCost(policy: .ifChanged)
         }
+        if settings.preferences.showsTokenUsageHeatmap {
+            model.refreshTokenHeatmap(policy: .ifChanged)
+        }
         // force:false — panel opens skip the heavy session-dir rescan while the
         // last successful scan is fresh; manual section refreshes stay forced.
         if settings.preferences.showsSessionRepairSummary {

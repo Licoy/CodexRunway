@@ -39,6 +39,11 @@ public struct QuotaClient: Sendable {
             endDate: endDate)
     }
 
+    public func fetchCodexProfileTokenUsage(auth: CodexAuth) async throws -> CodexProfileTokenUsage {
+        let data = try await data(path: "wham/profiles/me", auth: auth)
+        return try CodexProfileTokenUsage.decode(from: data)
+    }
+
     private func analyticsURL(startDate: String, endDate: String) throws -> URL {
         let url = baseURL.appendingPathComponent("wham/analytics/daily-workspace-usage-counts")
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
