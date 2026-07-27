@@ -1208,6 +1208,11 @@ final class RunwayModel: ObservableObject {
         // has a different token definition from workspace analytics.
         let local = try await localCostSummaries(queries: [query], now: now, policy: policy)
         let localMap = local[Self.tokenHeatmapQueryID].map(dailyTokenMap(from:)) ?? [:]
+        try Task.checkCancellation()
+        guard isCurrentAccount(auth, generation: expectedGeneration) else {
+            throw CancellationError()
+        }
+        applyLocalTokenHeatmap(localMap, now: now)
         try await fetchAndApplyProfileTokenHeatmap(TokenHeatmapRemoteRequest(
             auth: auth,
             localTokens: localMap,
@@ -1239,6 +1244,13 @@ final class RunwayModel: ObservableObject {
         }
         tokenHeatmapOfficialStatsAsOf = officialStatsAsOf
         tokenHeatmapOfficialGeneratedAt = officialGeneratedAt
+        tokenHeatmapCalculatedAt = now
+    }
+
+    private func applyLocalTokenHeatmap(_ local: [String: Int], now: Date) {
+        if local != tokenHeatmapLocalTokens {
+            tokenHeatmapLocalTokens = local
+        }
         tokenHeatmapCalculatedAt = now
     }
 
@@ -1642,6 +1654,10 @@ final class RunwayModel: ObservableObject {
             if includeHeatmap {
                 try Task.checkCancellation()
                 let localMap = local[Self.tokenHeatmapQueryID].map(dailyTokenMap(from:)) ?? [:]
+                guard isCurrentAccount(auth, generation: expectedGeneration) else {
+                    throw CancellationError()
+                }
+                applyLocalTokenHeatmap(localMap, now: now)
                 do {
                     try await fetchAndApplyProfileTokenHeatmap(TokenHeatmapRemoteRequest(
                         auth: auth,

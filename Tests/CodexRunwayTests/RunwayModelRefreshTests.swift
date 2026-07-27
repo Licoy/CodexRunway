@@ -52,6 +52,52 @@ struct RunwayModelRefreshTests {
         #expect(model.tokenHeatmapOfficialGeneratedAt == Date(timeIntervalSince1970: 1_785_139_420))
     }
 
+    @Test("first full refresh publishes local heatmap data when profile fails")
+    func firstProfileFailureKeepsLocalHeatmapVisible() async throws {
+        let profileService = FailOnceProfileUsageService()
+        let settings = RunwaySettings(store: PreferencesStore(defaults: scopedDefaults()))
+        let services = RunwayModelServices(
+            loadValidAuth: { _, _ in Self.auth() },
+            fetchQuota: { _ in Self.quotaSnapshot() },
+            fetchResetCredits: { _ in ResetCreditsSnapshot(availableCount: 0, credits: [], updatedAt: Date()) },
+            fetchRateLimitResetToday: {
+                RateLimitResetTodaySnapshot(state: .no, fetchedAt: Date())
+            },
+            scanAPIEquivalent: { queries, now, _, _ in
+                Dictionary(uniqueKeysWithValues: queries.map {
+                    ($0.id, Self.localHeatmapSummary(window: $0.window, calculatedAt: now))
+                })
+            },
+            fetchDailyWorkspaceUsage: { _, _, _, window, now in
+                Self.costSummary(window: window, calculatedAt: now)
+            },
+            fetchCodexProfileTokenUsage: { _ in
+                try await profileService.fetch()
+            },
+            dryRunSessions: {
+                SessionRepairReport(
+                    missingIndexIDs: [],
+                    orphanIndexIDs: [],
+                    duplicateIndexIDs: [],
+                    staleTitleIDs: [],
+                    backupPath: nil,
+                    plannedEntries: 0)
+            },
+            scanRecentSessions: { _ in SessionActivitySummary(items: []) })
+        let model = makeModel(settings: settings, services: services)
+
+        model.refresh()
+        try await waitForFullRefresh(in: model)
+
+        #expect(model.tokenHeatmapLocalTokens == ["2026-07-26": 364])
+        #expect(model.tokenHeatmapAllDevicesTokens.isEmpty)
+
+        model.refreshTokenHeatmap(policy: .force)
+        try await waitForTokenHeatmapRefresh(in: model)
+        #expect(model.tokenHeatmapAllDevicesTokens == ["2026-07-26": 159])
+        #expect(model.tokenHeatmapLocalTokens == ["2026-07-26": 364])
+    }
+
     @Test("account changes clear and immediately reload token heatmap state")
     func accountChangeClearsTokenHeatmapState() async throws {
         let provider = MutableAuthProvider(Self.auth(accountId: "acct-a"))
@@ -600,6 +646,14 @@ struct RunwayModelRefreshTests {
         Issue.record("Timed out waiting for API cost refresh")
     }
 
+    private func waitForFullRefresh(in model: RunwayModel) async throws {
+        for _ in 0..<100 {
+            if !model.isRefreshingAll { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("Timed out waiting for full refresh")
+    }
+
     private func waitForTokenHeatmapRefresh(in model: RunwayModel) async throws {
         for _ in 0..<100 {
             if !model.isRefreshing(.tokenHeatmap) { return }
@@ -715,6 +769,38 @@ struct RunwayModelRefreshTests {
             (query.id, costSummary(window: query.window, calculatedAt: calculatedAt))
         })
     }
+
+    nonisolated private static func localHeatmapSummary(
+        window: DateInterval,
+        calculatedAt: Date
+    ) -> ApiEquivalentSummary {
+        let totals = ApiEquivalentTotals(
+            totalTokens: 364,
+            uncachedInputTokens: 300,
+            cachedInputTokens: 0,
+            outputTokens: 64,
+            turns: 1,
+            threads: 1)
+        return ApiEquivalentSummary(
+            source: .localSessions,
+            confidence: .priced,
+            window: window,
+            estimatedUSD: 0.01,
+            totals: totals,
+            dailyRows: [
+                ApiEquivalentDailyRow(
+                    date: "2026-07-26",
+                    totals: totals,
+                    estimatedUSD: 0.01,
+                    rawCredits: 0),
+            ],
+            modelRows: [],
+            clientRows: [],
+            rawCredits: 0,
+            warnings: [],
+            pricingVersion: "test",
+            calculatedAt: calculatedAt)
+    }
 }
 
 private struct CostBatchCapture: Sendable {
@@ -770,6 +856,18 @@ private actor MutableAuthProvider {
 
     func set(_ auth: CodexAuth) {
         self.auth = auth
+    }
+}
+
+private actor FailOnceProfileUsageService {
+    private var attempts = 0
+
+    func fetch() throws -> CodexProfileTokenUsage {
+        attempts += 1
+        if attempts == 1 {
+            throw URLError(.timedOut)
+        }
+        return CodexProfileTokenUsage(dailyTokens: ["2026-07-26": 159])
     }
 }
 
