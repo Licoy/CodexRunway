@@ -8,6 +8,7 @@ struct TokenUsageHeatmapView: View {
     /// This Mac only — local session index.
     var localTokens: [String: Int]
     var calculatedAt: Date?
+    @Binding var chartStyle: TokenUsageChartStyle
     var l10n: L10n
     var isRefreshing: Bool
     var onRefresh: () -> Void
@@ -15,13 +16,15 @@ struct TokenUsageHeatmapView: View {
     @State private var mode: TokenUsageHeatmapMode = .daily
     /// Cached grid; rebuilt when `dataFingerprint` changes.
     @State private var snapshot: TokenUsageHeatmapSnapshot?
+    /// Cached line/bar series; rebuilt with the same fingerprint.
+    @State private var series: TokenUsageChartSeries?
     @StateObject private var hover = HeatmapHoverStore()
 
     private var dataFingerprint: String {
         let allTotal = allDevicesTokens.values.reduce(0, +)
         let localTotal = localTokens.values.reduce(0, +)
         let stamp = calculatedAt?.timeIntervalSince1970 ?? 0
-        return "\(mode.rawValue)|\(stamp)|\(allDevicesTokens.count)|\(allTotal)|\(localTokens.count)|\(localTotal)|\(l10n.language)"
+        return "\(mode.rawValue)|\(chartStyle.rawValue)|\(stamp)|\(allDevicesTokens.count)|\(allTotal)|\(localTokens.count)|\(localTotal)|\(l10n.language)"
     }
 
     var body: some View {
@@ -29,13 +32,32 @@ struct TokenUsageHeatmapView: View {
             header
             content
         }
-        .task(id: dataFingerprint) {
-            rebuildSnapshot()
+        // Fixed height keeps NSPopover geometry stable when switching chart styles.
+        .frame(minHeight: chartContentMinHeight, alignment: .topLeading)
+        .onAppear { rebuildData() }
+        .onChange(of: dataFingerprint) { _ in
+            rebuildData()
         }
+    }
+
+    /// Matches heatmap grid height so line/bar swaps do not resize the panel section.
+    private var chartContentMinHeight: CGFloat {
+        // header (~22) + spacing (8) + plot (~98)
+        128
     }
 
     @ViewBuilder
     private var content: some View {
+        switch chartStyle {
+        case .heatmap:
+            heatmapContent
+        case .line, .bar:
+            trendContent
+        }
+    }
+
+    @ViewBuilder
+    private var heatmapContent: some View {
         if let snapshot {
             if snapshot.weeks.isEmpty {
                 Text(l10n.text(isRefreshing ? .calculating : .heatmapEmpty))
@@ -44,6 +66,31 @@ struct TokenUsageHeatmapView: View {
             } else {
                 grid(snapshot)
                 if !snapshot.hasUsage, !isRefreshing {
+                    Text(l10n.text(.heatmapEmpty))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } else {
+            Text(l10n.text(isRefreshing ? .calculating : .heatmapEmpty))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var trendContent: some View {
+        if let series {
+            if series.points.isEmpty {
+                Text(l10n.text(isRefreshing ? .calculating : .heatmapEmpty))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                TokenUsageTrendChartView(
+                    series: series,
+                    style: chartStyle == .bar ? .bar : .line,
+                    l10n: l10n)
+                if !series.hasUsage, !isRefreshing {
                     Text(l10n.text(.heatmapEmpty))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -66,12 +113,19 @@ struct TokenUsageHeatmapView: View {
                 Picker("", selection: $mode) {
                     Text(l10n.text(.heatmapDaily)).tag(TokenUsageHeatmapMode.daily)
                     Text(l10n.text(.heatmapWeekly)).tag(TokenUsageHeatmapMode.weekly)
-                    Text(l10n.text(.heatmapCumulative)).tag(TokenUsageHeatmapMode.cumulative)
+                    Text(modeThirdSegmentTitle).tag(TokenUsageHeatmapMode.cumulative)
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
                 .controlSize(.small)
                 .fixedSize(horizontal: true, vertical: false)
+
+                // AppKit popup avoids SwiftUI Menu, which can collapse / mis-place NSPopover.
+                ChartStylePopUpButton(
+                    style: $chartStyle,
+                    titles: chartStyleTitles,
+                    helpText: l10n.text(.tokenUsageChartStyle))
+                    .frame(width: 34, height: 22)
 
                 Button(action: onRefresh) {
                     Group {
@@ -93,6 +147,23 @@ struct TokenUsageHeatmapView: View {
                 .pointingHandCursor()
             }
         }
+    }
+
+    private var modeThirdSegmentTitle: String {
+        switch chartStyle {
+        case .heatmap:
+            return l10n.text(.heatmapCumulative)
+        case .line, .bar:
+            return l10n.text(.heatmapMonthly)
+        }
+    }
+
+    private var chartStyleTitles: [TokenUsageChartStyle: String] {
+        [
+            .heatmap: l10n.text(.tokenUsageChartHeatmap),
+            .line: l10n.text(.tokenUsageChartLine),
+            .bar: l10n.text(.tokenUsageChartBar),
+        ]
     }
 
     private func grid(_ snapshot: TokenUsageHeatmapSnapshot) -> some View {
@@ -264,12 +335,24 @@ struct TokenUsageHeatmapView: View {
         return "\(total) \(l10n.text(.tokens))"
     }
 
-    private func rebuildSnapshot() {
-        snapshot = TokenUsageHeatmapBuilder.make(
-            allDevicesTokens: allDevicesTokens,
-            localTokens: localTokens,
-            mode: mode,
-            now: calculatedAt ?? Date())
+    private func rebuildData() {
+        let now = calculatedAt ?? Date()
+        switch chartStyle {
+        case .heatmap:
+            snapshot = TokenUsageHeatmapBuilder.make(
+                allDevicesTokens: allDevicesTokens,
+                localTokens: localTokens,
+                mode: mode,
+                now: now)
+            series = nil
+        case .line, .bar:
+            series = TokenUsageHeatmapBuilder.makeSeries(
+                allDevicesTokens: allDevicesTokens,
+                localTokens: localTokens,
+                mode: mode,
+                now: now)
+            snapshot = nil
+        }
         hover.clear()
     }
 
@@ -467,6 +550,575 @@ private struct HeatmapGridPointerOverlay: NSViewRepresentable {
 
 private final class HeatmapGridNSView: NSView {
     var coordinator: HeatmapGridPointerOverlay.Coordinator?
+    private var lastTrackingBounds: CGRect = .null
+
+    override var isFlipped: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func refreshTrackingAreasIfNeeded() {
+        if lastTrackingBounds != bounds {
+            updateTrackingAreas()
+        }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas {
+            removeTrackingArea(area)
+        }
+        let options: NSTrackingArea.Options = [
+            .activeInKeyWindow,
+            .mouseEnteredAndExited,
+            .mouseMoved,
+            .inVisibleRect,
+            .enabledDuringMouseDrag,
+        ]
+        addTrackingArea(NSTrackingArea(rect: bounds, options: options, owner: self, userInfo: nil))
+        lastTrackingBounds = bounds
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        handle(event)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        handle(event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        coordinator?.hover.clear()
+    }
+
+    private func handle(_ event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        coordinator?.handleMouse(at: point, in: bounds)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        return bounds.contains(local) ? self : nil
+    }
+
+    override var acceptsFirstResponder: Bool { false }
+}
+
+// MARK: - Chart style popup (AppKit — safe inside NSPopover)
+
+/// Pull-down using `NSPopUpButton` so selection does not re-anchor the host `NSPopover`
+/// the way SwiftUI `Menu` often does on macOS 12–14.
+private struct ChartStylePopUpButton: NSViewRepresentable {
+    @Binding var style: TokenUsageChartStyle
+    var titles: [TokenUsageChartStyle: String]
+    var helpText: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(style: $style)
+    }
+
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let button = NSPopUpButton(frame: .zero, pullsDown: true)
+        button.isBordered = false
+        button.bezelStyle = .inline
+        button.imagePosition = .imageOnly
+        button.controlSize = .small
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.selectionChanged(_:))
+        button.toolTip = helpText
+        context.coordinator.button = button
+        context.coordinator.rebuildMenu(titles: titles, selected: style)
+        return button
+    }
+
+    func updateNSView(_ button: NSPopUpButton, context: Context) {
+        context.coordinator.style = $style
+        context.coordinator.button = button
+        button.toolTip = helpText
+        context.coordinator.rebuildMenu(titles: titles, selected: style)
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        var style: Binding<TokenUsageChartStyle>
+        var titles: [TokenUsageChartStyle: String] = [:]
+        weak var button: NSPopUpButton?
+        private var isRebuilding = false
+
+        init(style: Binding<TokenUsageChartStyle>) {
+            self.style = style
+        }
+
+        func rebuildMenu(titles: [TokenUsageChartStyle: String], selected: TokenUsageChartStyle) {
+            guard let button else { return }
+            self.titles = titles
+            isRebuilding = true
+            defer { isRebuilding = false }
+
+            button.removeAllItems()
+
+            // Pull-down title item (index 0) — shows the active style icon.
+            let titleItem = NSMenuItem()
+            titleItem.image = Self.symbolImage(for: selected)
+            titleItem.image?.isTemplate = true
+            titleItem.title = ""
+            button.menu?.addItem(titleItem)
+
+            for chartStyle in TokenUsageChartStyle.allCases {
+                let title = titles[chartStyle] ?? chartStyle.rawValue
+                let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                item.representedObject = chartStyle.rawValue
+                item.state = chartStyle == selected ? .on : .off
+                item.image = Self.symbolImage(for: chartStyle)
+                item.image?.isTemplate = true
+                button.menu?.addItem(item)
+            }
+
+            button.selectItem(at: 0)
+        }
+
+        @objc func selectionChanged(_ sender: Any?) {
+            guard !isRebuilding else { return }
+            let raw = (sender as? NSPopUpButton)?.selectedItem?.representedObject as? String
+            guard let raw, let next = TokenUsageChartStyle(rawValue: raw) else {
+                button?.selectItem(at: 0)
+                return
+            }
+            if style.wrappedValue != next {
+                style.wrappedValue = next
+            }
+            rebuildMenu(titles: titles, selected: next)
+        }
+
+        private static func symbolImage(for style: TokenUsageChartStyle) -> NSImage? {
+            let name: String
+            switch style {
+            case .heatmap: name = "square.grid.3x3.fill"
+            case .line: name = "waveform.path"
+            case .bar: name = "chart.bar.fill"
+            }
+            let image = NSImage(systemSymbolName: name, accessibilityDescription: style.rawValue)
+            image?.isTemplate = true
+            return image
+        }
+    }
+}
+
+// MARK: - Line / bar chart
+
+private enum TokenUsageTrendStyle {
+    case line
+    case bar
+}
+
+private struct TokenUsageTrendChartView: View {
+    var series: TokenUsageChartSeries
+    var style: TokenUsageTrendStyle
+    var l10n: L10n
+
+    @StateObject private var hover = TrendHoverStore()
+
+    private let plotHeight: CGFloat = 78
+    private let labelHeight: CGFloat = 14
+    private let labelSpacing: CGFloat = 6
+    private let yAxisWidth: CGFloat = 36
+
+    private var outerHeight: CGFloat { plotHeight + labelSpacing + labelHeight }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let plotWidth = max(1, proxy.size.width - yAxisWidth)
+            let layout = TrendLayoutMetrics(
+                plotWidth: plotWidth,
+                plotHeight: plotHeight,
+                pointCount: series.points.count,
+                maxTokens: series.points.map(\.tokens).max() ?? 0)
+
+            ZStack(alignment: .topLeading) {
+                HStack(alignment: .top, spacing: 0) {
+                    yAxis(layout: layout)
+                        .frame(width: yAxisWidth, height: plotHeight, alignment: .trailing)
+                    VStack(alignment: .leading, spacing: labelSpacing) {
+                        ZStack(alignment: .topLeading) {
+                            StaticTrendCanvas(series: series, style: style, layout: layout)
+                                .frame(width: plotWidth, height: plotHeight)
+                            TrendPointerOverlay(layout: layout, hover: hover)
+                                .frame(width: plotWidth, height: plotHeight)
+                            hoverMarker(layout: layout)
+                                .allowsHitTesting(false)
+                            hoverTooltip(layout: layout, containerSize: CGSize(width: plotWidth, height: plotHeight))
+                                .allowsHitTesting(false)
+                        }
+                        .frame(width: plotWidth, height: plotHeight)
+                        monthAxis(layout: layout)
+                            .frame(width: plotWidth, height: labelHeight, alignment: .leading)
+                    }
+                }
+            }
+            .frame(width: proxy.size.width, height: outerHeight, alignment: .topLeading)
+        }
+        .frame(height: outerHeight, alignment: .top)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(l10n.text(.tokenUsageHeatmap))
+        .accessibilityValue(accessibilitySummary)
+        .onChange(of: series.points.count) { _ in
+            hover.clear()
+        }
+    }
+
+    private var accessibilitySummary: String {
+        let total = TokenUsageHeatmapBuilder.compactTokenCount(series.totalTokens, language: l10n.language)
+        return "\(total) \(l10n.text(.tokens))"
+    }
+
+    private func yAxis(layout: TrendLayoutMetrics) -> some View {
+        let top = TokenUsageHeatmapBuilder.compactTokenCount(layout.maxTokens, language: l10n.language)
+        let mid = TokenUsageHeatmapBuilder.compactTokenCount(layout.maxTokens / 2, language: l10n.language)
+        return VStack(alignment: .trailing, spacing: 0) {
+            Text(top)
+            Spacer(minLength: 0)
+            if layout.maxTokens > 0 {
+                Text(mid)
+                Spacer(minLength: 0)
+            }
+            Text("0")
+        }
+        .font(.system(size: 9, weight: .regular, design: .monospaced))
+        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+        .padding(.trailing, 4)
+    }
+
+    private func monthAxis(layout: TrendLayoutMetrics) -> some View {
+        let labels = monthLabels()
+        return Canvas { context, _ in
+            for label in labels {
+                guard series.points.indices.contains(label.pointIndex) else { continue }
+                let x = layout.xPosition(for: label.pointIndex)
+                let text = Text(label.title)
+                    .font(.caption2)
+                    .foregroundColor(Color(nsColor: .tertiaryLabelColor))
+                context.draw(context.resolve(text), at: CGPoint(x: x, y: 0), anchor: .top)
+            }
+        }
+    }
+
+    private struct MonthLabel {
+        var pointIndex: Int
+        var title: String
+    }
+
+    private func monthLabels() -> [MonthLabel] {
+        var result: [MonthLabel] = []
+        var lastMonth: Int?
+        let calendar = Calendar(identifier: .gregorian)
+        for (index, point) in series.points.enumerated() {
+            let month = calendar.component(.month, from: point.date)
+            if month != lastMonth {
+                result.append(MonthLabel(pointIndex: index, title: monthTitle(month)))
+                lastMonth = month
+            }
+        }
+        return result
+    }
+
+    private func monthTitle(_ month: Int) -> String {
+        if l10n.language == .simplifiedChinese {
+            return "\(month)月"
+        }
+        let symbols = Calendar(identifier: .gregorian).shortMonthSymbols
+        let index = max(0, min(symbols.count - 1, month - 1))
+        return symbols[index]
+    }
+
+    @ViewBuilder
+    private func hoverMarker(layout: TrendLayoutMetrics) -> some View {
+        if let index = hover.index, series.points.indices.contains(index) {
+            let point = series.points[index]
+            let x = layout.xPosition(for: index)
+            let y = layout.yPosition(for: point.tokens)
+            switch style {
+            case .line:
+                Circle()
+                    .stroke(Color.primary.opacity(0.55), lineWidth: 1.5)
+                    .background(Circle().fill(Color(nsColor: .systemBlue)))
+                    .frame(width: 8, height: 8)
+                    .offset(x: x - 4, y: y - 4)
+            case .bar:
+                let bar = layout.barRect(for: index, tokens: point.tokens)
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .stroke(Color.primary.opacity(0.45), lineWidth: 1)
+                    .frame(width: bar.width, height: bar.height)
+                    .offset(x: bar.minX, y: bar.minY)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func hoverTooltip(layout: TrendLayoutMetrics, containerSize: CGSize) -> some View {
+        if let index = hover.index, series.points.indices.contains(index) {
+            let point = series.points[index]
+            let lines = tooltipLines(for: point)
+            let preferredWidth = min(230, max(168, containerSize.width * 0.38))
+            let tooltipSize = CGSize(
+                width: min(containerSize.width, preferredWidth),
+                height: 60)
+            let x = layout.xPosition(for: index)
+            let y = layout.yPosition(for: point.tokens)
+            let cellRect = CGRect(x: x - 4, y: y - 4, width: 8, height: 8)
+            let origin = HeatmapTooltipPlacement.origin(
+                cellRect: cellRect,
+                tooltipSize: tooltipSize,
+                containerSize: containerSize)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(lines.date)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(lines.primary)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                if let secondary = lines.secondary {
+                    Text(secondary)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .frame(width: tooltipSize.width, height: tooltipSize.height, alignment: .topLeading)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor)))
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1))
+            .shadow(color: Color.black.opacity(0.18), radius: 5, y: 2)
+            .offset(x: origin.x, y: origin.y)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private struct TooltipLines: Equatable {
+        var date: String
+        var primary: String
+        var secondary: String?
+    }
+
+    private func tooltipLines(for point: TokenUsageChartPoint) -> TooltipLines {
+        let date = tooltipDateFormatter.string(from: point.date)
+        let tokensLabel = l10n.text(.tokens)
+        let allText =
+            "\(l10n.text(.heatmapAllDevices)) \(TokenUsageHeatmapBuilder.compactTokenCount(point.allDevicesTokens, language: l10n.language)) \(tokensLabel)"
+        let localText =
+            "\(l10n.text(.heatmapLocalDevice)) \(TokenUsageHeatmapBuilder.compactTokenCount(point.localTokens, language: l10n.language)) \(tokensLabel)"
+        return TooltipLines(date: date, primary: allText, secondary: localText)
+    }
+
+    private var tooltipDateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.locale = Locale(identifier: l10n.language == .simplifiedChinese ? "zh_Hans_CN" : "en_US")
+        switch series.mode {
+        case .weekly:
+            formatter.dateFormat = l10n.language == .simplifiedChinese ? "yyyy年M月d日" : "MMM d, yyyy"
+        case .cumulative:
+            // Monthly aggregation: show year-month.
+            formatter.dateFormat = l10n.language == .simplifiedChinese ? "yyyy年M月" : "MMM yyyy"
+        case .daily:
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+        }
+        return formatter
+    }
+}
+
+private struct TrendLayoutMetrics: Equatable {
+    var plotWidth: CGFloat
+    var plotHeight: CGFloat
+    var pointCount: Int
+    var maxTokens: Int
+
+    private var step: CGFloat {
+        guard pointCount > 1 else { return plotWidth }
+        return plotWidth / CGFloat(pointCount - 1)
+    }
+
+    private var barSlot: CGFloat {
+        guard pointCount > 0 else { return plotWidth }
+        return plotWidth / CGFloat(pointCount)
+    }
+
+    var barWidth: CGFloat {
+        min(12, max(1.5, barSlot * 0.62))
+    }
+
+    func xPosition(for index: Int) -> CGFloat {
+        guard pointCount > 1 else { return plotWidth / 2 }
+        return CGFloat(index) * step
+    }
+
+    func yPosition(for tokens: Int) -> CGFloat {
+        guard maxTokens > 0 else { return plotHeight }
+        let ratio = CGFloat(tokens) / CGFloat(maxTokens)
+        return plotHeight * (1 - min(1, max(0, ratio)))
+    }
+
+    func barRect(for index: Int, tokens: Int) -> CGRect {
+        let slot = barSlot
+        let width = barWidth
+        let x = CGFloat(index) * slot + (slot - width) / 2
+        let y = yPosition(for: tokens)
+        let height = max(0, plotHeight - y)
+        return CGRect(x: x, y: y, width: width, height: max(height, tokens > 0 ? 1 : 0))
+    }
+}
+
+private struct StaticTrendCanvas: View {
+    var series: TokenUsageChartSeries
+    var style: TokenUsageTrendStyle
+    var layout: TrendLayoutMetrics
+
+    var body: some View {
+        Canvas { context, size in
+            drawGrid(context: &context, size: size)
+
+            switch style {
+            case .line:
+                drawLine(context: &context)
+            case .bar:
+                drawBars(context: &context)
+            }
+        }
+    }
+
+    private func drawGrid(context: inout GraphicsContext, size: CGSize) {
+        let grid = Color(nsColor: .separatorColor).opacity(0.35)
+        var path = Path()
+        // baseline
+        path.move(to: CGPoint(x: 0, y: size.height - 0.5))
+        path.addLine(to: CGPoint(x: size.width, y: size.height - 0.5))
+        // mid
+        path.move(to: CGPoint(x: 0, y: size.height / 2))
+        path.addLine(to: CGPoint(x: size.width, y: size.height / 2))
+        context.stroke(path, with: .color(grid), lineWidth: 1)
+    }
+
+    private func drawLine(context: inout GraphicsContext) {
+        let points = series.points
+        guard !points.isEmpty else { return }
+        let lineColor = Color(nsColor: .systemBlue)
+        var line = Path()
+        var fill = Path()
+        for (index, point) in points.enumerated() {
+            let x = layout.xPosition(for: index)
+            let y = layout.yPosition(for: point.tokens)
+            if index == 0 {
+                line.move(to: CGPoint(x: x, y: y))
+                fill.move(to: CGPoint(x: x, y: layout.plotHeight))
+                fill.addLine(to: CGPoint(x: x, y: y))
+            } else {
+                line.addLine(to: CGPoint(x: x, y: y))
+                fill.addLine(to: CGPoint(x: x, y: y))
+            }
+        }
+        if let lastIndex = points.indices.last {
+            let lastX = layout.xPosition(for: lastIndex)
+            fill.addLine(to: CGPoint(x: lastX, y: layout.plotHeight))
+            fill.closeSubpath()
+        }
+        context.fill(fill, with: .color(lineColor.opacity(0.16)))
+        context.stroke(line, with: .color(lineColor), style: StrokeStyle(lineWidth: 1.75, lineJoin: .round))
+    }
+
+    private func drawBars(context: inout GraphicsContext) {
+        let fill = Color(nsColor: .systemBlue).opacity(0.78)
+        for (index, point) in series.points.enumerated() {
+            let rect = layout.barRect(for: index, tokens: point.tokens)
+            guard rect.height > 0 else { continue }
+            let path = Path(roundedRect: rect, cornerRadius: min(2, rect.width / 2))
+            context.fill(path, with: .color(fill))
+        }
+    }
+}
+
+private final class TrendHoverStore: ObservableObject {
+    @Published private(set) var index: Int?
+
+    func set(index: Int) {
+        if self.index != index {
+            self.index = index
+        }
+    }
+
+    func clear() {
+        if index != nil {
+            index = nil
+        }
+    }
+}
+
+private struct TrendPointerOverlay: NSViewRepresentable {
+    var layout: TrendLayoutMetrics
+    var hover: TrendHoverStore
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(hover: hover)
+    }
+
+    func makeNSView(context: Context) -> TrendPointerNSView {
+        let view = TrendPointerNSView()
+        view.coordinator = context.coordinator
+        context.coordinator.layout = layout
+        context.coordinator.hover = hover
+        return view
+    }
+
+    func updateNSView(_ nsView: TrendPointerNSView, context: Context) {
+        context.coordinator.layout = layout
+        context.coordinator.hover = hover
+        nsView.coordinator = context.coordinator
+        nsView.refreshTrackingAreasIfNeeded()
+    }
+
+    final class Coordinator {
+        var layout: TrendLayoutMetrics
+        var hover: TrendHoverStore
+
+        init(hover: TrendHoverStore) {
+            self.layout = TrendLayoutMetrics(plotWidth: 1, plotHeight: 1, pointCount: 0, maxTokens: 0)
+            self.hover = hover
+        }
+
+        func handleMouse(at point: CGPoint, in bounds: CGRect) {
+            guard bounds.contains(point), layout.pointCount > 0 else {
+                hover.clear()
+                return
+            }
+            let index: Int
+            if layout.pointCount == 1 {
+                index = 0
+            } else {
+                let step = layout.plotWidth / CGFloat(layout.pointCount - 1)
+                index = min(layout.pointCount - 1, max(0, Int((point.x / step).rounded())))
+            }
+            hover.set(index: index)
+        }
+    }
+}
+
+private final class TrendPointerNSView: NSView {
+    var coordinator: TrendPointerOverlay.Coordinator?
     private var lastTrackingBounds: CGRect = .null
 
     override var isFlipped: Bool { true }

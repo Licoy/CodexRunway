@@ -79,6 +79,7 @@ struct PreferencesTests {
         #expect(store.load().showsSessionRepairSummary == false)
         #expect(store.load().showsRateLimitResetToday)
         #expect(store.load().showsTokenUsageHeatmap)
+        #expect(store.load().tokenUsageChartStyle == .heatmap)
         #expect(store.load().rateLimitResetTodayRefreshIntervalSeconds == 3_600)
         #expect(store.load().automaticallyChecksForUpdates == false)
         #expect(store.load().quotaAlertsEnabled)
@@ -118,6 +119,24 @@ struct PreferencesTests {
 
         let preferences = try JSONDecoder().decode(RunwayPreferences.self, from: data)
         #expect(preferences.showsTokenUsageHeatmap)
+        #expect(preferences.tokenUsageChartStyle == .heatmap)
+    }
+
+    @Test("token usage chart style persists")
+    func tokenUsageChartStylePersists() {
+        let suiteName = "CodexRunwayPreferencesChartStyle-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = PreferencesStore(defaults: defaults)
+
+        var preferences = RunwayPreferences()
+        preferences.tokenUsageChartStyle = .line
+        store.save(preferences)
+        #expect(store.load().tokenUsageChartStyle == .line)
+
+        preferences.tokenUsageChartStyle = .bar
+        store.save(preferences)
+        #expect(store.load().tokenUsageChartStyle == .bar)
     }
 
     @Test("old preferences use new status bar defaults")

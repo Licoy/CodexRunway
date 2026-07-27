@@ -6,6 +6,66 @@ public enum TokenUsageHeatmapMode: String, CaseIterable, Codable, Sendable, Hash
     case cumulative
 }
 
+public struct TokenUsageChartPoint: Identifiable, Sendable, Equatable {
+    public var id: String { dayKey }
+    public var dayKey: String
+    public var date: Date
+    /// Mode metric used for chart height (daily / weekly total / cumulative of primary series).
+    public var tokens: Int
+    /// Tooltip: that calendar day's workspace total (all devices). For weekly points this is the week total.
+    public var allDevicesTokens: Int
+    /// Tooltip: that calendar day's local total. For weekly points this is the week total.
+    public var localTokens: Int
+
+    public init(
+        dayKey: String,
+        date: Date,
+        tokens: Int,
+        allDevicesTokens: Int = 0,
+        localTokens: Int = 0)
+    {
+        self.dayKey = dayKey
+        self.date = date
+        self.tokens = tokens
+        self.allDevicesTokens = allDevicesTokens
+        self.localTokens = localTokens
+    }
+}
+
+public struct TokenUsageChartSeries: Sendable, Equatable {
+    public var mode: TokenUsageHeatmapMode
+    public var points: [TokenUsageChartPoint]
+    public var totalTokens: Int
+    public var totalAllDevicesTokens: Int
+    public var totalLocalTokens: Int
+    public var hasAllDevicesData: Bool
+    public var hasLocalData: Bool
+    public var calculatedAt: Date
+    public var hasUsage: Bool
+
+    public init(
+        mode: TokenUsageHeatmapMode,
+        points: [TokenUsageChartPoint],
+        totalTokens: Int,
+        totalAllDevicesTokens: Int = 0,
+        totalLocalTokens: Int = 0,
+        hasAllDevicesData: Bool = false,
+        hasLocalData: Bool = false,
+        calculatedAt: Date,
+        hasUsage: Bool)
+    {
+        self.mode = mode
+        self.points = points
+        self.totalTokens = totalTokens
+        self.totalAllDevicesTokens = totalAllDevicesTokens
+        self.totalLocalTokens = totalLocalTokens
+        self.hasAllDevicesData = hasAllDevicesData
+        self.hasLocalData = hasLocalData
+        self.calculatedAt = calculatedAt
+        self.hasUsage = hasUsage
+    }
+}
+
 public struct TokenUsageHeatmapCell: Identifiable, Sendable, Equatable {
     public var id: String { dayKey }
     public var dayKey: String
@@ -189,6 +249,84 @@ public enum TokenUsageHeatmapBuilder {
             hasUsage: totalAll > 0 || totalLocal > 0)
     }
 
+    /// Max daily points shown on line / bar charts (rolling window ending today).
+    public static let chartDailyWindowDays = 30
+
+    /// Ordered points for line / bar charts.
+    /// - daily: last up to 30 days
+    /// - weekly: one point per week from year start through today
+    /// - cumulative: one point per month from January through the current month
+    public static func makeSeries(
+        allDevicesTokens: [String: Int],
+        localTokens: [String: Int],
+        mode: TokenUsageHeatmapMode,
+        now: Date = Date(),
+        firstWeekday: Int = Calendar.current.firstWeekday
+    ) -> TokenUsageChartSeries {
+        let calendar = displayCalendar(firstWeekday: firstWeekday)
+        let today = calendar.startOfDay(for: now)
+        let year = calendar.component(.year, from: today)
+        guard let yearStart = calendar.date(from: DateComponents(year: year, month: 1, day: 1)) else {
+            return emptySeries(mode: mode, calculatedAt: now)
+        }
+
+        // Always index the full YTD so weekly / monthly aggregates stay complete.
+        let yearDayKeys = orderedDayKeys(from: yearStart, through: today, calendar: calendar)
+        let allDaily = clippedDaily(dayKeys: yearDayKeys, source: allDevicesTokens)
+        let localDaily = clippedDaily(dayKeys: yearDayKeys, source: localTokens)
+        let totalAll = allDaily.values.reduce(0, +)
+        let totalLocal = localDaily.values.reduce(0, +)
+        let hasAllDevicesData = totalAll > 0
+        let hasLocalData = totalLocal > 0
+        let totalTokens = hasAllDevicesData ? totalAll : totalLocal
+
+        let primaryDaily = hasAllDevicesData ? allDaily : localDaily
+        let points: [TokenUsageChartPoint]
+        switch mode {
+        case .daily:
+            let windowStart = calendar.date(byAdding: .day, value: -(chartDailyWindowDays - 1), to: today) ?? today
+            let seriesStart = max(yearStart, calendar.startOfDay(for: windowStart))
+            let dayKeys = orderedDayKeys(from: seriesStart, through: today, calendar: calendar)
+            points = dayKeys.compactMap { key in
+                guard let date = date(fromDayKey: key, calendar: calendar) else { return nil }
+                return TokenUsageChartPoint(
+                    dayKey: key,
+                    date: date,
+                    tokens: primaryDaily[key] ?? 0,
+                    allDevicesTokens: allDaily[key] ?? 0,
+                    localTokens: localDaily[key] ?? 0)
+            }
+        case .weekly:
+            points = weeklyChartPoints(
+                from: yearStart,
+                through: today,
+                allDaily: allDaily,
+                localDaily: localDaily,
+                primaryDaily: primaryDaily,
+                calendar: calendar)
+        case .cumulative:
+            // Line / bar "month" aggregation reuses the third segment control slot.
+            points = monthlyChartPoints(
+                from: yearStart,
+                through: today,
+                allDaily: allDaily,
+                localDaily: localDaily,
+                primaryDaily: primaryDaily,
+                calendar: calendar)
+        }
+
+        return TokenUsageChartSeries(
+            mode: mode,
+            points: points,
+            totalTokens: totalTokens,
+            totalAllDevicesTokens: totalAll,
+            totalLocalTokens: totalLocal,
+            hasAllDevicesData: hasAllDevicesData,
+            hasLocalData: hasLocalData,
+            calculatedAt: now,
+            hasUsage: totalAll > 0 || totalLocal > 0)
+    }
+
     /// Single-series convenience (tests / callers with one map).
     public static func make(
         dailyTokens: [String: Int],
@@ -197,6 +335,21 @@ public enum TokenUsageHeatmapBuilder {
         firstWeekday: Int = Calendar.current.firstWeekday
     ) -> TokenUsageHeatmapSnapshot {
         make(
+            allDevicesTokens: [:],
+            localTokens: dailyTokens,
+            mode: mode,
+            now: now,
+            firstWeekday: firstWeekday)
+    }
+
+    /// Single-series convenience for chart points.
+    public static func makeSeries(
+        dailyTokens: [String: Int],
+        mode: TokenUsageHeatmapMode,
+        now: Date = Date(),
+        firstWeekday: Int = Calendar.current.firstWeekday
+    ) -> TokenUsageChartSeries {
+        makeSeries(
             allDevicesTokens: [:],
             localTokens: dailyTokens,
             mode: mode,
@@ -321,6 +474,123 @@ public enum TokenUsageHeatmapBuilder {
             hasLocalData: false,
             calculatedAt: calculatedAt,
             hasUsage: false)
+    }
+
+    private static func emptySeries(mode: TokenUsageHeatmapMode, calculatedAt: Date) -> TokenUsageChartSeries {
+        TokenUsageChartSeries(
+            mode: mode,
+            points: [],
+            totalTokens: 0,
+            totalAllDevicesTokens: 0,
+            totalLocalTokens: 0,
+            hasAllDevicesData: false,
+            hasLocalData: false,
+            calculatedAt: calculatedAt,
+            hasUsage: false)
+    }
+
+    private static func weeklyChartPoints(
+        from start: Date,
+        through end: Date,
+        allDaily: [String: Int],
+        localDaily: [String: Int],
+        primaryDaily: [String: Int],
+        calendar: Calendar
+    ) -> [TokenUsageChartPoint] {
+        var points: [TokenUsageChartPoint] = []
+        var cursor = calendar.startOfDay(for: start)
+        let last = calendar.startOfDay(for: end)
+        while cursor <= last {
+            let weekStart = startOfWeek(containing: cursor, calendar: calendar)
+            var primaryTotal = 0
+            var allTotal = 0
+            var localTotal = 0
+            var lastInRangeDay = weekStart
+            var day = weekStart
+            for _ in 0..<7 {
+                if day >= start, day <= last {
+                    let key = dayString(day, calendar: calendar)
+                    primaryTotal += primaryDaily[key] ?? 0
+                    allTotal += allDaily[key] ?? 0
+                    localTotal += localDaily[key] ?? 0
+                    lastInRangeDay = day
+                }
+                guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+                day = next
+            }
+            let key = dayString(lastInRangeDay, calendar: calendar)
+            points.append(TokenUsageChartPoint(
+                dayKey: key,
+                date: lastInRangeDay,
+                tokens: primaryTotal,
+                allDevicesTokens: allTotal,
+                localTokens: localTotal))
+            guard let nextWeek = calendar.date(byAdding: .day, value: 7, to: weekStart) else { break }
+            cursor = nextWeek
+        }
+        return points
+    }
+
+    private static func monthlyChartPoints(
+        from start: Date,
+        through end: Date,
+        allDaily: [String: Int],
+        localDaily: [String: Int],
+        primaryDaily: [String: Int],
+        calendar: Calendar
+    ) -> [TokenUsageChartPoint] {
+        var points: [TokenUsageChartPoint] = []
+        let last = calendar.startOfDay(for: end)
+        guard var cursor = calendar.date(from: DateComponents(
+            year: calendar.component(.year, from: start),
+            month: calendar.component(.month, from: start),
+            day: 1))
+        else { return points }
+
+        while cursor <= last {
+            let month = calendar.component(.month, from: cursor)
+            let year = calendar.component(.year, from: cursor)
+            guard let monthStart = calendar.date(from: DateComponents(year: year, month: month, day: 1)),
+                  let nextMonth = calendar.date(byAdding: .month, value: 1, to: monthStart)
+            else { break }
+            let monthEndExclusive = nextMonth
+            let rangeEnd = min(last, calendar.date(byAdding: .day, value: -1, to: monthEndExclusive) ?? last)
+
+            var primaryTotal = 0
+            var allTotal = 0
+            var localTotal = 0
+            var day = monthStart
+            while day <= rangeEnd {
+                if day >= start {
+                    let key = dayString(day, calendar: calendar)
+                    primaryTotal += primaryDaily[key] ?? 0
+                    allTotal += allDaily[key] ?? 0
+                    localTotal += localDaily[key] ?? 0
+                }
+                guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+                day = next
+            }
+
+            let pointDate = rangeEnd
+            points.append(TokenUsageChartPoint(
+                dayKey: dayString(pointDate, calendar: calendar),
+                date: pointDate,
+                tokens: primaryTotal,
+                allDevicesTokens: allTotal,
+                localTokens: localTotal))
+            cursor = nextMonth
+        }
+        return points
+    }
+
+    private static func date(fromDayKey key: String, calendar: Calendar) -> Date? {
+        let parts = key.split(separator: "-")
+        guard parts.count == 3,
+              let year = Int(parts[0]),
+              let month = Int(parts[1]),
+              let day = Int(parts[2])
+        else { return nil }
+        return calendar.date(from: DateComponents(year: year, month: month, day: day))
     }
 
     private static func displayCalendar(firstWeekday: Int) -> Calendar {

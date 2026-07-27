@@ -137,6 +137,9 @@ struct RunwayPopoverView: View {
                             allDevicesTokens: model.tokenHeatmapAllDevicesTokens,
                             localTokens: model.tokenHeatmapLocalTokens,
                             calculatedAt: model.tokenHeatmapCalculatedAt,
+                            chartStyle: Binding(
+                                get: { settings.preferences.tokenUsageChartStyle },
+                                set: { settings.updateTokenUsageChartStyle($0) }),
                             l10n: l10n,
                             isRefreshing: model.isRefreshing(.tokenHeatmap),
                             onRefresh: { model.refreshTokenHeatmap(policy: .force) })

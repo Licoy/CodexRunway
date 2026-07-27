@@ -152,6 +152,19 @@ struct ControlPanelView: View {
                     title: l10n.text(.showTokenUsageHeatmap),
                     subtitle: l10n.text(.tokenUsageHeatmapDescription),
                     binding: tokenUsageHeatmapBinding)
+                if settings.preferences.showsTokenUsageHeatmap {
+                    PickerRow(
+                        title: l10n.text(.tokenUsageChartStyle),
+                        subtitle: l10n.text(.tokenUsageHeatmapDescription))
+                    {
+                        Picker(l10n.text(.tokenUsageChartStyle), selection: tokenUsageChartStyleBinding) {
+                            ForEach(TokenUsageChartStyle.allCases, id: \.self) { style in
+                                Text(style.title(l10n)).tag(style)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+                }
                 PreferenceToggleRow(
                     title: l10n.text(.showCostSummary),
                     subtitle: l10n.text(.apiEquivalent),
@@ -310,6 +323,12 @@ struct ControlPanelView: View {
             })
     }
 
+    private var tokenUsageChartStyleBinding: Binding<TokenUsageChartStyle> {
+        Binding(
+            get: { settings.preferences.tokenUsageChartStyle },
+            set: { settings.updateTokenUsageChartStyle($0) })
+    }
+
     private var rateLimitResetTodayBinding: Binding<Bool> {
         Binding(
             get: { settings.preferences.showsRateLimitResetToday },
@@ -452,6 +471,16 @@ private extension ApiCostSummaryRange {
         case .current: l10n.text(.currentCycle)
         case .previous: l10n.text(.previousCycle)
         case .thisMonth: l10n.text(.thisMonth)
+        }
+    }
+}
+
+private extension TokenUsageChartStyle {
+    func title(_ l10n: L10n) -> String {
+        switch self {
+        case .heatmap: l10n.text(.tokenUsageChartHeatmap)
+        case .line: l10n.text(.tokenUsageChartLine)
+        case .bar: l10n.text(.tokenUsageChartBar)
         }
     }
 }

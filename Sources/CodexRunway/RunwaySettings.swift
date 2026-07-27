@@ -81,6 +81,10 @@ final class RunwaySettings: ObservableObject {
         update { $0.showsTokenUsageHeatmap = isShown }
     }
 
+    func updateTokenUsageChartStyle(_ style: TokenUsageChartStyle) {
+        update { $0.tokenUsageChartStyle = style }
+    }
+
     func updateRateLimitResetTodayRefreshInterval(_ seconds: Int) {
         update {
             $0.rateLimitResetTodayRefreshIntervalSeconds =

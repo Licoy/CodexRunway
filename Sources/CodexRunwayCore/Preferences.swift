@@ -223,9 +223,14 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case tokenUsageHeatmap
     case tokenUsageHeatmapDescription
     case tokenUsageHeatmapUnavailable
+    case tokenUsageChartStyle
+    case tokenUsageChartHeatmap
+    case tokenUsageChartLine
+    case tokenUsageChartBar
     case heatmapDaily
     case heatmapWeekly
     case heatmapCumulative
+    case heatmapMonthly
     case heatmapEmpty
     case heatmapAllDevices
     case heatmapLocalDevice

@@ -144,16 +144,22 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
 
     private func rebuildHostedViews() {
         let wasVisible = isMainPanelVisible
-        // Settings change: rebuild hosting in place when visible; when hidden just drop
-        // the trees — the next open builds fresh ones.
-        if popover.isShown {
-            popover.contentViewController = NSHostingController(rootView: popoverRootView())
-        } else {
+        // While the status-item popover is visible, never replace its content VC.
+        // Swapping NSHostingController (e.g. after chart-style preference writes)
+        // detaches the popover from the status button and leaves a thin sliver at
+        // the top of the screen. RunwayPopoverView already observes settings and
+        // redraws in place. Drop hosting only when hidden so the next open is fresh.
+        if !popover.isShown {
             popover.contentViewController = nil
+        } else {
+            // Keep size pinned even if SwiftUI layout thrash tries to shrink it.
+            pinPopoverContentSize()
+            reanchorPopoverIfShown()
         }
         if let detailsWindow {
             if detailsWindow.isVisible {
-                detailsWindow.contentViewController = NSHostingController(rootView: popoverRootView())
+                // Normal NSWindow is safe to refresh; not anchored like NSPopover.
+                detailsWindow.contentViewController = makePopoverHostingController()
                 detailsWindow.title = "Codex Runway"
             } else {
                 detailsWindow.contentViewController = nil
@@ -165,7 +171,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         }
     }
 
-    private func popoverRootView() -> some View {
+    private func popoverRootView() -> RunwayPopoverRootView {
         RunwayPopoverRootView(
             model: model,
             settings: settings,
@@ -173,6 +179,30 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
             checkForUpdates: { [weak self] in self?.updaterService.checkForUpdates() },
             openGitHub: { ExternalURLLauncher.open(ControlPanelView.githubURL) },
             openControlPanel: { [weak self] tab in self?.showControlPanel(tab: tab) })
+    }
+
+    private func makePopoverHostingController() -> NSHostingController<RunwayPopoverRootView> {
+        let controller = NSHostingController(rootView: popoverRootView())
+        controller.preferredContentSize = RunwayPopoverView.panelSize
+        return controller
+    }
+
+    private func pinPopoverContentSize() {
+        let size = NSSize(
+            width: RunwayPopoverView.panelSize.width,
+            height: RunwayPopoverView.panelSize.height)
+        popover.contentSize = size
+        if let controller = popover.contentViewController {
+            controller.preferredContentSize = size
+        }
+    }
+
+    /// Re-show relative to the status button after any geometry glitch.
+    private func reanchorPopoverIfShown() {
+        guard popover.isShown, let button = statusItem.button else { return }
+        pinPopoverContentSize()
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        focusPopoverWindow()
     }
 
     private func eventHitsStatusButton(_ event: NSEvent) -> Bool {
@@ -221,8 +251,9 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         // fresh hosting per open (dropped on close) keeps presentation state clean.
         mainPanelVisibility.isVisible = true
         if popover.contentViewController == nil {
-            popover.contentViewController = NSHostingController(rootView: popoverRootView())
+            popover.contentViewController = makePopoverHostingController()
         }
+        pinPopoverContentSize()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         if !popover.isShown {
             showDetailsWindow()
@@ -233,6 +264,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         focusPopoverWindow()
         DispatchQueue.main.async { [weak self] in
             guard let self, self.popover.isShown else { return }
+            self.pinPopoverContentSize()
             self.focusPopoverWindow()
         }
         startPopoverCloseMonitors()

@@ -21,7 +21,7 @@ Codex Runway is a native macOS menu bar app for checking Codex quota, whether ra
 - Show the current account, subscription tier, and expiration.
 - View reset credit count, status, and expiration time.
 - View API-equivalent cost and token usage for today, the current cycle, the previous cycle, this month, or a custom range; the default range is configurable in settings.
-- Show a year-to-date token usage heatmap under quota on the main panel (daily / weekly / cumulative); can be turned off in settings.
+- Show a year-to-date token usage chart under quota on the main panel (heatmap / line / bar; daily / weekly / cumulative); style is switchable in the panel and settings, heatmap by default; can be turned off.
 - Use a local incremental session index for faster cost scans.
 - View recent Codex sessions, projects, status, and usage summaries.
 - Repair the local session index.

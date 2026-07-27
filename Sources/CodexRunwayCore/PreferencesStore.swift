@@ -48,6 +48,12 @@ public enum ApiCostSummaryRange: String, CaseIterable, Codable, Sendable {
     case thisMonth
 }
 
+public enum TokenUsageChartStyle: String, CaseIterable, Codable, Sendable, Hashable {
+    case heatmap
+    case line
+    case bar
+}
+
 public struct RunwayPreferences: Codable, Sendable, Equatable {
     public var language: LanguagePreference
     public var appearance: AppearancePreference
@@ -62,6 +68,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     public var showsSessionRepairSummary: Bool
     public var showsRateLimitResetToday: Bool
     public var showsTokenUsageHeatmap: Bool
+    public var tokenUsageChartStyle: TokenUsageChartStyle
     public var rateLimitResetTodayRefreshIntervalSeconds: Int
     public var automaticallyChecksForUpdates: Bool
     public var quotaAlertsEnabled: Bool
@@ -85,6 +92,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         showsSessionRepairSummary: Bool = true,
         showsRateLimitResetToday: Bool = true,
         showsTokenUsageHeatmap: Bool = true,
+        tokenUsageChartStyle: TokenUsageChartStyle = .heatmap,
         rateLimitResetTodayRefreshIntervalSeconds: Int = RunwayPreferences.defaultRateLimitResetTodayRefreshIntervalSeconds,
         automaticallyChecksForUpdates: Bool = true,
         quotaAlertsEnabled: Bool = false,
@@ -104,6 +112,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         self.showsSessionRepairSummary = showsSessionRepairSummary
         self.showsRateLimitResetToday = showsRateLimitResetToday
         self.showsTokenUsageHeatmap = showsTokenUsageHeatmap
+        self.tokenUsageChartStyle = tokenUsageChartStyle
         self.rateLimitResetTodayRefreshIntervalSeconds = Self.clampRateLimitResetTodayRefreshInterval(
             rateLimitResetTodayRefreshIntervalSeconds)
         self.automaticallyChecksForUpdates = automaticallyChecksForUpdates
@@ -130,6 +139,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         case showsSessionRepairSummary
         case showsRateLimitResetToday
         case showsTokenUsageHeatmap
+        case tokenUsageChartStyle
         case rateLimitResetTodayRefreshIntervalSeconds
         case automaticallyChecksForUpdates
         case quotaAlertsEnabled
@@ -152,6 +162,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         showsSessionRepairSummary = try container.decodeIfPresent(Bool.self, forKey: .showsSessionRepairSummary) ?? true
         showsRateLimitResetToday = try container.decodeIfPresent(Bool.self, forKey: .showsRateLimitResetToday) ?? true
         showsTokenUsageHeatmap = try container.decodeIfPresent(Bool.self, forKey: .showsTokenUsageHeatmap) ?? true
+        tokenUsageChartStyle = try container.decodeIfPresent(TokenUsageChartStyle.self, forKey: .tokenUsageChartStyle) ?? .heatmap
         rateLimitResetTodayRefreshIntervalSeconds = Self.clampRateLimitResetTodayRefreshInterval(
             try container.decodeIfPresent(Int.self, forKey: .rateLimitResetTodayRefreshIntervalSeconds)
                 ?? Self.defaultRateLimitResetTodayRefreshIntervalSeconds)

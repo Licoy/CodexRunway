@@ -244,6 +244,113 @@ struct TokenUsageHeatmapTests {
         #expect(months == months.sorted())
     }
 
+    @Test("chart series daily mode is capped at the last 30 days")
+    func chartSeriesDailyPointCount() {
+        let now = date("2026-03-20")
+        var daily: [String: Int] = [:]
+        // Spread usage across more than 30 days of the year.
+        for day in 1...20 {
+            daily[String(format: "2026-01-%02d", day)] = 10
+            daily[String(format: "2026-02-%02d", day)] = 20
+            daily[String(format: "2026-03-%02d", day)] = 30
+        }
+        let series = TokenUsageHeatmapBuilder.makeSeries(
+            dailyTokens: daily,
+            mode: .daily,
+            now: now,
+            firstWeekday: 1)
+
+        #expect(series.points.count == TokenUsageHeatmapBuilder.chartDailyWindowDays)
+        #expect(series.points.first?.dayKey == "2026-02-19")
+        #expect(series.points.last?.dayKey == "2026-03-20")
+        #expect(series.points.contains { $0.dayKey == "2026-01-15" } == false)
+        #expect(series.hasUsage)
+    }
+
+    @Test("chart series daily mode early in the year uses available days only")
+    func chartSeriesDailyEarlyYear() {
+        let now = date("2026-01-10")
+        let series = TokenUsageHeatmapBuilder.makeSeries(
+            dailyTokens: [
+                "2026-01-05": 100,
+                "2026-01-06": 400,
+            ],
+            mode: .daily,
+            now: now,
+            firstWeekday: 1)
+
+        #expect(series.points.count == 10)
+        let byKey = Dictionary(uniqueKeysWithValues: series.points.map { ($0.dayKey, $0.tokens) })
+        #expect(byKey["2026-01-05"] == 100)
+        #expect(byKey["2026-01-06"] == 400)
+        #expect(series.totalTokens == 500)
+    }
+
+    @Test("chart series weekly mode collapses to one point per week")
+    func chartSeriesWeeklyOnePointPerWeek() {
+        let now = date("2026-01-10")
+        let series = TokenUsageHeatmapBuilder.makeSeries(
+            dailyTokens: [
+                "2026-01-04": 10,
+                "2026-01-05": 30,
+                "2026-01-06": 60,
+            ],
+            mode: .weekly,
+            now: now,
+            firstWeekday: 1)
+
+        // 2026-01-01..01-10 with Sunday firstWeekday spans 2 weeks.
+        #expect(series.points.count == 2)
+        let weekWithUsage = series.points.first { $0.tokens == 100 }
+        #expect(weekWithUsage != nil)
+        #expect(weekWithUsage?.allDevicesTokens == 0)
+        #expect(weekWithUsage?.localTokens == 100)
+    }
+
+    @Test("chart series third mode is one point per month")
+    func chartSeriesMonthlyOnePointPerMonth() {
+        let now = date("2026-03-15")
+        let series = TokenUsageHeatmapBuilder.makeSeries(
+            dailyTokens: [
+                "2026-01-01": 10,
+                "2026-01-20": 20,
+                "2026-02-05": 40,
+                "2026-03-10": 100,
+            ],
+            mode: .cumulative,
+            now: now,
+            firstWeekday: 1)
+
+        #expect(series.points.count == 3)
+        #expect(series.points[0].tokens == 30)
+        #expect(series.points[1].tokens == 40)
+        #expect(series.points[2].tokens == 100)
+    }
+
+    @Test("chart series prefers all-devices primary values")
+    func chartSeriesPrefersAllDevices() {
+        let now = date("2026-01-10")
+        let series = TokenUsageHeatmapBuilder.makeSeries(
+            allDevicesTokens: [
+                "2026-01-05": 1_600,
+                "2026-01-06": 100,
+            ],
+            localTokens: [
+                "2026-01-05": 50,
+                "2026-01-06": 20,
+            ],
+            mode: .daily,
+            now: now,
+            firstWeekday: 1)
+
+        let jan5 = series.points.first { $0.dayKey == "2026-01-05" }
+        #expect(jan5?.tokens == 1_600)
+        #expect(jan5?.allDevicesTokens == 1_600)
+        #expect(jan5?.localTokens == 50)
+        #expect(series.hasAllDevicesData)
+        #expect(series.totalTokens == 1_700)
+    }
+
     private func date(_ value: String) -> Date {
         if value.count == 10 {
             return ISO8601DateFormatter().date(from: "\(value)T12:00:00Z")!
