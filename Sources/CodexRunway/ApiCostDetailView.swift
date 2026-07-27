@@ -355,7 +355,8 @@ struct ApiCostDetailView: View {
         case .onlineAnalytics:
             return l10n.text(.sourceOnlineSupplement)
         case .unavailable:
-            return l10n.text(.usageAnalyticsUnavailable)
+            // Zero-token range is empty usage, not a failed analytics fetch.
+            return l10n.text(.usageAnalyticsEmpty)
         }
     }
 

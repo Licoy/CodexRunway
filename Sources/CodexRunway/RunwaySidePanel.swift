@@ -34,7 +34,7 @@ struct SidePanelDisclosureRow: View {
                 if showsChevron {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(isHovered ? Color.accentColor : Color.secondary)
+                        .foregroundStyle(isHovered ? Color.primary : Color.secondary)
                 }
             }
             .padding(.vertical, 8)

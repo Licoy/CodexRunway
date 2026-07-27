@@ -1515,7 +1515,9 @@ final class RunwayModel: ObservableObject {
         now: Date
     ) async throws -> ApiEquivalentSummary {
         if range == .current {
-            guard let current, current.isDisplayableCost else {
+            // Empty-but-successful current cycle is still a valid summary ("no usage").
+            // Only fail hard when we could not resolve any summary at all.
+            guard let current else {
                 throw CostRangeQueryError.usageUnavailable
             }
             return current
@@ -1524,9 +1526,9 @@ final class RunwayModel: ObservableObject {
             throw CostRangeQueryError.usageUnavailable
         }
         guard let selectedRange else { throw CostRangeQueryError.usageUnavailable }
-        let summary = try await resolveCost(local: local, range: selectedRange, auth: auth, now: now)
-        guard summary.isDisplayableCost else { throw CostRangeQueryError.usageUnavailable }
-        return summary
+        // Pass through zero-usage results so the UI can show "no usage in range"
+        // instead of conflating that with a fetch/analytics failure.
+        return try await resolveCost(local: local, range: selectedRange, auth: auth, now: now)
     }
 
     private func selectedCostRange(
@@ -1574,6 +1576,19 @@ final class RunwayModel: ObservableObject {
         if clearsScanNote { costScanNote = nil }
         latestDisplayedCost = summary
         latestDisplayedCostRange = range
+        // Successful scan with zero tokens is "no usage", not a fetch failure.
+        if !summary.isDisplayableCost {
+            costText = l10n.text(.usageAnalyticsEmpty)
+            costSubtitle = costSubtitle(for: summary, range: range, now: now)
+            costLines = [
+                DetailLine(title: l10n.text(.apiCost), value: l10n.text(.usageAnalyticsEmpty)),
+                DetailLine(title: l10n.text(.apiCostSource), value: sourceText(summary.source)),
+            ]
+            if let costScanNote {
+                costLines.append(DetailLine(title: l10n.text(.costScanFailed), value: costScanNote))
+            }
+            return
+        }
         let amount = summary.estimatedUSD.map(DurationFormatter.money) ?? "--"
         costText = "\(amount) \(l10n.text(.apiEquivalent)) · \(Self.compactNumber(summary.totals.totalTokens)) \(l10n.text(.tokens)) · \(sourceText(summary.source))"
         costSubtitle = costSubtitle(for: summary, range: range, now: now)
@@ -1741,7 +1756,8 @@ final class RunwayModel: ObservableObject {
         case .onlineAnalytics:
             return l10n.text(.sourceOnlineSupplement)
         case .unavailable:
-            return l10n.text(.usageAnalyticsUnavailable)
+            // Source is "unavailable" when a range resolved with zero tokens — not a hard failure.
+            return l10n.text(.usageAnalyticsEmpty)
         }
     }
 

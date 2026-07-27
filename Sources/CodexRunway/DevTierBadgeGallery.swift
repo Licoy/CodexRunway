@@ -72,7 +72,7 @@ struct DevTierBadgeGallery: View {
                     .font(.caption2.monospaced())
                     .foregroundStyle(.tertiary)
             }
-            Text("Plan capsules + expiry phases for visual QA.")
+            Text("Plan tier capsules + expiry phases for visual QA.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

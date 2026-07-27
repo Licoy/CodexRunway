@@ -168,8 +168,8 @@ struct RunwayModelRefreshTests {
         #expect(await recorder.captureCount == 1)
     }
 
-    @Test("API cost summary hides bad analytics response for unavailable selected range")
-    func apiCostSummaryHidesBadAnalyticsResponseForUnavailableRange() async throws {
+    @Test("API cost summary shows empty usage when selected range has no tokens")
+    func apiCostSummaryShowsEmptyUsageWhenSelectedRangeHasNoTokens() async throws {
         let recorder = CostBatchRecorder()
         let settings = RunwaySettings(store: PreferencesStore(defaults: scopedDefaults()))
         settings.updateShowsCostSummary(true)
@@ -220,18 +220,21 @@ struct RunwayModelRefreshTests {
         settings.updateApiCostSummaryRange(.today)
         model.refreshCost()
         _ = try await recorder.waitForBatch(count: 2)
-        let unavailable = settings.l10n.text(.usageAnalyticsUnavailable)
+        // Empty local scan for the selected range is "no usage", not a hard failure —
+        // even when the online analytics supplement fails.
+        let emptyUsage = settings.l10n.text(.usageAnalyticsEmpty)
         for _ in 0..<100 {
-            if model.costText == unavailable { break }
+            if model.costText == emptyUsage { break }
             try await Task.sleep(for: .milliseconds(20))
         }
 
         let lineText = model.costLines.map(\.value).joined(separator: " ")
-        #expect(model.costText == unavailable)
+        #expect(model.costText == emptyUsage)
         #expect(model.costScanNote == nil)
         #expect(!model.costText.contains("$1"))
         #expect(!lineText.contains("NSURLErrorDomain"))
         #expect(!lineText.contains("-1011"))
+        #expect(!lineText.contains(settings.l10n.text(.usageAnalyticsUnavailable)))
     }
 
     @Test("full refresh reserves synchronously and forwards if-changed policy")
