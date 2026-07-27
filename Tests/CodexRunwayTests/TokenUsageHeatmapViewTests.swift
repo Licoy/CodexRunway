@@ -84,4 +84,29 @@ struct TokenUsageHeatmapViewTests {
         #expect(topOrigin.y > topCell.maxY)
         #expect(bottomOrigin.y + tooltip.height < bottomCell.minY)
     }
+
+    @Test("mismatch tooltip stays inside a real year-end heatmap frame")
+    func mismatchTooltipFitsRealHeatmapFrame() {
+        let container = CGSize(width: 369, height: 109)
+        let middleCell = CGRect(x: 182, y: 21, width: 5, height: 5)
+        let content = TokenUsageTooltipContent.make(
+            date: "2026年12月25日",
+            officialTokens: 998_000_000,
+            localTokens: 1_611_000_000,
+            l10n: L10n(language: .simplifiedChinese))
+        let tooltip = TokenUsageTooltipLayout.size(
+            for: content,
+            cellRect: middleCell,
+            containerSize: container)
+        let origin = HeatmapTooltipPlacement.origin(
+            cellRect: middleCell,
+            tooltipSize: tooltip,
+            containerSize: container)
+        let frame = CGRect(origin: origin, size: tooltip)
+
+        #expect(tooltip.height == 80)
+        #expect(frame.minX >= 0 && frame.maxX <= container.width)
+        #expect(frame.minY >= 0 && frame.maxY <= container.height)
+        #expect(!frame.intersects(middleCell))
+    }
 }

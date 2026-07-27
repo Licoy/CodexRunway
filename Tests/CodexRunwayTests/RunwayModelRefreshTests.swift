@@ -73,7 +73,14 @@ struct RunwayModelRefreshTests {
             },
             fetchCodexProfileTokenUsage: { auth in
                 let value = auth.tokens.accountId == "acct-a" ? 100 : 200
-                return CodexProfileTokenUsage(dailyTokens: ["2026-07-26": value])
+                let statsAsOf = auth.tokens.accountId == "acct-a" ? "2026-07-27" : "2026-07-28"
+                let generatedAt = auth.tokens.accountId == "acct-a"
+                    ? Date(timeIntervalSince1970: 1_785_139_420)
+                    : Date(timeIntervalSince1970: 1_785_225_820)
+                return CodexProfileTokenUsage(
+                    dailyTokens: ["2026-07-26": value],
+                    statsAsOf: statsAsOf,
+                    generatedAt: generatedAt)
             },
             dryRunSessions: {
                 SessionRepairReport(
@@ -90,6 +97,8 @@ struct RunwayModelRefreshTests {
         model.refreshTokenHeatmap()
         try await waitForTokenHeatmapRefresh(in: model)
         #expect(model.tokenHeatmapAllDevicesTokens["2026-07-26"] == 100)
+        #expect(model.tokenHeatmapOfficialStatsAsOf == "2026-07-27")
+        #expect(model.tokenHeatmapOfficialGeneratedAt == Date(timeIntervalSince1970: 1_785_139_420))
 
         await provider.set(Self.auth(accountId: "acct-b"))
         model.refreshQuota()
@@ -103,6 +112,8 @@ struct RunwayModelRefreshTests {
         model.refreshTokenHeatmap(policy: .ifChanged)
         try await waitForTokenHeatmapRefresh(in: model)
         #expect(model.tokenHeatmapAllDevicesTokens["2026-07-26"] == 200)
+        #expect(model.tokenHeatmapOfficialStatsAsOf == "2026-07-28")
+        #expect(model.tokenHeatmapOfficialGeneratedAt == Date(timeIntervalSince1970: 1_785_225_820))
     }
 
     @Test("switching accounts cancels an in-flight old-account heatmap")

@@ -62,11 +62,20 @@ enum TokenUsageSourcePresentation {
     }
 }
 
-private enum TokenUsageTooltipLayout {
-    static func size(for content: TokenUsageTooltipContent, containerWidth: CGFloat) -> CGSize {
-        let preferredWidth = min(260, max(180, containerWidth * 0.42))
+enum TokenUsageTooltipLayout {
+    static func size(
+        for content: TokenUsageTooltipContent,
+        cellRect: CGRect,
+        containerSize: CGSize,
+        gap: CGFloat = 6
+    ) -> CGSize {
+        let preferredWidth = min(260, max(180, containerSize.width * 0.42))
+        let leftRoom = max(0, cellRect.minX - gap)
+        let rightRoom = max(0, containerSize.width - cellRect.maxX - gap)
+        let sideRoom = max(leftRoom, rightRoom)
+        let width = sideRoom >= 160 ? min(preferredWidth, sideRoom) : preferredWidth
         return CGSize(
-            width: min(containerWidth, preferredWidth),
+            width: min(containerSize.width, width),
             height: content.note == nil ? 60 : 80)
     }
 }
@@ -328,7 +337,7 @@ struct TokenUsageHeatmapView: View {
                 hoverTooltip(
                     snapshot: snapshot,
                     metrics: metrics,
-                    containerSize: CGSize(width: metrics.gridWidth, height: cellsHeight))
+                    containerSize: CGSize(width: metrics.gridWidth, height: outerHeight))
                     .allowsHitTesting(false)
             }
             .frame(width: metrics.gridWidth, height: height, alignment: .topLeading)
@@ -375,14 +384,15 @@ struct TokenUsageHeatmapView: View {
             let cell = snapshot.weeks[week][day]
             if cell.isInRange {
                 let content = tooltipContent(for: cell)
-                let tooltipSize = TokenUsageTooltipLayout.size(
-                    for: content,
-                    containerWidth: containerSize.width)
                 let cellRect = CGRect(
                     x: CGFloat(week) * (metrics.cellSize + metrics.columnSpacing),
                     y: CGFloat(day) * (metrics.cellSize + metrics.rowSpacing),
                     width: metrics.cellSize,
                     height: metrics.cellSize)
+                let tooltipSize = TokenUsageTooltipLayout.size(
+                    for: content,
+                    cellRect: cellRect,
+                    containerSize: containerSize)
                 let origin = HeatmapTooltipPlacement.origin(
                     cellRect: cellRect,
                     tooltipSize: tooltipSize,
@@ -578,7 +588,11 @@ enum HeatmapTooltipPlacement {
         if above >= 0 {
             return CGPoint(x: alignedX, y: above)
         }
-        return CGPoint(x: alignedX, y: cellRect.maxY + gap)
+        let below = cellRect.maxY + gap
+        if below <= maxY {
+            return CGPoint(x: alignedX, y: below)
+        }
+        return CGPoint(x: alignedX, y: alignedY)
     }
 }
 
@@ -853,7 +867,9 @@ private struct TokenUsageTrendChartView: View {
                                 .frame(width: plotWidth, height: plotHeight)
                             hoverMarker(layout: layout)
                                 .allowsHitTesting(false)
-                            hoverTooltip(layout: layout, containerSize: CGSize(width: plotWidth, height: plotHeight))
+                            hoverTooltip(layout: layout, containerSize: CGSize(
+                                width: plotWidth,
+                                height: outerHeight))
                                 .allowsHitTesting(false)
                         }
                         .frame(width: plotWidth, height: plotHeight)
@@ -965,12 +981,13 @@ private struct TokenUsageTrendChartView: View {
         if let index = hover.index, series.points.indices.contains(index) {
             let point = series.points[index]
             let content = tooltipContent(for: point)
-            let tooltipSize = TokenUsageTooltipLayout.size(
-                for: content,
-                containerWidth: containerSize.width)
             let x = layout.xPosition(for: index)
             let y = layout.yPosition(for: point.tokens)
             let cellRect = CGRect(x: x - 4, y: y - 4, width: 8, height: 8)
+            let tooltipSize = TokenUsageTooltipLayout.size(
+                for: content,
+                cellRect: cellRect,
+                containerSize: containerSize)
             let origin = HeatmapTooltipPlacement.origin(
                 cellRect: cellRect,
                 tooltipSize: tooltipSize,
