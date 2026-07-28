@@ -196,7 +196,7 @@ enum MainPanelMockRender {
                 markerPercents: [25, 50, 75]),
         ]
 
-        model.rateLimitResetToday = RateLimitResetTodaySnapshot.devMock(kind: .yesCountdown, now: now)
+        model.rateLimitResetToday = RateLimitResetTodaySnapshot.devMock(kind: .yes, now: now)
 
         // Synthetic YTD token series so the heatmap renders in mock shots.
         var heatmap: [String: Int] = [:]

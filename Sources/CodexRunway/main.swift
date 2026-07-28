@@ -11,17 +11,17 @@ if CommandLine.arguments.contains("--self-check") {
 //   swift run CodexRunway -- --dev-tier-badges
 
 // Dev helper: render the rate-limit-reset card with mock data to a PNG.
-// Example: CodexRunway --render-reset-today-mock=yes-countdown /tmp/reset-yes.png
+// Example: CodexRunway --render-reset-today-mock=yes /tmp/reset-yes.png
 if let renderIndex = CommandLine.arguments.firstIndex(where: { $0.hasPrefix("--render-reset-today-mock=") }) {
     let renderFlag = CommandLine.arguments[renderIndex]
     let value = String(renderFlag.dropFirst("--render-reset-today-mock=".count))
     guard let kind = RateLimitResetTodaySnapshot.DevMockKind.parse(value) else {
-        fputs("usage: --render-reset-today-mock=yes|yes-countdown|no <output.png>\n", stderr)
+        fputs("usage: --render-reset-today-mock=yes|no|unknown <output.png>\n", stderr)
         exit(2)
     }
     let pathIndex = CommandLine.arguments.index(after: renderIndex)
     guard pathIndex < CommandLine.arguments.endIndex else {
-        fputs("usage: --render-reset-today-mock=yes|yes-countdown|no <output.png>\n", stderr)
+        fputs("usage: --render-reset-today-mock=yes|no|unknown <output.png>\n", stderr)
         exit(2)
     }
     let path = CommandLine.arguments[pathIndex]

@@ -660,6 +660,7 @@ final class RunwayModel: ObservableObject {
                 costSubtitle = nextSubtitle
             }
         }
+        refreshRateLimitResetTodayDisplayIfNeeded(now: now)
         refreshRateLimitResetTodayIfDue(now: now)
     }
 
@@ -1051,6 +1052,25 @@ final class RunwayModel: ObservableObject {
         refreshRateLimitResetToday(force: false)
     }
 
+    private func refreshRateLimitResetTodayDisplayIfNeeded(now: Date) {
+        guard let snapshot = rateLimitResetToday else { return }
+        let state = snapshot.resolvedState(now: now)
+        let stateText = rateLimitResetTodayStateText(state)
+        if rateLimitResetTodayText != stateText {
+            rateLimitResetTodayText = stateText
+        }
+        let hintText = rateLimitResetTodayHintText(state)
+        guard let statusIndex = rateLimitResetTodayLines.firstIndex(where: {
+            $0.title == l10n.text(.status)
+        }), rateLimitResetTodayLines[statusIndex].value != hintText
+        else {
+            return
+        }
+        var lines = rateLimitResetTodayLines
+        lines[statusIndex] = DetailLine(title: l10n.text(.status), value: hintText)
+        rateLimitResetTodayLines = lines
+    }
+
     private func refreshRateLimitResetTodayNow(force: Bool) async {
         guard settings.preferences.showsRateLimitResetToday else { return }
         if !force,
@@ -1079,20 +1099,24 @@ final class RunwayModel: ObservableObject {
 
     private func applyRateLimitResetToday(_ snapshot: RateLimitResetTodaySnapshot) {
         rateLimitResetToday = snapshot
-        rateLimitResetTodayText = rateLimitResetTodayStateText(snapshot.state)
+        let state = snapshot.resolvedState()
+        rateLimitResetTodayText = rateLimitResetTodayStateText(state)
         var lines: [DetailLine] = [
-            DetailLine(title: l10n.text(.status), value: rateLimitResetTodayHintText(snapshot.state)),
+            DetailLine(title: l10n.text(.status), value: rateLimitResetTodayHintText(state)),
         ]
-        if let checkedAt = snapshot.latestCheckedAt ?? snapshot.updatedAt {
+        if let checkedAt = snapshot.lastSuccessfulCheckAt {
             lines.append(
                 DetailLine(
                     title: l10n.text(.rateLimitResetTodayLastCheck),
                     value: DurationFormatter.relativePast(since: checkedAt, language: l10n.language)))
         }
-        if let tweet = snapshot.displayTweetLine {
-            lines.append(DetailLine(title: l10n.text(.rateLimitResetTodayLatestTweet), value: tweet))
+        if let evidence = snapshot.evidenceLine(l10n: l10n) {
+            lines.append(
+                DetailLine(
+                    title: l10n.text(.rateLimitResetTodayLatestEvidence),
+                    value: evidence))
         }
-        if let resetAt = snapshot.resetAt {
+        if let resetAt = snapshot.latestResetAt() {
             lines.append(
                 DetailLine(
                     title: l10n.text(.lastReset),

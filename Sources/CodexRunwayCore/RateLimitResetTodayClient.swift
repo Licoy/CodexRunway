@@ -1,8 +1,8 @@
 import Foundation
 
 public struct RateLimitResetTodayClient: Sendable {
-    public static let siteURL = URL(string: "https://hascodexratelimitreset.today/")!
-    public static let statusURL = URL(string: "https://hascodexratelimitreset.today/api/status")!
+    public static let siteURL = URL(string: "https://licoy.github.io/codex-runway/")!
+    public static let statusURL = URL(string: "https://licoy.github.io/codex-runway/api/status.json")!
 
     public var session: URLSession
     public var statusURL: URL
@@ -19,7 +19,10 @@ public struct RateLimitResetTodayClient: Sendable {
         self.devMockKind = devMockKind
     }
 
-    public func fetchStatus(now: Date = Date()) async throws -> RateLimitResetTodaySnapshot {
+    public func fetchStatus(
+        now: Date = Date(),
+        calendar: Calendar = .current) async throws -> RateLimitResetTodaySnapshot
+    {
         if let devMockKind {
             return RateLimitResetTodaySnapshot.devMock(kind: devMockKind, now: now)
         }
@@ -31,10 +34,13 @@ public struct RateLimitResetTodayClient: Sendable {
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
             throw URLError(.badServerResponse)
         }
-        return try RateLimitResetTodaySnapshot.decode(from: data, fetchedAt: now)
+        return try RateLimitResetTodaySnapshot.decode(
+            from: data,
+            now: now,
+            calendar: calendar)
     }
 
-    /// `--mock-reset-today=yes|yes-countdown|no` or `CODEX_RUNWAY_MOCK_RESET_TODAY=...`.
+    /// `--mock-reset-today=yes|no|unknown` or `CODEX_RUNWAY_MOCK_RESET_TODAY=...`.
     public static func resolveDevMockKind(
         arguments: [String] = CommandLine.arguments,
         environment: [String: String] = ProcessInfo.processInfo.environment)

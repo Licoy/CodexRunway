@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'self'; img-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    >
+    <meta name="color-scheme" content="light dark">
+    <meta
+      name="description"
+      content=""
+      data-i18n-content="metaDescription"
+    >
+    <title data-i18n="pageTitle"></title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow" data-i18n="eyebrow"></p>
+        <h1 data-i18n="pageTitle"></h1>
+        <p class="intro" data-i18n="intro"></p>
+      </header>
+
+      <section class="status-card" aria-live="polite" aria-busy="true" id="status-card">
+        <div>
+          <p class="label" data-i18n="currentVerdict"></p>
+          <p class="status-value" id="status-value" data-i18n="loading"></p>
+        </div>
+        <span class="status-dot" id="status-dot" aria-hidden="true"></span>
+        <p class="status-detail" id="status-detail" data-i18n="loadingDetail"></p>
+        <p class="updated" id="updated"></p>
+      </section>
+
+      <section class="events-section" aria-labelledby="events-title">
+        <div class="section-heading">
+          <h2 id="events-title" data-i18n="recentEvidence"></h2>
+          <a href="./api/status.json" data-i18n="viewJSON"></a>
+        </div>
+        <ol class="events" id="events"></ol>
+        <p class="empty" id="empty" data-i18n="emptyEvents" hidden></p>
+      </section>
+
+      <footer>
+        <p data-i18n="disclaimer"></p>
+        <p data-i18n="privacy"></p>
+      </footer>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "id": "response_fixture",
+  "status": "completed",
+  "citations": [
+    "https://x.com/i/status/200",
+    "https://x.com/thsottiaux/status/100"
+  ],
+  "output": [
+    {
+      "type": "x_search_call",
+      "id": "search_fixture",
+      "status": "completed"
+    },
+    {
+      "type": "message",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "{\"events\":[{\"kind\":\"limit_increase\",\"announcedAt\":\"2026-07-27T09:00:00Z\",\"effectiveAt\":null,\"plans\":[\"pro\",\"all\",\"pro\"],\"windows\":[\"weekly\"],\"postId\":\"100\",\"sourceUrl\":\"https://x.com/thsottiaux/status/100\",\"confidence\":0.83},{\"kind\":\"reset_completed\",\"announcedAt\":\"2026-07-28T11:55:00Z\",\"effectiveAt\":null,\"plans\":[\"all\"],\"windows\":[\"weekly\",\"five_hour\"],\"postId\":\"200\",\"sourceUrl\":\"https://x.com/i/status/200\",\"confidence\":0.98}]}",
+          "annotations": []
+        }
+      ]
+    }
+  ]
+}

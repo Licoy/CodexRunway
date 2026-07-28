@@ -1,0 +1,221 @@
+name: Update reset-today status
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-hasreset
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      publish: ${{ steps.decision.outputs.publish }}
+      degraded: ${{ steps.decision.outputs.degraded }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Prepare Pages state
+        id: paths
+        shell: bash
+        run: |
+          previous_dir="${RUNNER_TEMP}/hasreset-previous"
+          output_dir="${RUNNER_TEMP}/hasreset-site"
+          decision_file="${RUNNER_TEMP}/hasreset-decision.json"
+
+          mkdir -p "$output_dir"
+          set +e
+          git ls-remote --exit-code --heads origin gh-pages \
+            >"${RUNNER_TEMP}/hasreset-gh-pages-ref"
+          remote_status=$?
+          set -e
+
+          case "$remote_status" in
+            0)
+              git fetch --no-tags --depth=1 origin \
+                gh-pages:refs/remotes/origin/gh-pages
+              git worktree add --detach "$previous_dir" \
+                refs/remotes/origin/gh-pages
+              ;;
+            2)
+              mkdir -p "$previous_dir"
+              ;;
+            *)
+              echo "::error::Unable to inspect the gh-pages branch."
+              exit 1
+              ;;
+          esac
+
+          echo "previous_dir=$previous_dir" >> "$GITHUB_OUTPUT"
+          echo "output_dir=$output_dir" >> "$GITHUB_OUTPUT"
+          echo "decision_file=$decision_file" >> "$GITHUB_OUTPUT"
+
+      - name: Run reset monitor
+        id: monitor
+        shell: bash
+        env:
+          GROK_API_BASE_URL: ${{ secrets.GROK_API_BASE_URL }}
+          GROK_MODEL: ${{ secrets.GROK_MODEL }}
+          GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+        run: |
+          set +e
+          node api/hasreset/src/cli.mjs \
+            --previous-dir "${{ steps.paths.outputs.previous_dir }}" \
+            --output-dir "${{ steps.paths.outputs.output_dir }}" \
+            --decision-file "${{ steps.paths.outputs.decision_file }}"
+          monitor_exit_code=$?
+          set -e
+          echo "exit_code=$monitor_exit_code" >> "$GITHUB_OUTPUT"
+
+      - name: Validate publish decision
+        id: decision
+        shell: bash
+        env:
+          DECISION_FILE: ${{ steps.paths.outputs.decision_file }}
+          MONITOR_EXIT_CODE: ${{ steps.monitor.outputs.exit_code }}
+        run: |
+          test -f "$DECISION_FILE"
+
+          publish="$(jq -er \
+            '.publish | if type == "boolean" then tostring else error("publish must be boolean") end' \
+            "$DECISION_FILE")"
+          degraded="$(jq -er \
+            '.degraded | if type == "boolean" then tostring else error("degraded must be boolean") end' \
+            "$DECISION_FILE")"
+          jq -e \
+            'if (keys | sort) == ["degraded", "errorCode", "publish", "reason"] then true else error("unexpected decision fields") end' \
+            "$DECISION_FILE" >/dev/null
+          jq -e \
+            '.errorCode | if . == null or type == "string" then true else error("errorCode must be a string or null") end' \
+            "$DECISION_FILE" >/dev/null
+          jq -e \
+            '.reason | if type == "string" then true else error("reason must be a string") end' \
+            "$DECISION_FILE" >/dev/null
+
+          if [[ "$MONITOR_EXIT_CODE" == "0" && "$degraded" != "false" ]]; then
+            echo "::error::The monitor returned success with a degraded decision."
+            exit 1
+          fi
+          if [[ "$MONITOR_EXIT_CODE" == "2" && "$degraded" != "true" ]]; then
+            echo "::error::The monitor returned a degraded exit without a degraded decision."
+            exit 1
+          fi
+          if [[ "$MONITOR_EXIT_CODE" != "0" && "$MONITOR_EXIT_CODE" != "2" ]]; then
+            echo "::error::The monitor returned an unexpected exit code."
+            exit 1
+          fi
+
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "degraded=$degraded" >> "$GITHUB_OUTPUT"
+
+      - name: Validate generated site
+        if: steps.decision.outputs.publish == 'true'
+        shell: bash
+        env:
+          OUTPUT_DIR: ${{ steps.paths.outputs.output_dir }}
+        run: |
+          test -f "$OUTPUT_DIR/.nojekyll"
+          test -f "$OUTPUT_DIR/favicon.svg"
+          test -f "$OUTPUT_DIR/index.html"
+          test -f "$OUTPUT_DIR/app.js"
+          test -f "$OUTPUT_DIR/l10n.js"
+          test -f "$OUTPUT_DIR/status-logic.js"
+          test -f "$OUTPUT_DIR/api/status.json"
+
+      - name: Upload Pages artifact
+        if: steps.decision.outputs.publish == 'true'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ steps.paths.outputs.output_dir }}
+
+      - name: Publish gh-pages state
+        if: steps.decision.outputs.publish == 'true'
+        shell: bash
+        env:
+          OUTPUT_DIR: ${{ steps.paths.outputs.output_dir }}
+        run: |
+          publish_dir="${RUNNER_TEMP}/hasreset-publish"
+
+          if git show-ref --verify --quiet refs/remotes/origin/gh-pages; then
+            git worktree add -B gh-pages "$publish_dir" \
+              refs/remotes/origin/gh-pages
+          else
+            git worktree add --detach "$publish_dir" HEAD
+            git -C "$publish_dir" switch --orphan gh-pages
+          fi
+
+          rsync -a --delete --exclude=".git" "$OUTPUT_DIR/" "$publish_dir/"
+          git -C "$publish_dir" add --all
+
+          if git -C "$publish_dir" diff --cached --quiet; then
+            echo "::error::The monitor requested publication without changing the site."
+            exit 1
+          fi
+
+          git -C "$publish_dir" config user.name "github-actions[bot]"
+          git -C "$publish_dir" config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$publish_dir" commit -m "chore(hasreset): publish status"
+          git -C "$publish_dir" push origin gh-pages
+
+  deploy:
+    needs: monitor
+    if: needs.monitor.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+
+  report-health:
+    needs: [monitor, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Report monitor health
+        shell: bash
+        env:
+          MONITOR_RESULT: ${{ needs.monitor.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          PUBLISH: ${{ needs.monitor.outputs.publish }}
+          DEGRADED: ${{ needs.monitor.outputs.degraded }}
+        run: |
+          if [[ "$MONITOR_RESULT" != "success" ]]; then
+            echo "::error::The reset monitor did not complete successfully."
+            exit 1
+          fi
+          if [[ "$PUBLISH" == "true" && "$DEPLOY_RESULT" != "success" ]]; then
+            echo "::error::The generated reset status was not deployed."
+            exit 1
+          fi
+          if [[ "$DEGRADED" == "true" ]]; then
+            echo "::error::The reset monitor published a degraded status."
+            exit 1
+          fi

@@ -173,13 +173,19 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case rateLimitResetTodayCheckCost
     case rateLimitResetTodayConfidence
     case rateLimitResetTodayDescription
+    case rateLimitResetTodayEvidenceBankedReset
+    case rateLimitResetTodayEvidenceLimitIncrease
+    case rateLimitResetTodayEvidenceResetCompleted
+    case rateLimitResetTodayEvidenceResetScheduled
+    case rateLimitResetTodayEvidenceUncertain
     case rateLimitResetTodayLastCheck
     case rateLimitResetTodayLastFetched
-    case rateLimitResetTodayLatestTweet
+    case rateLimitResetTodayLocalDayHint
+    case rateLimitResetTodayLatestEvidence
     case rateLimitResetTodayNo
     case rateLimitResetTodayNoHint
     case rateLimitResetTodayOpenSource
-    case rateLimitResetTodayOpenTweet
+    case rateLimitResetTodayOpenEvidence
     case rateLimitResetTodayRefreshInterval
     case rateLimitResetTodaySeen
     case rateLimitResetTodaySource

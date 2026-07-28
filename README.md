@@ -14,7 +14,7 @@ Codex Runway 是一个原生 macOS 状态栏应用，帮你在菜单栏查看 Co
 
 - 菜单栏查看 Codex 剩余额度。
 - 查看 5 小时、每周和附加额度窗口。
-- 查看今日速率限制是否已重置（第三方公开状态）；有下次重置窗口时显示倒计时，可跳转相关推文。
+- 查看今日速率限制是否已重置（项目自托管公开状态源），并可跳转到相关公开动态。
 - 设置中可开关「今日是否重置」栏目，并单独配置其刷新间隔（默认开启、每 1 小时）。
 - 管理多个 Codex 账号：浏览器登录、导入本机 `auth.json`、粘贴 token / JSON（含 `/auth/session`）、导入文件或 API Key。
 - 确认后安全切号，原子写回 `~/.codex/auth.json`，可选立即重启 Codex，使 CLI / IDE 同步。
@@ -89,21 +89,38 @@ swift run CodexRunway --self-check
 - API 等价成本默认来自本机会话 JSONL 日志，并在 `~/.codex-runway/` 下维护本地增量索引等派生数据；不上传会话内容。
 - API 等价成本的在线用量只在本地没有可用 token 数据时作为补全。Token 图表的“官方统计（多端）”来自当前账号的官方资料统计，可能延迟或后续修订；“本机日志（全部本机会话）”扫描本机现有会话，历史记录可能跨账号。两者口径不同，不能视为包含关系或直接相减。
 - 会话修复只处理 `~/.codex/session_index.jsonl`，写入前会创建备份，不删除会话文件。
+- 「今日是否重置」只下载本项目发布的派生状态 JSON，不附带 Codex 账号、token 或本机会话内容。后台 AI 分析只检索公开 X 动态，不接收应用用户的数据。
 - 更新检测只访问版本信息，不上传 Codex 账号或会话数据。
 
 ## 数据来源
 
-- **今日是否重置**：状态来自第三方公开站点 [hascodexratelimitreset.today](https://hascodexratelimitreset.today/) 及其 `api/status` 接口。Codex Runway 仅拉取公开结果，不附带任何 Codex 账号或 token；结果仅供参考，应用不控制也不保证该数据源的准确性与可用性。
+- **今日是否重置**：状态来自本仓库通过 GitHub Actions 生成并由 [GitHub Pages](https://licoy.github.io/codex-runway/api/status.json) 发布的静态 feed。后台使用 Grok X Search 检索 `@thsottiaux` 的公开动态并生成结构化事件，应用再按用户本地自然日计算结果。该结果由 AI 分析，非官方且仅供参考；定时任务和 Pages 都是尽力运行，可能延迟或暂时不可用。
 - **配额 / reset credits / Token 用量官方统计 / 部分在线用量**：在你已登录的前提下，通过本机凭据访问官方 ChatGPT / Codex 后端接口；官方 Token 统计仅对应当前账号，并显示服务端统计截至日期。
 - **Token 用量本机日志 / API 等价成本 / 最近会话**：默认基于本机 `~/.codex` 会话日志与本地索引计算。本机历史日志没有可靠的账号归属，因此可能包含多个账号的数据。
 
 ## 开发与贡献
 
 ```bash
+node --test api/hasreset/tests
 swift test
 swift build
 swift build -c release
 ```
+
+### 自托管「今日是否重置」状态源
+
+服务源码位于 [`api/hasreset`](api/hasreset)，定时发布由 `.github/workflows/update-hasreset.yml` 负责。部署自己的 fork 时：
+
+1. 在仓库的 Actions Secrets 中添加 `GROK_API_BASE_URL`、`GROK_MODEL`、`GROK_API_KEY`。Base URL 应为 HTTPS API 版本根路径，例如 `https://api.x.ai/v1`；所选模型需支持 Responses API、X Search 和 Structured Outputs。
+2. 在 **Settings > Actions > General > Workflow permissions** 中允许 `GITHUB_TOKEN` 读写仓库内容；无需创建 PAT。
+3. 在 **Settings > Pages** 中把 Source 设为 **GitHub Actions**。
+4. 手动运行一次 **Update reset-today status** workflow 完成首次发布，并检查 Pages 页面和 `api/status.json`。
+
+workflow 每小时第 17 分钟运行一次，每轮最多发起一次 Grok 请求，不重试；只有状态变化或每日心跳时才更新 orphan `gh-pages` 分支并部署 Pages。GitHub 的定时任务不是实时调度，可能延迟、丢失运行，或因公共仓库长期无活动而停用，可用 `workflow_dispatch` 手动补跑。
+
+此设计将 Actions 限制为低频、低负载的项目静态内容发布，不把它作为按请求执行的 serverless 服务。不要直接改成 5/15 分钟轮询、商业服务或通用 API；扩大频率或用途前应重新核对 GitHub 的 [Actions 附加条款](https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features#actions) 与 [Pages 限制](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)，必要时联系 GitHub Support。
+
+Grok 密钥和原始响应不会写入仓库、Pages 或日志；公开 feed 只包含派生事件、时间、来源链接和安全错误码，不包含完整动态正文。公开说明文字由事件类型映射为固定文案，不发布模型生成的自由文本。请勿在 workflow 调试输出中打印 Secrets。
 
 贡献说明见 [CONTRIBUTORS.md](CONTRIBUTORS.md)。
 

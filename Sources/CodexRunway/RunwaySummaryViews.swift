@@ -265,7 +265,7 @@ struct RateLimitResetTodayView: View {
     var isRefreshing: Bool
     var onRefresh: () -> Void
     var onOpenSource: () -> Void
-    var onOpenTweet: ((URL) -> Void)?
+    var onOpenEvidence: ((URL) -> Void)?
 
     @State private var showsSourceInfo = false
 
@@ -283,14 +283,16 @@ struct RateLimitResetTodayView: View {
             }
 
             VStack(alignment: .leading, spacing: 0) {
-                hero
-                if hasNextResetCountdown {
-                    zoneRule
-                    nextResetCountdownRow
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    hero(now: context.date)
                 }
-                if hasTweetRow {
+                if snapshot != nil {
                     zoneRule
-                    tweetRow
+                    localDayBoundaryRow
+                }
+                if hasEvidenceRow {
+                    zoneRule
+                    evidenceRow
                 }
                 if let footerText = footerMetaText {
                     zoneRule
@@ -325,16 +327,16 @@ struct RateLimitResetTodayView: View {
     }
 
     /// Large answer on the left, hint on the right — one row instead of a tall centered stack.
-    private var hero: some View {
+    private func hero(now: Date) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            Text(heroTitle)
+            Text(heroTitle(now: now))
                 .font(.system(size: 28, weight: .semibold, design: .rounded))
-                .foregroundStyle(heroColor)
+                .foregroundStyle(heroColor(now: now))
                 .minimumScaleFactor(0.75)
                 .lineLimit(1)
                 .layoutPriority(1)
 
-            Text(heroSubtitle)
+            Text(heroSubtitle(now: now))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.leading)
@@ -346,53 +348,45 @@ struct RateLimitResetTodayView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var hasNextResetCountdown: Bool {
-        snapshot?.nextResetRemaining() != nil
-    }
+    private var localDayBoundaryRow: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "calendar")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
 
-    private var nextResetCountdownRow: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let remaining = snapshot?.nextResetRemaining(now: context.date)
-            HStack(spacing: 6) {
-                Image(systemName: "timer")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(heroColor)
+            Text(l10n.text(.rateLimitResetTodayLocalDayHint))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
 
-                Text(l10n.text(.nextResetIn))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Spacer(minLength: 4)
-
-                Text(remaining.map { DurationFormatter.localized($0, language: l10n.language) } ?? "—")
-                    .font(.callout.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(heroColor)
-                    .lineLimit(1)
-            }
-            .padding(.top, 8)
+            Spacer(minLength: 0)
         }
+        .padding(.top, 8)
     }
 
-    private var tweetRow: some View {
+    private var evidenceRow: some View {
         Group {
-            if let url = snapshot?.tweetURL, let onOpenTweet {
-                TweetRowButton(action: { onOpenTweet(url) }, help: l10n.text(.rateLimitResetTodayOpenTweet)) {
-                    tweetRowContent
+            if let url = snapshot?.evidenceURL, let onOpenEvidence {
+                EvidenceRowButton(
+                    action: { onOpenEvidence(url) },
+                    help: l10n.text(.rateLimitResetTodayOpenEvidence))
+                {
+                    evidenceRowContent
                 }
             } else {
-                tweetRowContent
+                evidenceRowContent
             }
         }
         .padding(.top, 8)
     }
 
-    private var tweetRowContent: some View {
+    private var evidenceRowContent: some View {
         HStack(spacing: 6) {
             Image(systemName: "bubble.left")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            Text(tweetLineText)
+            Text(evidenceLineText)
                 .font(.caption)
                 .foregroundStyle(.primary.opacity(0.85))
                 .lineLimit(1)
@@ -400,7 +394,7 @@ struct RateLimitResetTodayView: View {
 
             Spacer(minLength: 4)
 
-            if snapshot?.tweetURL != nil {
+            if snapshot?.evidenceURL != nil {
                 Image(systemName: "arrow.up.right")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
@@ -423,35 +417,35 @@ struct RateLimitResetTodayView: View {
             return l10n.text(isRefreshing ? .calculating : .notLoaded)
         }
         var parts: [String] = []
-        if let checkedAt = snapshot.latestCheckedAt ?? snapshot.updatedAt {
+        if let checkedAt = snapshot.lastSuccessfulCheckAt {
             parts.append(
                 "\(l10n.text(.rateLimitResetTodayLastCheck)) \(DurationFormatter.relativePast(since: checkedAt, language: l10n.language))")
         }
-        if let resetAt = snapshot.resetAt {
+        if let resetAt = snapshot.latestResetAt() {
             parts.append(
                 "\(l10n.text(.lastReset)) \(DurationFormatter.relativePast(since: resetAt, language: l10n.language))")
-        } else if snapshot.state == .no {
+        } else if snapshot.resolvedState() == .no {
             parts.append(l10n.text(.rateLimitResetTodayAwaiting))
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private var hasTweetRow: Bool {
-        snapshot?.tweetURL != nil || snapshot?.displayTweetLine != nil
+    private var hasEvidenceRow: Bool {
+        snapshot?.evidenceURL != nil || snapshot?.evidenceLine(l10n: l10n) != nil
     }
 
-    private var tweetLineText: String {
-        if let line = snapshot?.displayTweetLine, !line.isEmpty {
+    private var evidenceLineText: String {
+        if let line = snapshot?.evidenceLine(l10n: l10n), !line.isEmpty {
             return line
         }
-        return l10n.text(.rateLimitResetTodayLatestTweet)
+        return l10n.text(.rateLimitResetTodayLatestEvidence)
     }
 
-    private var heroTitle: String {
+    private func heroTitle(now: Date) -> String {
         guard let snapshot else {
             return isRefreshing ? "…" : "—"
         }
-        switch snapshot.state {
+        switch snapshot.resolvedState(now: now) {
         case .yes:
             return l10n.text(.rateLimitResetTodayYes)
         case .no:
@@ -461,11 +455,11 @@ struct RateLimitResetTodayView: View {
         }
     }
 
-    private var heroSubtitle: String {
+    private func heroSubtitle(now: Date) -> String {
         if snapshot == nil {
             return l10n.text(isRefreshing ? .calculating : .notLoaded)
         }
-        switch snapshot?.state {
+        switch snapshot?.resolvedState(now: now) {
         case .yes:
             return l10n.text(.rateLimitResetTodayYesHint)
         case .no:
@@ -475,9 +469,9 @@ struct RateLimitResetTodayView: View {
         }
     }
 
-    private var heroColor: Color {
+    private func heroColor(now: Date) -> Color {
         guard let snapshot else { return Color(nsColor: .secondaryLabelColor) }
-        switch snapshot.state {
+        switch snapshot.resolvedState(now: now) {
         case .yes:
             return Color(nsColor: .systemGreen)
         case .no:
@@ -488,8 +482,8 @@ struct RateLimitResetTodayView: View {
     }
 }
 
-/// Hoverable wrapper for the tweet line (quiet pill highlight, no chrome at rest).
-private struct TweetRowButton<Content: View>: View {
+/// Hoverable wrapper for the evidence line (quiet pill highlight, no chrome at rest).
+private struct EvidenceRowButton<Content: View>: View {
     var action: () -> Void
     var help: String
     @ViewBuilder var content: () -> Content

@@ -1,0 +1,11 @@
+{
+  "name": "codex-runway-hasreset",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

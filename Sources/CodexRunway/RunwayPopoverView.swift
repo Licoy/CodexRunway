@@ -157,7 +157,7 @@ struct RunwayPopoverView: View {
                             onOpenSource: {
                                 ExternalURLLauncher.open(RateLimitResetTodayClient.siteURL)
                             },
-                            onOpenTweet: { url in
+                            onOpenEvidence: { url in
                                 ExternalURLLauncher.open(url)
                             })
                     }

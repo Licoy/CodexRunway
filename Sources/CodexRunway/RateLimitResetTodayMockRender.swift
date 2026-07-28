@@ -18,7 +18,7 @@ enum RateLimitResetTodayMockRender {
             isRefreshing: false,
             onRefresh: {},
             onOpenSource: {},
-            onOpenTweet: { _ in })
+            onOpenEvidence: { _ in })
             .padding(16)
             .frame(width: width)
             .background(Color(nsColor: .windowBackgroundColor))
