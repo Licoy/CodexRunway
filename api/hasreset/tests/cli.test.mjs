@@ -22,14 +22,20 @@ test("runCLI stages a safe first-run degraded site and returns exit code 2", asy
   const previousDir = join(root, "missing-previous");
   const outputDir = join(root, "site");
   const decisionFile = join(root, "decision.json");
+  const diagnostics = [];
 
   const exitCode = await runCLI({
     argv: cliArguments(previousDir, outputDir, decisionFile),
     env: {},
     now: new Date("2026-07-29T12:17:00.000Z"),
+    onMonitorError: (diagnostic) => diagnostics.push(diagnostic),
   });
 
   assert.equal(exitCode, 2);
+  assert.deepEqual(diagnostics, [{
+    code: "configuration_error",
+    message: "GROK_API_KEY is required",
+  }]);
   assert.deepEqual(await readJSON(decisionFile), {
     publish: true,
     degraded: true,

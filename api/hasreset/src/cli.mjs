@@ -20,6 +20,7 @@ export async function runCLI({
   now = new Date(),
   fetchImpl = globalThis.fetch,
   publicDir = defaultPublicDir,
+  onMonitorError = () => {},
 }) {
   const paths = parseArguments(argv);
   const prior = await loadPrevious(paths.previousDir);
@@ -40,7 +41,9 @@ export async function runCLI({
         fetchImpl,
       });
     } catch (error) {
-      errorCode = safeErrorCode(error);
+      const diagnostic = safeErrorDiagnostic(error);
+      errorCode = diagnostic.code;
+      onMonitorError(diagnostic);
     }
   }
 
@@ -105,6 +108,16 @@ function safeErrorCode(error) {
     : "request_failed";
 }
 
+function safeErrorDiagnostic(error) {
+  if (error instanceof HasResetError) {
+    return { code: error.code, message: error.message };
+  }
+  return {
+    code: "request_failed",
+    message: "Unexpected monitor failure",
+  };
+}
+
 async function writeDecision(path, result) {
   const decision = {
     publish: result.publish,
@@ -118,7 +131,12 @@ async function writeDecision(path, result) {
 
 async function main() {
   try {
-    process.exitCode = await runCLI({ argv: process.argv.slice(2) });
+    process.exitCode = await runCLI({
+      argv: process.argv.slice(2),
+      onMonitorError: ({ code, message }) => {
+        process.stderr.write(`hasreset monitor: ${code}: ${message}\n`);
+      },
+    });
   } catch (error) {
     const code = safeErrorCode(error);
     process.stderr.write(`hasreset: ${code}\n`);
