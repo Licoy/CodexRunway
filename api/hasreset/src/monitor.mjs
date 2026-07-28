@@ -41,7 +41,10 @@ export async function fetchGrokEvents({
   }
 
   if (!response?.ok) {
-    throw new HasResetError("request_failed", "Grok returned an unsuccessful response");
+    const status = Number.isInteger(response?.status)
+      ? response.status
+      : "an unsuccessful status";
+    throw new HasResetError("request_failed", `Grok returned HTTP ${status}`);
   }
   const payload = await parseResponseBody(response);
   return filterRecentEvents(parseGrokResponse(payload), now);

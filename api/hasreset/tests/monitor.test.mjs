@@ -55,6 +55,25 @@ test("fetchGrokEvents does not retry a failed request", async () => {
   assert.equal(callCount, 1);
 });
 
+test("fetchGrokEvents reports an unsuccessful HTTP status without its body", async () => {
+  await assert.rejects(
+    fetchGrokEvents({
+      baseURL: "https://api.x.ai/v1",
+      model: "grok-4.5",
+      apiKey: "test-secret",
+      fetchImpl: async () => new Response("sensitive upstream body", {
+        status: 503,
+      }),
+    }),
+    (error) => (
+      error instanceof HasResetError
+      && error.code === "request_failed"
+      && error.message === "Grok returned HTTP 503"
+      && !error.message.includes("sensitive")
+    ),
+  );
+});
+
 test("fetchGrokEvents ignores posts outside the strict prior 48 hours", async () => {
   const response = structuredClone(validResponse);
   const analysis = JSON.parse(response.output[1].content[0].text);
