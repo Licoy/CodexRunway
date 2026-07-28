@@ -101,7 +101,7 @@ The self-check prints local diagnostics with tokens redacted.
 ## Development and Contribution
 
 ```bash
-node --test api/hasreset/tests
+npm test --prefix api/hasreset
 swift test
 swift build
 swift build -c release

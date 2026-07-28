@@ -169,7 +169,7 @@ X 原文。
 运行测试不需要任何 API Key，所有外部响应均来自 fixtures：
 
 ```bash
-node --test api/hasreset/tests
+npm test --prefix api/hasreset
 ```
 
 也可以从服务目录运行：

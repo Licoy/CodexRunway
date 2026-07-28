@@ -16,7 +16,7 @@ jobs:
         with:
           node-version: "24"
       - name: Test reset monitor
-        run: node --test api/hasreset/tests
+        run: npm test --prefix api/hasreset
       - name: Test Swift
         run: swift test
 

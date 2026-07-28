@@ -101,7 +101,7 @@ swift run CodexRunway --self-check
 ## 开发与贡献
 
 ```bash
-node --test api/hasreset/tests
+npm test --prefix api/hasreset
 swift test
 swift build
 swift build -c release
