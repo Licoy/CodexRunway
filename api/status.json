@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-28T03:07:05.492Z",
+  "generatedAt": "2026-07-28T05:32:09.858Z",
   "lastSuccessfulCheckAt": null,
   "monitor": {
     "status": "degraded",
-    "errorCode": "invalid_response"
+    "errorCode": "request_failed"
   },
   "events": []
 }
