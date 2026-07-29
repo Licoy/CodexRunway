@@ -18,7 +18,28 @@ export function classifyStatus(feed, now = new Date()) {
   if (reset) {
     return status("yes", "reset", reset.kind);
   }
+
+  const upcoming = nextScheduledReset(events, now);
+  if (upcoming) {
+    return status("no", "scheduled", "reset_scheduled", upcoming.effectiveAt);
+  }
   return status("no", "none");
+}
+
+export function nextScheduledReset(events, now = new Date()) {
+  const nowMs = now.getTime();
+  let best = null;
+  for (const event of events) {
+    if (event?.kind !== "reset_scheduled") continue;
+    const when = new Date(event.effectiveAt ?? "");
+    if (Number.isNaN(when.getTime()) || when.getTime() <= nowMs) continue;
+    if (!best || when < best.when) {
+      best = { event, when };
+    }
+  }
+  return best
+    ? { effectiveAt: best.when.toISOString(), event: best.event }
+    : null;
 }
 
 function isEffectiveResetToday(event, now) {
@@ -37,6 +58,6 @@ function isSameLocalDay(value, now) {
     && date.getDate() === now.getDate();
 }
 
-function status(state, reason, eventKind = null) {
-  return { state, reason, eventKind };
+function status(state, reason, eventKind = null, scheduledAt = null) {
+  return { state, reason, eventKind, scheduledAt };
 }

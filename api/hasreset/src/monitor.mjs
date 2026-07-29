@@ -222,7 +222,9 @@ async function fetchViaHTTP({ url, apiKey, request, timeoutMs, fetchImpl }) {
 
 function filterRecentEvents(events, now) {
   const upperBound = now.getTime();
-  const lowerBound = upperBound - (48 * 60 * 60 * 1_000);
+  // Keep a 72h announcement window to match the search range. Scheduled
+  // effectiveAt may still point further ahead and is retained by merge logic.
+  const lowerBound = upperBound - (72 * 60 * 60 * 1_000);
   return events.filter((event) => {
     const announcedAt = Date.parse(event.announcedAt);
     return announcedAt >= lowerBound && announcedAt <= upperBound;

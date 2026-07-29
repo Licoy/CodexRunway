@@ -27,7 +27,8 @@ flowchart LR
   WebSocket `wss://…/v1/responses`（`response.create` + 等待
   `response.completed`）。
 - 仅启用 `x_search`，只允许检索 `@thsottiaux`。
-- 搜索最近 48 小时，请求最多两个 X Search 工具调用。
+- 搜索最近 72 小时的 `@thsottiaux` 原帖与回复，最多 4 次 X Search 工具调用。
+- 明确区分已完成重置 / 计划重置；相对日期（明天、31 号等）需解析为 ISO `effectiveAt`。
 - 兼容代理可将一次 X Search 展开为多个已完成的内部 X 搜索调用。
 - 兼容代理也可省略工具调用记录：非空事件须有同 Post ID 的 X citation（`thsottiaux` 或 `i/status`）；空事件可直接作为“无相关公告”。
 - 关闭图片和视频理解，设置 `store: false`。
@@ -190,7 +191,8 @@ API v1 的 Schema 位于 `schemas/status.schema.json`。它返回事件列表，
 2. `lastSuccessfulCheckAt` 缺失、无效或距当前超过 30 小时时显示“未知”。
 3. 本地当天存在 `uncertain` 时显示“未知”。
 4. 本地当天存在已经生效的 `reset_completed` 或 `reset_scheduled` 时显示“是”。
-5. 其他情况显示“否”。
+5. 若存在尚未到期的 `reset_scheduled`，显示“否”，并提示下次计划重置时间。
+6. 其他情况显示“否”。
 
 `rationale` 是服务根据事件类型生成的固定派生文案，不是模型自由文本，也不包含
 X 原文。
@@ -222,7 +224,7 @@ loopback 地址。
 与 Post ID 校验。部分代理会省略 X Search 调用记录；此时：
 
 - 非空事件：每个事件必须有同 Post ID 的 X citation（`@thsottiaux` 或 `x.com/i/status/<id>`）；
-- 空事件：允许作为“最近 48 小时无相关公告”的合法结果；
+- 空事件：允许作为“最近 72 小时无相关公告”的合法结果；
 - 仍拒绝 `web_search` 等非 X 工具调用。
 
 代理若返回缺少 `effectiveAt` 的 `reset_scheduled`，服务会将其安全降级为

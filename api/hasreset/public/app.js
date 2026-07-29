@@ -55,6 +55,14 @@ function renderEvents(events) {
     rationale.textContent = l10n.text(rationaleKey(event.kind));
     heading.append(kind, time);
     item.append(heading, rationale);
+    if (event.kind === "reset_scheduled" && event.effectiveAt) {
+      const schedule = document.createElement("p");
+      schedule.className = "schedule";
+      schedule.textContent = l10n.text("eventScheduledFor", {
+        date: formatDate(event.effectiveAt),
+      });
+      item.append(schedule);
+    }
 
     const source = safeSourceLink(event?.source?.url);
     if (source) item.append(source);
@@ -119,6 +127,11 @@ function statusDetail(result) {
   if (result.reason === "reset") {
     return l10n.text("detailReset", {
       event: l10n.text(eventLabelKey(result.eventKind)),
+    });
+  }
+  if (result.reason === "scheduled" && result.scheduledAt) {
+    return l10n.text("detailScheduled", {
+      date: formatDate(result.scheduledAt),
     });
   }
   return l10n.text({

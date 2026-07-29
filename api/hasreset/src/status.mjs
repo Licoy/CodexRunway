@@ -199,7 +199,7 @@ function mergeRecentEvents(previousEvents, currentEvents, now) {
     byPostID.set(event.source.postId, event);
   }
 
-  const cutoff = now.getTime() - (48 * 60 * 60 * 1_000);
+  const cutoff = now.getTime() - (72 * 60 * 60 * 1_000);
   for (const event of previousEvents) {
     if (!byPostID.has(event.source.postId) && shouldRetain(event, cutoff)) {
       byPostID.set(event.source.postId, event);

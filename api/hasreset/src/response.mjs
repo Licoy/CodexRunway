@@ -273,6 +273,15 @@ function normalizeDate(value, name) {
   if (typeof value !== "string") {
     invalid(`${name} must be an ISO date-time`);
   }
+  // Date-only schedules (YYYY-MM-DD) are common for "on the 31st" style posts.
+  // Anchor at UTC noon so local-day classification is stable across time zones.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const dateOnly = new Date(`${value}T12:00:00.000Z`);
+    if (Number.isNaN(dateOnly.getTime())) {
+      invalid(`${name} must be an ISO date-time`);
+    }
+    return dateOnly.toISOString();
+  }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     invalid(`${name} must be an ISO date-time`);

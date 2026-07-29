@@ -241,7 +241,7 @@ test("decidePublication republishes an otherwise unchanged feed when site assets
   assert.equal(result.status.lastSuccessfulCheckAt, "2026-07-29T12:17:00.000Z");
 });
 
-test("decidePublication expires retained events after the 48-hour window", () => {
+test("decidePublication expires retained events after the 72-hour window", () => {
   const oldEvent = {
     ...resetEvent,
     announcedAt: "2026-07-26T10:00:00.000Z",

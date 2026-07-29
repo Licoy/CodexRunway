@@ -52,7 +52,7 @@ test("fetchGrokEvents performs exactly one authenticated Responses WebSocket req
       assert.equal(session.options.headers.Authorization, "Bearer test-secret");
       const message = JSON.parse(text);
       assert.equal(message.type, "response.create");
-      assert.equal(message.max_tool_calls, 2);
+      assert.equal(message.max_tool_calls, 4);
       assert.equal(message.input[0].type, "message");
       session.emit("message", JSON.stringify({
         type: "response.completed",
@@ -104,10 +104,10 @@ test("fetchGrokEvents reports a failed WebSocket upgrade without upstream body d
   );
 });
 
-test("fetchGrokEvents ignores posts outside the strict prior 48 hours", async () => {
+test("fetchGrokEvents ignores posts outside the strict prior 72 hours", async () => {
   const response = structuredClone(validResponse);
   const analysis = JSON.parse(response.output[1].content[0].text);
-  analysis.events[0].announcedAt = "2026-07-26T11:59:59.000Z";
+  analysis.events[0].announcedAt = "2026-07-25T11:59:59.000Z";
   analysis.events[1].announcedAt = "2026-07-28T12:00:00.001Z";
   response.output[1].content[0].text = JSON.stringify(analysis);
   let callCount = 0;

@@ -327,6 +327,24 @@ test("parseGrokResponse accepts a cited completed reset with a distinct effectiv
   assert.equal(event.effectiveAt, "2026-07-28T12:00:00.000Z");
 });
 
+test("parseGrokResponse accepts date-only scheduled effectiveAt as UTC noon", () => {
+  const response = structuredClone(validResponse);
+  const analysis = JSON.parse(response.output[1].content[0].text);
+  analysis.events = [{
+    ...analysis.events[1],
+    kind: "reset_scheduled",
+    effectiveAt: "2026-07-31",
+    sourceUrl: "https://x.com/thsottiaux/status/200",
+    postId: "200",
+  }];
+  response.output[1].content[0].text = JSON.stringify(analysis);
+  response.citations = ["https://x.com/thsottiaux/status/200"];
+
+  const [event] = parseGrokResponse(response);
+  assert.equal(event.kind, "reset_scheduled");
+  assert.equal(event.effectiveAt, "2026-07-31T12:00:00.000Z");
+});
+
 test("parseGrokResponse downgrades a scheduled reset without a time to uncertain", () => {
   const response = structuredClone(validResponse);
   const analysis = JSON.parse(response.output[1].content[0].text);

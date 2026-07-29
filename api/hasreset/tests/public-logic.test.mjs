@@ -81,3 +81,17 @@ test("classifyStatus gives same-day uncertainty precedence over a confirmed rese
     "unknown",
   );
 });
+
+test("classifyStatus surfaces the next future scheduled reset when today is not reset", () => {
+  const result = classifyStatus(
+    feed({
+      kind: "reset_scheduled",
+      announcedAt: "2026-07-29T05:00:00.000Z",
+      effectiveAt: "2026-07-31T12:00:00.000Z",
+    }),
+    new Date("2026-07-29T12:00:00.000Z"),
+  );
+  assert.equal(result.state, "no");
+  assert.equal(result.reason, "scheduled");
+  assert.equal(result.scheduledAt, "2026-07-31T12:00:00.000Z");
+});
