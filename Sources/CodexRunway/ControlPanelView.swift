@@ -213,6 +213,10 @@ struct ControlPanelView: View {
                     title: l10n.text(.resetCreditAlerts),
                     subtitle: l10n.text(.resetCreditAlertsDescription),
                     binding: resetCreditAlertsBinding)
+                PreferenceToggleRow(
+                    title: l10n.text(.rateLimitResetTodayAlerts),
+                    subtitle: l10n.text(.rateLimitResetTodayAlertsDescription),
+                    binding: rateLimitResetTodayAlertsBinding)
                 ActionRow(
                     title: l10n.text(.testNotification),
                     subtitle: l10n.text(.testNotificationSubtitle),
@@ -389,6 +393,12 @@ struct ControlPanelView: View {
 
     private var resetCreditAlertsBinding: Binding<Bool> {
         Binding(get: { settings.preferences.resetCreditAlertsEnabled }, set: { settings.updateResetCreditAlertsEnabled($0) })
+    }
+
+    private var rateLimitResetTodayAlertsBinding: Binding<Bool> {
+        Binding(
+            get: { settings.preferences.rateLimitResetTodayAlertsEnabled },
+            set: { settings.updateRateLimitResetTodayAlertsEnabled($0) })
     }
 
     private var exportsStatusJSONBinding: Binding<Bool> {

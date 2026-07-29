@@ -104,6 +104,10 @@ final class RunwaySettings: ObservableObject {
         update { $0.resetCreditAlertsEnabled = isEnabled }
     }
 
+    func updateRateLimitResetTodayAlertsEnabled(_ isEnabled: Bool) {
+        update { $0.rateLimitResetTodayAlertsEnabled = isEnabled }
+    }
+
     func updateExportsStatusJSON(_ isEnabled: Bool) {
         update { $0.exportsStatusJSON = isEnabled }
     }

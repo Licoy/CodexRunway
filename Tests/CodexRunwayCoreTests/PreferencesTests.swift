@@ -64,6 +64,7 @@ struct PreferencesTests {
             automaticallyChecksForUpdates: false,
             quotaAlertsEnabled: true,
             resetCreditAlertsEnabled: true,
+            rateLimitResetTodayAlertsEnabled: false,
             exportsStatusJSON: true))
 
         #expect(store.load().language == .english)
@@ -84,6 +85,7 @@ struct PreferencesTests {
         #expect(store.load().automaticallyChecksForUpdates == false)
         #expect(store.load().quotaAlertsEnabled)
         #expect(store.load().resetCreditAlertsEnabled)
+        #expect(store.load().rateLimitResetTodayAlertsEnabled == false)
         #expect(store.load().exportsStatusJSON)
     }
 
@@ -163,6 +165,7 @@ struct PreferencesTests {
         #expect(preferences.automaticallyChecksForUpdates)
         #expect(preferences.quotaAlertsEnabled == false)
         #expect(preferences.resetCreditAlertsEnabled == false)
+        #expect(preferences.rateLimitResetTodayAlertsEnabled)
         #expect(preferences.exportsStatusJSON == false)
     }
 

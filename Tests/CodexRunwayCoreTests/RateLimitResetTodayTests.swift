@@ -12,6 +12,65 @@ struct RateLimitResetTodayTests {
                 == "https://codexreset.gitcdn.top/api/status.json")
     }
 
+    @Test("notifies when a reset becomes newly detected and when schedule is near")
+    func rateLimitResetTodayAlerts() throws {
+        let now = try resetStatusDate("2026-07-29T12:00:00Z")
+        let previousNo = try ResetStatusFeedFixture(eventsJSON: "", now: now).decode()
+        let currentYes = try ResetStatusFeedFixture(
+            event: .init(kind: "reset_completed", announcedAt: "2026-07-29T04:09:02Z"),
+            now: now)
+            .decode()
+        let detected = RunwayAlertDecider.rateLimitResetTodayAlerts(
+            previous: previousNo,
+            current: currentYes,
+            now: now)
+        #expect(detected.count == 1)
+        #expect(detected[0].kind == .rateLimitResetDetected)
+
+        // First load with no previous snapshot should not spam.
+        #expect(
+            RunwayAlertDecider.rateLimitResetTodayAlerts(
+                previous: nil,
+                current: currentYes,
+                now: now)
+                .isEmpty)
+
+        let withSchedule = try ResetStatusFeedFixture(
+            eventsJSON: """
+            {
+              "kind": "reset_scheduled",
+              "announcedAt": "2026-07-29T05:44:16.000Z",
+              "effectiveAt": "2026-07-29T12:25:00.000Z",
+              "scope": {"plans": ["all"], "windows": ["weekly"]},
+              "source": {
+                "handle": "thsottiaux",
+                "postId": "999",
+                "url": "https://x.com/thsottiaux/status/999"
+              },
+              "confidence": 0.9,
+              "rationale": "Explicit Codex quota reset schedule."
+            }
+            """,
+            now: now)
+            .decode()
+        let upcoming30 = RunwayAlertDecider.rateLimitResetTodayAlerts(
+            previous: withSchedule,
+            current: withSchedule,
+            now: now)
+        #expect(upcoming30.count == 1)
+        #expect(upcoming30[0].kind == .rateLimitResetUpcoming)
+        #expect(upcoming30[0].threshold == 30)
+
+        // 12:25 - 11:35 = 50 minutes → 1-hour threshold.
+        let hourOut = try resetStatusDate("2026-07-29T11:35:00Z")
+        let upcoming60 = RunwayAlertDecider.rateLimitResetTodayAlerts(
+            previous: withSchedule,
+            current: withSchedule,
+            now: hourOut)
+        #expect(upcoming60.count == 1)
+        #expect(upcoming60[0].threshold == 60)
+    }
+
     @Test("primary evidence and next schedule prefer actionable events")
     func primaryEvidenceAndNextSchedulePreferActionableEvents() throws {
         let now = try resetStatusDate("2026-07-29T12:00:00Z")

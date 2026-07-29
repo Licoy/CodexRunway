@@ -1054,6 +1054,13 @@ final class RunwayModel: ObservableObject {
 
     private func refreshRateLimitResetTodayDisplayIfNeeded(now: Date) {
         guard let snapshot = rateLimitResetToday else { return }
+        // Re-check approaching scheduled resets on the local timer (refresh may be hourly).
+        deliverAlerts(
+            RunwayAlertDecider.rateLimitResetTodayAlerts(
+                previous: snapshot,
+                current: snapshot,
+                now: now),
+            enabled: settings.preferences.rateLimitResetTodayAlertsEnabled)
         let state = snapshot.resolvedState(now: now)
         let stateText = rateLimitResetTodayStateText(state)
         if rateLimitResetTodayText != stateText {
@@ -1115,10 +1122,17 @@ final class RunwayModel: ObservableObject {
     }
 
     private func applyRateLimitResetToday(_ snapshot: RateLimitResetTodaySnapshot) {
+        let previous = rateLimitResetToday
         rateLimitResetToday = snapshot
         let now = Date()
         let state = snapshot.resolvedState(now: now)
         rateLimitResetTodayText = rateLimitResetTodayStateText(state)
+        deliverAlerts(
+            RunwayAlertDecider.rateLimitResetTodayAlerts(
+                previous: previous,
+                current: snapshot,
+                now: now),
+            enabled: settings.preferences.rateLimitResetTodayAlertsEnabled)
         var lines: [DetailLine] = [
             DetailLine(title: l10n.text(.status), value: rateLimitResetTodayHintText(snapshot, now: now)),
         ]

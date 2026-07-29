@@ -58,6 +58,36 @@ public enum DurationFormatter {
         return language == .simplifiedChinese ? "\(text)之前" : "\(text) ago"
     }
 
+    /// Compact absolute remaining duration (no "ago"/"in" wrapper), e.g. "3小时20分钟".
+    public static func remaining(
+        until date: Date,
+        now: Date = Date(),
+        language: ResolvedLanguage,
+        includeSeconds: Bool = false)
+        -> String
+    {
+        let interval = max(0, date.timeIntervalSince(now))
+        if !includeSeconds, interval < 60 {
+            return language == .simplifiedChinese ? "不到1分钟" : "under 1 minute"
+        }
+        return localized(interval, language: language, includeSeconds: includeSeconds)
+    }
+
+    /// Compact elapsed duration since a past moment, e.g. "3小时20分钟".
+    public static func elapsed(
+        since date: Date,
+        now: Date = Date(),
+        language: ResolvedLanguage,
+        includeSeconds: Bool = false)
+        -> String
+    {
+        let interval = max(0, now.timeIntervalSince(date))
+        if !includeSeconds, interval < 60 {
+            return language == .simplifiedChinese ? "不到1分钟" : "under 1 minute"
+        }
+        return localized(interval, language: language, includeSeconds: includeSeconds)
+    }
+
     private static func unit(_ value: Int, singular: String, plural: String) -> String {
         "\(value) \(value == 1 ? singular : plural)"
     }

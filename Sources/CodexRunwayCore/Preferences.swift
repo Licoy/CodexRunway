@@ -166,6 +166,13 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case quotaAlertTitle
     case quotaAlertsDescription
     case quotaAlerts
+    case rateLimitResetDetectedAlertBody
+    case rateLimitResetDetectedAlertTitle
+    case rateLimitResetTodayAlerts
+    case rateLimitResetTodayAlertsDescription
+    case rateLimitResetUpcomingAlertBody1h
+    case rateLimitResetUpcomingAlertBody30m
+    case rateLimitResetUpcomingAlertTitle
     case quit
     case rawAnalyticsCredits
     case rateLimitResetToday
@@ -183,11 +190,14 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case rateLimitResetTodayLocalDayHint
     case rateLimitResetTodayLatestEvidence
     case rateLimitResetTodayNextScheduled
+    case rateLimitResetTodayNextScheduledWithCountdown
     case rateLimitResetTodayNo
     case rateLimitResetTodayNoHint
     case rateLimitResetTodayNoHintWithNext
     case rateLimitResetTodayOpenSource
     case rateLimitResetTodayOpenEvidence
+    case rateLimitResetTodayResetAgo
+    case rateLimitResetTodayUntilReset
     case rateLimitResetTodayPlanAll
     case rateLimitResetTodayPlanBusiness
     case rateLimitResetTodayPlanEnterprise

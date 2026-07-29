@@ -73,6 +73,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     public var automaticallyChecksForUpdates: Bool
     public var quotaAlertsEnabled: Bool
     public var resetCreditAlertsEnabled: Bool
+    public var rateLimitResetTodayAlertsEnabled: Bool
     public var exportsStatusJSON: Bool
 
     public static let rateLimitResetTodayRefreshIntervalOptions: [Int] = [900, 1_800, 3_600, 7_200, 21_600]
@@ -97,6 +98,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         automaticallyChecksForUpdates: Bool = true,
         quotaAlertsEnabled: Bool = false,
         resetCreditAlertsEnabled: Bool = false,
+        rateLimitResetTodayAlertsEnabled: Bool = true,
         exportsStatusJSON: Bool = false)
     {
         self.language = language
@@ -118,6 +120,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         self.automaticallyChecksForUpdates = automaticallyChecksForUpdates
         self.quotaAlertsEnabled = quotaAlertsEnabled
         self.resetCreditAlertsEnabled = resetCreditAlertsEnabled
+        self.rateLimitResetTodayAlertsEnabled = rateLimitResetTodayAlertsEnabled
         self.exportsStatusJSON = exportsStatusJSON
     }
 
@@ -144,6 +147,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         case automaticallyChecksForUpdates
         case quotaAlertsEnabled
         case resetCreditAlertsEnabled
+        case rateLimitResetTodayAlertsEnabled
         case exportsStatusJSON
     }
 
@@ -169,6 +173,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         automaticallyChecksForUpdates = try container.decodeIfPresent(Bool.self, forKey: .automaticallyChecksForUpdates) ?? true
         quotaAlertsEnabled = try container.decodeIfPresent(Bool.self, forKey: .quotaAlertsEnabled) ?? false
         resetCreditAlertsEnabled = try container.decodeIfPresent(Bool.self, forKey: .resetCreditAlertsEnabled) ?? false
+        rateLimitResetTodayAlertsEnabled = try container.decodeIfPresent(Bool.self, forKey: .rateLimitResetTodayAlertsEnabled) ?? true
         exportsStatusJSON = try container.decodeIfPresent(Bool.self, forKey: .exportsStatusJSON) ?? false
     }
 }

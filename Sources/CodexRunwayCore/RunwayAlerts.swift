@@ -3,6 +3,8 @@ import Foundation
 public enum RunwayAlertKind: String, Codable, Sendable, Equatable {
     case quota
     case resetCredit
+    case rateLimitResetDetected
+    case rateLimitResetUpcoming
 }
 
 public struct RunwayAlert: Codable, Sendable, Equatable, Identifiable {
@@ -15,6 +17,7 @@ public struct RunwayAlert: Codable, Sendable, Equatable, Identifiable {
 
 public enum RunwayAlertDecider {
     private static let quotaThresholds = [80, 95, 100]
+    private static let upcomingThresholdMinutes = [60, 30]
 
     public static func quotaAlerts(_ snapshot: QuotaSnapshot) -> [RunwayAlert] {
         var rows = [("5-hour", snapshot.primary)]
@@ -44,6 +47,62 @@ public enum RunwayAlertDecider {
                 threshold: nil,
                 date: credit.expiresAt)
         }
+    }
+
+    /// Alerts when a reset becomes newly detected, or when a scheduled reset is within 1h / 30m.
+    public static func rateLimitResetTodayAlerts(
+        previous: RateLimitResetTodaySnapshot?,
+        current: RateLimitResetTodaySnapshot,
+        now: Date = Date(),
+        calendar: Calendar = .current) -> [RunwayAlert]
+    {
+        var alerts: [RunwayAlert] = []
+
+        let currentYes = current.resolvedState(now: now, calendar: calendar) == .yes
+        // Skip the very first successful load so app launch does not spam when a reset already exists.
+        // Compare both snapshots against the same `now` so a new local-day reset is still detected.
+        if let previous {
+            let previousYes = previous.resolvedState(now: now, calendar: calendar) == .yes
+            if currentYes, !previousYes {
+                let postID = current.primaryEvidenceEvent(now: now, calendar: calendar)?.source.postID
+                    ?? current.latestEvent?.source.postID
+                    ?? "unknown"
+                let day = calendar.startOfDay(for: now).timeIntervalSince1970
+                alerts.append(RunwayAlert(
+                    id: "rate-limit-reset:detected:\(postID):\(Int(day))",
+                    kind: .rateLimitResetDetected,
+                    name: postID,
+                    threshold: nil,
+                    date: current.latestResetAt(now: now)))
+            }
+        }
+
+        if let next = current.nextScheduledReset(now: now) {
+            let remaining = next.effectiveAt.timeIntervalSince(now)
+            guard remaining > 0 else { return alerts }
+            // Prefer the tighter threshold so a late refresh only fires once.
+            let minutes = Int(ceil(remaining / 60))
+            let threshold: Int?
+            if minutes <= 30 {
+                threshold = 30
+            } else if minutes <= 60 {
+                threshold = 60
+            } else {
+                threshold = nil
+            }
+            if let threshold {
+                let effectiveID = Int(next.effectiveAt.timeIntervalSince1970)
+                let postID = next.event.source.postID
+                alerts.append(RunwayAlert(
+                    id: "rate-limit-reset:upcoming:\(postID):\(threshold):\(effectiveID)",
+                    kind: .rateLimitResetUpcoming,
+                    name: postID,
+                    threshold: threshold,
+                    date: next.effectiveAt))
+            }
+        }
+
+        return alerts
     }
 }
 

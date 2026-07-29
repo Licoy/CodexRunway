@@ -282,40 +282,26 @@ struct RateLimitResetTodayView: View {
                     infoHelp: l10n.text(.rateLimitResetTodaySourceTitle))
             }
 
-            VStack(alignment: .leading, spacing: 0) {
-                TimelineView(.periodic(from: .now, by: 60)) { context in
+            // 30s keeps relative reset countdowns fresh without second-level churn.
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                VStack(alignment: .leading, spacing: 0) {
                     hero(now: context.date)
-                }
-                TimelineView(.periodic(from: .now, by: 60)) { context in
                     nextScheduledSection(now: context.date)
-                }
-                if snapshot != nil {
-                    zoneRule
-                    localDayBoundaryRow
-                }
-                if hasEvidenceRow {
-                    zoneRule
-                    evidenceRow
-                }
-                TimelineView(.periodic(from: .now, by: 60)) { context in
-                    if let scope = scopeSummaryText(now: context.date) {
-                        zoneRule
-                        Text(scope)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, 8)
+                    scopeSummarySection(now: context.date)
+                    if hasEvidenceRow {
+                        dividedSection {
+                            evidenceRowContent
+                        }
                     }
-                }
-                if let footerText = footerMetaText {
-                    zoneRule
-                    Text(footerText)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 8)
+                    if let footerText = footerMetaText {
+                        dividedSection {
+                            Text(footerText)
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
                 }
             }
             .padding(12)
@@ -333,16 +319,25 @@ struct RateLimitResetTodayView: View {
         }
     }
 
+    /// Hairline only — spacing is owned by `dividedSection`.
     private var zoneRule: some View {
         Rectangle()
             .fill(RunwaySurface.hairlineFaint)
             .frame(height: 1)
-            .padding(.top, 8)
     }
 
-    /// Large answer on the left, hint on the right — one row instead of a tall centered stack.
+    /// 8pt above the rule, 8pt between rule and content (same for every block).
+    private func dividedSection<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            zoneRule
+            content()
+        }
+        .padding(.top, 8)
+    }
+
+    /// Large answer on the left, detail on the right — time/countdown stay caption-sized.
     private func hero(now: Date) -> some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(heroTitle(now: now))
                 .font(.system(size: 28, weight: .semibold, design: .rounded))
                 .foregroundStyle(heroColor(now: now))
@@ -350,78 +345,116 @@ struct RateLimitResetTodayView: View {
                 .lineLimit(1)
                 .layoutPriority(1)
 
-            Text(heroSubtitle(now: now))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.leading)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+            heroSubtitleView(now: now)
 
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var localDayBoundaryRow: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "calendar")
-                .font(.caption.weight(.semibold))
+    @ViewBuilder
+    private func heroSubtitleView(now: Date) -> some View {
+        // First row: keep absolute time only (no relative countdown) so it stays single-line aligned.
+        if let detail = heroYesTimeDetail(now: now) {
+            (
+                Text("\(l10n.text(.rateLimitResetTodayYesHint)) · ")
+                    .foregroundColor(Color(nsColor: .secondaryLabelColor))
+                + Text(detail.text)
+                    .foregroundColor(detail.color)
+            )
+            .font(.caption2)
+            .multilineTextAlignment(.leading)
+            .lineLimit(1)
+            .truncationMode(.tail)
+        } else {
+            Text(heroSubtitle(now: now))
+                .font(.caption2)
                 .foregroundStyle(.secondary)
-
-            Text(l10n.text(.rateLimitResetTodayLocalDayHint))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
                 .lineLimit(2)
-
-            Spacer(minLength: 0)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.top, 8)
+    }
+
+    private func heroYesTimeDetail(now: Date) -> (text: String, color: Color)? {
+        guard let snapshot, snapshot.resolvedState(now: now) == .yes,
+              let resetAt = snapshot.latestResetAt(now: now)
+        else { return nil }
+        let when = ResetCreditDateFormatter.updatedAt(resetAt, language: l10n.language)
+        // Past reset → muted gray; upcoming same-day effective time → green.
+        let color: Color = resetAt <= now
+            ? Color(nsColor: .secondaryLabelColor)
+            : Color(nsColor: .systemGreen)
+        return (when, color)
+    }
+
+    @ViewBuilder
+    private func scopeSummarySection(now: Date) -> some View {
+        if let scope = scopeSummaryText(now: now) {
+            dividedSection {
+                HStack(spacing: 6) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Text(scope)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+
+                    Spacer(minLength: 0)
+                }
+            }
+        }
     }
 
     @ViewBuilder
     private func nextScheduledSection(now: Date) -> some View {
         if let next = snapshot?.nextScheduledReset(now: now) {
-            zoneRule
-            HStack(spacing: 6) {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+            let absolute = ResetCreditDateFormatter.updatedAt(
+                next.effectiveAt,
+                language: l10n.language)
+            let remaining = DurationFormatter.remaining(
+                until: next.effectiveAt,
+                now: now,
+                language: l10n.language)
+            let countdown = String(format: l10n.text(.rateLimitResetTodayUntilReset), remaining)
+            let separator = l10n.language == .simplifiedChinese ? "：" : ": "
+            let openParen = l10n.language == .simplifiedChinese ? "（" : " ("
+            let closeParen = l10n.language == .simplifiedChinese ? "）" : ")"
+            dividedSection {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
 
-                Text("\(l10n.text(.rateLimitResetTodayNextScheduled)): \(ResetCreditDateFormatter.updatedAt(next.effectiveAt, language: l10n.language))")
-                    .font(.caption)
-                    .foregroundStyle(.primary.opacity(0.9))
+                    (
+                        Text("\(l10n.text(.rateLimitResetTodayNextScheduled))\(separator)")
+                            .foregroundColor(Color(nsColor: .secondaryLabelColor))
+                        + Text(absolute)
+                            .foregroundColor(Color(nsColor: .systemBlue))
+                            .fontWeight(.bold)
+                        + Text("\(openParen)\(countdown)\(closeParen)")
+                            .foregroundColor(Color(nsColor: .secondaryLabelColor))
+                    )
+                    .font(.caption2)
                     .lineLimit(2)
 
-                Spacer(minLength: 0)
-            }
-            .padding(.top, 8)
-        }
-    }
-
-    private var evidenceRow: some View {
-        Group {
-            if let url = snapshot?.evidenceURL, let onOpenEvidence {
-                EvidenceRowButton(
-                    action: { onOpenEvidence(url) },
-                    help: l10n.text(.rateLimitResetTodayOpenEvidence))
-                {
-                    evidenceRowContent
+                    Spacer(minLength: 0)
                 }
-            } else {
-                evidenceRowContent
             }
         }
-        .padding(.top, 8)
     }
 
+    @ViewBuilder
     private var evidenceRowContent: some View {
-        HStack(spacing: 6) {
+        let row = HStack(spacing: 6) {
             Image(systemName: "bubble.left")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
 
             Text(evidenceLineText)
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(.primary.opacity(0.85))
                 .lineLimit(2)
                 .truncationMode(.tail)
@@ -433,6 +466,16 @@ struct RateLimitResetTodayView: View {
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
+        }
+        if let url = snapshot?.evidenceURL, let onOpenEvidence {
+            EvidenceRowButton(
+                action: { onOpenEvidence(url) },
+                help: l10n.text(.rateLimitResetTodayOpenEvidence))
+            {
+                row
+            }
+        } else {
+            row
         }
     }
 
@@ -509,15 +552,19 @@ struct RateLimitResetTodayView: View {
         }
         switch snapshot.resolvedState(now: now) {
         case .yes:
-            if let resetAt = snapshot.latestResetAt(now: now) {
-                let when = ResetCreditDateFormatter.updatedAt(resetAt, language: l10n.language)
-                return String(format: l10n.text(.rateLimitResetTodayYesHintWithTime), when)
-            }
+            // Time detail is rendered separately in small type via heroYesTimeDetail.
             return l10n.text(.rateLimitResetTodayYesHint)
         case .no:
             if let next = snapshot.nextScheduledReset(now: now) {
                 let when = ResetCreditDateFormatter.updatedAt(next.effectiveAt, language: l10n.language)
-                return String(format: l10n.text(.rateLimitResetTodayNoHintWithNext), when)
+                let remaining = DurationFormatter.remaining(
+                    until: next.effectiveAt,
+                    now: now,
+                    language: l10n.language)
+                let countdown = String(format: l10n.text(.rateLimitResetTodayUntilReset), remaining)
+                let openParen = l10n.language == .simplifiedChinese ? "（" : " ("
+                let closeParen = l10n.language == .simplifiedChinese ? "）" : ")"
+                return "\(String(format: l10n.text(.rateLimitResetTodayNoHintWithNext), when))\(openParen)\(countdown)\(closeParen)"
             }
             return l10n.text(.rateLimitResetTodayNoHint)
         case .unknown:
@@ -742,6 +789,11 @@ private struct RateLimitResetTodaySourceSheet: View {
                 .font(.title3.weight(.semibold))
 
             Text(l10n.text(.rateLimitResetTodaySourceInfo))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(l10n.text(.rateLimitResetTodayLocalDayHint))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

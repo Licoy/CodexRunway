@@ -54,6 +54,10 @@ struct RunwayNotificationService {
             return l10n.text(.quotaAlertTitle)
         case .resetCredit:
             return l10n.text(.resetCreditAlertTitle)
+        case .rateLimitResetDetected:
+            return l10n.text(.rateLimitResetDetectedAlertTitle)
+        case .rateLimitResetUpcoming:
+            return l10n.text(.rateLimitResetUpcomingAlertTitle)
         }
     }
 
@@ -66,6 +70,14 @@ struct RunwayNotificationService {
                 alert.threshold.map { "\($0)%" } ?? "--")
         case .resetCredit:
             return l10n.text(.resetCreditAlertBody)
+        case .rateLimitResetDetected:
+            return l10n.text(.rateLimitResetDetectedAlertBody)
+        case .rateLimitResetUpcoming:
+            let minutes = alert.threshold ?? 60
+            if minutes <= 30 {
+                return l10n.text(.rateLimitResetUpcomingAlertBody30m)
+            }
+            return l10n.text(.rateLimitResetUpcomingAlertBody1h)
         }
     }
 
