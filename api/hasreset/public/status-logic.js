@@ -9,14 +9,15 @@ export function classifyStatus(feed, now = new Date()) {
   }
 
   const events = Array.isArray(feed.events) ? feed.events : [];
+  // Confirmed same-day resets win over uncertain commentary/replies.
+  const reset = events.find((event) => isEffectiveResetToday(event, now));
+  if (reset) {
+    return status("yes", "reset", reset.kind);
+  }
   if (events.some((event) => (
     event?.kind === "uncertain" && isSameLocalDay(event.announcedAt, now)
   ))) {
     return status("unknown", "uncertain");
-  }
-  const reset = events.find((event) => isEffectiveResetToday(event, now));
-  if (reset) {
-    return status("yes", "reset", reset.kind);
   }
 
   const upcoming = nextScheduledReset(events, now);

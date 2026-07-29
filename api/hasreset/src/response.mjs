@@ -249,14 +249,21 @@ function normalizeEventKind(event) {
   if (!EVENT_KINDS.has(event.kind)) {
     invalid("Grok returned an unsupported event kind");
   }
-  return event.kind === "reset_scheduled" && event.effectiveAt === null
-    ? "uncertain"
-    : event.kind;
+  // Keep reset_scheduled even without an explicit time; normalizeEffectiveAt
+  // fills a near-term default so "in a few hours" style posts stay scheduled.
+  return event.kind;
 }
 
 function normalizeEffectiveAt(event, kind) {
   if (kind === "reset_scheduled") {
-    return normalizeDate(event.effectiveAt, "effectiveAt");
+    if (event.effectiveAt !== null) {
+      return normalizeDate(event.effectiveAt, "effectiveAt");
+    }
+    // Tibo often signals an imminent reset without a clock time
+    // ("feeling like a limit reset", "see you in a few hours"). Default to
+    // announcedAt + 3h so clients can treat it as a near-term schedule.
+    const announcedAt = normalizeDate(event.announcedAt, "announcedAt");
+    return new Date(Date.parse(announcedAt) + (3 * 60 * 60 * 1_000)).toISOString();
   }
   if (kind === "reset_completed") {
     return event.effectiveAt === null

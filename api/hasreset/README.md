@@ -27,8 +27,10 @@ flowchart LR
   WebSocket `wss://…/v1/responses`（`response.create` + 等待
   `response.completed`）。
 - 仅启用 `x_search`，只允许检索 `@thsottiaux`。
-- 搜索最近 72 小时的 `@thsottiaux` 原帖与回复，最多 4 次 X Search 工具调用。
-- 明确区分已完成重置 / 计划重置；相对日期（明天、31 号等）需解析为 ISO `effectiveAt`。
+- 搜索最近 72 小时的 `@thsottiaux` 原帖与回复，最多 8 次 X Search 工具调用；优先覆盖 UTC 当天与回复。
+- 明确区分已完成重置 / 计划重置；相对日期（明天、数小时内、31 号等）需解析为 ISO `effectiveAt`。
+- “I'm feeling like a limit reset / see you in a few hours” 记为 `reset_scheduled`，`effectiveAt` 默认公告后 3 小时，不是 `uncertain`。
+- 长帖只要含明确“已重置”表述仍记为 `reset_completed`；同日 `uncertain` 不得覆盖已确认重置。
 - 兼容代理可将一次 X Search 展开为多个已完成的内部 X 搜索调用。
 - 兼容代理也可省略工具调用记录：非空事件须有同 Post ID 的 X citation（`thsottiaux` 或 `i/status`）；空事件可直接作为“无相关公告”。
 - 关闭图片和视频理解，设置 `store: false`。
@@ -189,8 +191,8 @@ API v1 的 Schema 位于 `schemas/status.schema.json`。它返回事件列表，
 
 1. `monitor.status != "ok"` 时显示“未知”。
 2. `lastSuccessfulCheckAt` 缺失、无效或距当前超过 30 小时时显示“未知”。
-3. 本地当天存在 `uncertain` 时显示“未知”。
-4. 本地当天存在已经生效的 `reset_completed` 或 `reset_scheduled` 时显示“是”。
+3. 本地当天存在已经生效的 `reset_completed` 或 `reset_scheduled` 时显示“是”（优先于同日 `uncertain`）。
+4. 本地当天仅有 `uncertain`、且没有已确认重置时显示“未知”。
 5. 若存在尚未到期的 `reset_scheduled`，显示“否”，并提示下次计划重置时间。
 6. 其他情况显示“否”。
 
@@ -227,8 +229,9 @@ loopback 地址。
 - 空事件：允许作为“最近 72 小时无相关公告”的合法结果；
 - 仍拒绝 `web_search` 等非 X 工具调用。
 
-代理若返回缺少 `effectiveAt` 的 `reset_scheduled`，服务会将其安全降级为
-`uncertain`，不会当作已经生效的重置。非严格 Structured Output 多出的字段
+代理若返回缺少 `effectiveAt` 的 `reset_scheduled`，服务会按公告时间
+`announcedAt + 3 小时` 补齐近端计划时间（对应 “数小时内 / when I'm back”
+类措辞），而不是降级为 `uncertain`。非严格 Structured Output 多出的字段
 会被忽略；模型自带的 `rationale` 不会写入公开状态。
 
 运行测试不需要任何 API Key，所有外部响应均来自 fixtures：

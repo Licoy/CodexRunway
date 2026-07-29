@@ -67,7 +67,7 @@ test("classifyStatus reports uncertain, degraded, and stale data as unknown", ()
   );
 });
 
-test("classifyStatus gives same-day uncertainty precedence over a confirmed reset", () => {
+test("classifyStatus prefers a confirmed same-day reset over uncertain commentary", () => {
   const uncertain = {
     ...reset,
     kind: "uncertain",
@@ -78,6 +78,20 @@ test("classifyStatus gives same-day uncertainty precedence over a confirmed rese
 
   assert.equal(
     classifyStatus(value, new Date("2026-07-29T12:00:00.000Z")).state,
+    "yes",
+  );
+});
+
+test("classifyStatus reports unknown when only same-day uncertain events exist", () => {
+  assert.equal(
+    classifyStatus(
+      feed({
+        kind: "uncertain",
+        announcedAt: "2026-07-29T11:30:00.000Z",
+        effectiveAt: null,
+      }),
+      new Date("2026-07-29T12:00:00.000Z"),
+    ).state,
     "unknown",
   );
 });

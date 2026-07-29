@@ -52,7 +52,7 @@ test("fetchGrokEvents performs exactly one authenticated Responses WebSocket req
       assert.equal(session.options.headers.Authorization, "Bearer test-secret");
       const message = JSON.parse(text);
       assert.equal(message.type, "response.create");
-      assert.equal(message.max_tool_calls, 4);
+      assert.equal(message.max_tool_calls, 8);
       assert.equal(message.input[0].type, "message");
       session.emit("message", JSON.stringify({
         type: "response.completed",

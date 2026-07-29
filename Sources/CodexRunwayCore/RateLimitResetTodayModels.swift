@@ -122,19 +122,22 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         else {
             return .unknown
         }
-        if events.contains(where: {
-            $0.kind == .uncertain && calendar.isDate($0.announcedAt, inSameDayAs: now)
-        }) {
-            return .unknown
-        }
-        return events.contains { event in
+        // Confirmed same-day resets win over uncertain commentary/replies.
+        let hasEffectiveResetToday = events.contains { event in
             guard let occurredAt = event.resetOccurrenceAt, occurredAt <= now else {
                 return false
             }
             return calendar.isDate(occurredAt, inSameDayAs: now)
         }
-            ? .yes
-            : .no
+        if hasEffectiveResetToday {
+            return .yes
+        }
+        if events.contains(where: {
+            $0.kind == .uncertain && calendar.isDate($0.announcedAt, inSameDayAs: now)
+        }) {
+            return .unknown
+        }
+        return .no
     }
 
     public var latestEvent: RateLimitResetTodayEvent? {

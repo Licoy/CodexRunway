@@ -345,21 +345,19 @@ test("parseGrokResponse accepts date-only scheduled effectiveAt as UTC noon", ()
   assert.equal(event.effectiveAt, "2026-07-31T12:00:00.000Z");
 });
 
-test("parseGrokResponse downgrades a scheduled reset without a time to uncertain", () => {
+test("parseGrokResponse defaults a scheduled reset without a time to announcedAt + 3h", () => {
   const response = structuredClone(validResponse);
   const analysis = JSON.parse(response.output[1].content[0].text);
   analysis.events = [{
     ...analysis.events[1],
     kind: "reset_scheduled",
+    announcedAt: "2026-07-28T00:27:37.000Z",
     effectiveAt: null,
   }];
   response.output[1].content[0].text = JSON.stringify(analysis);
 
   const [event] = parseGrokResponse(response);
-  assert.equal(event.kind, "uncertain");
-  assert.equal(event.effectiveAt, null);
-  assert.equal(
-    event.rationale,
-    "Relevant announcement could not be classified safely.",
-  );
+  assert.equal(event.kind, "reset_scheduled");
+  assert.equal(event.effectiveAt, "2026-07-28T03:27:37.000Z");
+  assert.equal(event.rationale, "Explicit Codex quota reset schedule.");
 });

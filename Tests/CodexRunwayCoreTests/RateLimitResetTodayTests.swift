@@ -136,14 +136,14 @@ struct RateLimitResetTodayTests {
         #expect(snapshot.state == .no)
     }
 
-    @Test("uncertain event today takes precedence over a reset event")
-    func uncertainEventTakesPrecedence() throws {
+    @Test("confirmed same-day reset wins over uncertain commentary")
+    func confirmedResetWinsOverUncertain() throws {
         let now = try resetStatusDate("2026-07-28T12:00:00Z")
-        let uncertain = try ResetStatusFeedFixture(
+        let uncertainOnly = try ResetStatusFeedFixture(
             event: .init(kind: "uncertain", announcedAt: "2026-07-28T11:00:00Z"),
             now: now)
             .decode()
-        let confirmed = try ResetStatusFeedFixture(
+        let confirmedWithUncertain = try ResetStatusFeedFixture(
             eventsJSON: """
             {
               "kind": "reset_completed",
@@ -162,7 +162,7 @@ struct RateLimitResetTodayTests {
               "kind": "uncertain",
               "announcedAt": "2026-07-28T11:00:00Z",
               "effectiveAt": null,
-              "scope": {"plans": [], "windows": []},
+              "scope": {"plans": ["all"], "windows": ["unknown"]},
               "source": {
                 "handle": "thsottiaux",
                 "postId": "789",
@@ -175,8 +175,8 @@ struct RateLimitResetTodayTests {
             now: now)
             .decode()
 
-        #expect(uncertain.state == .unknown)
-        #expect(confirmed.state == .unknown)
+        #expect(uncertainOnly.state == .unknown)
+        #expect(confirmedWithUncertain.state == .yes)
     }
 
     @Test("degraded or stale monitor forces unknown")
