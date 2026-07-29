@@ -137,8 +137,24 @@ Workflow 使用：
 - 与已发布状态相同的重复故障。
 
 首次故障会发布一个安全的 `degraded` 状态（仍可能更新 Pages）。重复的同类故障
-不会持续制造提交。Pages 实际由 `deploy` job（`actions/deploy-pages`）发布；
-仅推送 `gh-pages` 分支、跳过 `deploy` 时，线上站点不会更新。
+不会持续制造提交。
+
+Pages 由 `deploy` job（`actions/deploy-pages`）发布，**不是**直接读 `gh-pages`
+分支。Workflow 因此拆成两步：
+
+| 标志 | 含义 |
+| --- | --- |
+| `should_update_branch` | decision 要求 `publish=true` 时更新 `gh-pages`（状态源） |
+| `should_deploy` | 需要把当前 site artifact 部署到 GitHub Pages |
+
+`should_deploy=yes` 的条件：
+
+1. decision 要求发布（`publish=true`），或
+2. 本轮检查健康（exit `0`，用于自愈：分支已更新但上次 deploy 被跳过），或
+3. 手动 `workflow_dispatch` 且勾选 `force_deploy`（默认勾选）
+
+因此：若线上仍是旧页，而 `gh-pages` 已是健康数据，再跑一次成功的 monitor
+就会重新 deploy，不必强行制造“事件变化”。
 
 ## 公开 API
 

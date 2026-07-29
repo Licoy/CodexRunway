@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: Redeploy GitHub Pages even if the monitor decided not to publish
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -21,7 +26,7 @@ jobs:
     # Use yes/no (not true/false). Values like "true" collide with secrets such as
     # GROK_USE_WS=true and get stripped from job outputs ("Skip output … secret").
     outputs:
-      should_publish: ${{ steps.decision.outputs.should_publish }}
+      should_deploy: ${{ steps.decision.outputs.should_deploy }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -92,6 +97,7 @@ jobs:
         env:
           DECISION_FILE: ${{ steps.paths.outputs.decision_file }}
           MONITOR_EXIT_CODE: ${{ steps.monitor.outputs.exit_code }}
+          FORCE_DEPLOY: ${{ github.event_name == 'workflow_dispatch' && inputs.force_deploy || false }}
         run: |
           test -f "$DECISION_FILE"
 
@@ -101,6 +107,7 @@ jobs:
           degraded="$(jq -er \
             '.degraded | if type == "boolean" then tostring else error("degraded must be boolean") end' \
             "$DECISION_FILE")"
+          reason="$(jq -er '.reason' "$DECISION_FILE")"
           jq -e \
             'if (keys | sort) == ["degraded", "errorCode", "publish", "reason"] then true else error("unexpected decision fields") end' \
             "$DECISION_FILE" >/dev/null
@@ -124,15 +131,31 @@ jobs:
             exit 1
           fi
 
-          # Encode as yes/no so the job output never equals secret values like "true".
+          # Branch update only when the decision says so (semantic change / recovery / etc).
           if [[ "$publish" == "true" ]]; then
-            echo "should_publish=yes" >> "$GITHUB_OUTPUT"
+            echo "should_update_branch=yes" >> "$GITHUB_OUTPUT"
           else
-            echo "should_publish=no" >> "$GITHUB_OUTPUT"
+            echo "should_update_branch=no" >> "$GITHUB_OUTPUT"
           fi
 
+          # Pages is served from deploy-pages artifacts, not the gh-pages branch.
+          # Redeploy when:
+          # - the monitor asked to publish, or
+          # - the check is healthy (so a prior missed deploy can self-heal), or
+          # - the operator forced a manual redeploy.
+          should_deploy=no
+          if [[ "$publish" == "true" ]]; then
+            should_deploy=yes
+          elif [[ "$MONITOR_EXIT_CODE" == "0" ]]; then
+            should_deploy=yes
+          elif [[ "$FORCE_DEPLOY" == "true" ]]; then
+            should_deploy=yes
+          fi
+          echo "should_deploy=$should_deploy" >> "$GITHUB_OUTPUT"
+          echo "decision_reason=$reason publish=$publish deploy=$should_deploy force=$FORCE_DEPLOY"
+
       - name: Validate generated site
-        if: steps.decision.outputs.should_publish == 'yes'
+        if: steps.decision.outputs.should_deploy == 'yes'
         shell: bash
         env:
           OUTPUT_DIR: ${{ steps.paths.outputs.output_dir }}
@@ -146,13 +169,13 @@ jobs:
           test -f "$OUTPUT_DIR/api/status.json"
 
       - name: Upload Pages artifact
-        if: steps.decision.outputs.should_publish == 'yes'
+        if: steps.decision.outputs.should_deploy == 'yes'
         uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ steps.paths.outputs.output_dir }}
 
       - name: Publish gh-pages state
-        if: steps.decision.outputs.should_publish == 'yes'
+        if: steps.decision.outputs.should_update_branch == 'yes'
         shell: bash
         env:
           OUTPUT_DIR: ${{ steps.paths.outputs.output_dir }}
@@ -183,7 +206,7 @@ jobs:
 
   deploy:
     needs: monitor
-    if: needs.monitor.outputs.should_publish == 'yes'
+    if: needs.monitor.outputs.should_deploy == 'yes'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
