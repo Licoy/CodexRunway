@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-29T19:43:01.298Z",
-  "lastSuccessfulCheckAt": "2026-07-29T19:43:01.298Z",
+  "generatedAt": "2026-07-29T21:12:19.738Z",
+  "lastSuccessfulCheckAt": "2026-07-29T21:12:19.738Z",
   "monitor": {
     "status": "ok",
     "errorCode": null
@@ -24,8 +24,28 @@
         "postId": "2082341416681001277",
         "url": "https://x.com/thsottiaux/status/2082341416681001277"
       },
-      "confidence": 0.9,
+      "confidence": 0.86,
       "rationale": "Explicit Codex quota reset schedule."
+    },
+    {
+      "kind": "reset_completed",
+      "announcedAt": "2026-07-29T05:42:35.000Z",
+      "effectiveAt": null,
+      "scope": {
+        "plans": [
+          "all"
+        ],
+        "windows": [
+          "weekly"
+        ]
+      },
+      "source": {
+        "handle": "thsottiaux",
+        "postId": "2082340992871760182",
+        "url": "https://x.com/thsottiaux/status/2082340992871760182"
+      },
+      "confidence": 0.9,
+      "rationale": "Explicit Codex quota reset announcement."
     },
     {
       "kind": "reset_completed",
@@ -36,7 +56,6 @@
           "all"
         ],
         "windows": [
-          "five_hour",
           "weekly"
         ]
       },
@@ -45,7 +64,7 @@
         "postId": "2082317452755751098",
         "url": "https://x.com/thsottiaux/status/2082317452755751098"
       },
-      "confidence": 0.95,
+      "confidence": 0.96,
       "rationale": "Explicit Codex quota reset announcement."
     },
     {
@@ -54,7 +73,11 @@
       "effectiveAt": null,
       "scope": {
         "plans": [
-          "all"
+          "business",
+          "enterprise",
+          "plus",
+          "pro",
+          "team"
         ],
         "windows": [
           "weekly"
@@ -65,7 +88,7 @@
         "postId": "2081940052154933696",
         "url": "https://x.com/thsottiaux/status/2081940052154933696"
       },
-      "confidence": 0.95,
+      "confidence": 0.96,
       "rationale": "Explicit Codex quota reset announcement."
     },
     {
@@ -85,7 +108,7 @@
         "postId": "2081899343091843463",
         "url": "https://x.com/thsottiaux/status/2081899343091843463"
       },
-      "confidence": 0.9,
+      "confidence": 0.94,
       "rationale": "Explicit Codex quota reset schedule."
     }
   ]
