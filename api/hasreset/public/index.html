@@ -20,8 +20,8 @@
       <div class="atmosphere-beam"></div>
     </div>
 
-    <div class="frame">
-      <header class="topbar">
+    <header class="topbar">
+      <div class="topbar-inner">
         <div class="brand">
           <span class="brand-mark" aria-hidden="true">⌘</span>
           <div class="brand-text">
@@ -50,11 +50,11 @@
             </span>
           </button>
         </div>
-      </header>
+      </div>
+    </header>
 
+    <div class="frame">
       <main>
-        <p class="lede" data-i18n="intro"></p>
-
         <section
           class="dashboard"
           id="status-card"
@@ -101,6 +101,17 @@
         </section>
 
         <footer>
+          <div class="footer-links">
+            <a
+              class="github-link"
+              href="https://github.com/Licoy/codex-runway"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              <span aria-hidden="true">⭐</span>
+              <span data-i18n="githubLink"></span>
+            </a>
+          </div>
           <p data-i18n="disclaimer"></p>
           <p data-i18n="privacy"></p>
         </footer>
