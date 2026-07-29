@@ -1,10 +1,57 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-29T11:22:08.790Z",
-  "lastSuccessfulCheckAt": null,
+  "generatedAt": "2026-07-29T12:00:45.124Z",
+  "lastSuccessfulCheckAt": "2026-07-29T12:00:45.124Z",
   "monitor": {
-    "status": "degraded",
-    "errorCode": "request_failed"
+    "status": "ok",
+    "errorCode": null
   },
-  "events": []
+  "events": [
+    {
+      "kind": "reset_completed",
+      "announcedAt": "2026-07-28T03:09:23.000Z",
+      "effectiveAt": null,
+      "scope": {
+        "plans": [
+          "business",
+          "plus",
+          "pro",
+          "team"
+        ],
+        "windows": [
+          "unknown"
+        ]
+      },
+      "source": {
+        "handle": "thsottiaux",
+        "postId": "2081940052154933696",
+        "url": "https://x.com/thsottiaux/status/2081940052154933696"
+      },
+      "confidence": 1,
+      "rationale": "Explicit Codex quota reset announcement."
+    },
+    {
+      "kind": "uncertain",
+      "announcedAt": "2026-07-28T00:27:37.000Z",
+      "effectiveAt": null,
+      "scope": {
+        "plans": [
+          "business",
+          "plus",
+          "pro",
+          "team"
+        ],
+        "windows": [
+          "unknown"
+        ]
+      },
+      "source": {
+        "handle": "thsottiaux",
+        "postId": "2081899343091843463",
+        "url": "https://x.com/thsottiaux/status/2081899343091843463"
+      },
+      "confidence": 0.9,
+      "rationale": "Relevant announcement could not be classified safely."
+    }
+  ]
 }
