@@ -144,14 +144,44 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         events.max { $0.announcedAt < $1.announcedAt }
     }
 
+    /// Prefer the event that best explains the current answer, not merely the newest tweet.
+    public func primaryEvidenceEvent(
+        now: Date = Date(),
+        calendar: Calendar = .current) -> RateLimitResetTodayEvent?
+    {
+        switch resolvedState(now: now, calendar: calendar) {
+        case .yes:
+            return events
+                .filter { event in
+                    guard let occurredAt = event.resetOccurrenceAt, occurredAt <= now else {
+                        return false
+                    }
+                    return calendar.isDate(occurredAt, inSameDayAs: now)
+                }
+                .max { $0.announcedAt < $1.announcedAt }
+                ?? latestEvent
+        case .no:
+            return nextScheduledReset(now: now)?.event ?? latestEvent
+        case .unknown:
+            return events
+                .filter { $0.kind == .uncertain && calendar.isDate($0.announcedAt, inSameDayAs: now) }
+                .max { $0.announcedAt < $1.announcedAt }
+                ?? latestEvent
+        }
+    }
+
     public var evidenceURL: URL? {
-        latestEvent?.source.url
+        primaryEvidenceEvent()?.source.url ?? latestEvent?.source.url
     }
 
     /// Maps the event kind to app-owned copy; feed text is never shown directly.
-    public func evidenceLine(l10n: L10n) -> String? {
-        guard let kind = latestEvent?.kind else { return nil }
-        let key: L10nKey = switch kind {
+    public func evidenceLine(
+        l10n: L10n,
+        now: Date = Date(),
+        calendar: Calendar = .current) -> String?
+    {
+        guard let event = primaryEvidenceEvent(now: now, calendar: calendar) else { return nil }
+        let key: L10nKey = switch event.kind {
         case .resetCompleted:
             .rateLimitResetTodayEvidenceResetCompleted
         case .resetScheduled:
@@ -172,6 +202,63 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
             return occurredAt
         }
         .max()
+    }
+
+    /// Next future `reset_scheduled` effective time, if any.
+    public func nextScheduledReset(now: Date = Date()) -> (effectiveAt: Date, event: RateLimitResetTodayEvent)? {
+        var best: (effectiveAt: Date, event: RateLimitResetTodayEvent)?
+        for event in events {
+            guard event.kind == .resetScheduled, let when = event.effectiveAt, when > now else {
+                continue
+            }
+            if best == nil || when < best!.effectiveAt {
+                best = (when, event)
+            }
+        }
+        return best
+    }
+
+    public func scopeSummary(
+        for event: RateLimitResetTodayEvent,
+        l10n: L10n) -> String?
+    {
+        var parts: [String] = []
+        let plans = event.scope.plans
+            .map { planLabel($0, l10n: l10n) }
+            .filter { !$0.isEmpty }
+        let windows = event.scope.windows
+            .map { windowLabel($0, l10n: l10n) }
+            .filter { !$0.isEmpty }
+        if !plans.isEmpty {
+            parts.append("\(l10n.text(.rateLimitResetTodayPlans)): \(plans.joined(separator: ", "))")
+        }
+        if !windows.isEmpty {
+            parts.append("\(l10n.text(.rateLimitResetTodayWindows)): \(windows.joined(separator: ", "))")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func planLabel(_ plan: String, l10n: L10n) -> String {
+        switch plan {
+        case "all": return l10n.text(.rateLimitResetTodayPlanAll)
+        case "free": return l10n.text(.rateLimitResetTodayPlanFree)
+        case "plus": return l10n.text(.rateLimitResetTodayPlanPlus)
+        case "pro": return l10n.text(.rateLimitResetTodayPlanPro)
+        case "team": return l10n.text(.rateLimitResetTodayPlanTeam)
+        case "business": return l10n.text(.rateLimitResetTodayPlanBusiness)
+        case "enterprise": return l10n.text(.rateLimitResetTodayPlanEnterprise)
+        case "unknown": return l10n.text(.rateLimitResetTodayPlanUnknown)
+        default: return plan
+        }
+    }
+
+    private func windowLabel(_ window: String, l10n: L10n) -> String {
+        switch window {
+        case "weekly": return l10n.text(.rateLimitResetTodayWindowWeekly)
+        case "five_hour": return l10n.text(.rateLimitResetTodayWindowFiveHour)
+        case "unknown": return l10n.text(.rateLimitResetTodayWindowUnknown)
+        default: return window
+        }
     }
 
     public enum DevMockKind: String, Sendable, Equatable {

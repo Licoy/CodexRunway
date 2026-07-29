@@ -112,10 +112,11 @@ WebSocket；未设置、空字符串或其它值一律走 HTTP。
 
 本仓库的正式地址为：
 
-- `https://licoy.github.io/codex-runway/`
-- `https://licoy.github.io/codex-runway/api/status.json`
+- 页面 CDN：`https://codexreset.gitcdn.top/`
+- JSON CDN：`https://codexreset.gitcdn.top/api/status.json`
+- GitHub Pages 源：`https://licoy.github.io/codex-runway/`
 
-Swift 客户端当前使用上述正式地址。Fork 如果要改用自己的状态源，需要同步
+Swift 客户端默认读取 CDN 地址。Fork 如果要改用自己的状态源，需要同步
 修改 `RateLimitResetTodayClient` 中的 `siteURL` 和 `statusURL`。
 
 ## 调度与发布行为

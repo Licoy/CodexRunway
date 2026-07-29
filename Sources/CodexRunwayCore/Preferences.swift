@@ -182,10 +182,21 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case rateLimitResetTodayLastFetched
     case rateLimitResetTodayLocalDayHint
     case rateLimitResetTodayLatestEvidence
+    case rateLimitResetTodayNextScheduled
     case rateLimitResetTodayNo
     case rateLimitResetTodayNoHint
+    case rateLimitResetTodayNoHintWithNext
     case rateLimitResetTodayOpenSource
     case rateLimitResetTodayOpenEvidence
+    case rateLimitResetTodayPlanAll
+    case rateLimitResetTodayPlanBusiness
+    case rateLimitResetTodayPlanEnterprise
+    case rateLimitResetTodayPlanFree
+    case rateLimitResetTodayPlanPlus
+    case rateLimitResetTodayPlanPro
+    case rateLimitResetTodayPlanTeam
+    case rateLimitResetTodayPlanUnknown
+    case rateLimitResetTodayPlans
     case rateLimitResetTodayRefreshInterval
     case rateLimitResetTodaySeen
     case rateLimitResetTodaySource
@@ -194,8 +205,13 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case rateLimitResetTodayUnknown
     case rateLimitResetTodayUnknownHint
     case rateLimitResetTodayVerdict
+    case rateLimitResetTodayWindowFiveHour
+    case rateLimitResetTodayWindowUnknown
+    case rateLimitResetTodayWindowWeekly
+    case rateLimitResetTodayWindows
     case rateLimitResetTodayYes
     case rateLimitResetTodayYesHint
+    case rateLimitResetTodayYesHintWithTime
     case recent
     case recentSessionsDescription
     case refresh

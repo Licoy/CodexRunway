@@ -1059,7 +1059,7 @@ final class RunwayModel: ObservableObject {
         if rateLimitResetTodayText != stateText {
             rateLimitResetTodayText = stateText
         }
-        let hintText = rateLimitResetTodayHintText(state)
+        let hintText = rateLimitResetTodayHintText(snapshot, now: now)
         guard let statusIndex = rateLimitResetTodayLines.firstIndex(where: {
             $0.title == l10n.text(.status)
         }), rateLimitResetTodayLines[statusIndex].value != hintText
@@ -1068,6 +1068,23 @@ final class RunwayModel: ObservableObject {
         }
         var lines = rateLimitResetTodayLines
         lines[statusIndex] = DetailLine(title: l10n.text(.status), value: hintText)
+        // Rebuild next-schedule line when local midnight changes the answer context.
+        if let next = snapshot.nextScheduledReset(now: now) {
+            let nextValue = ResetCreditDateFormatter.updatedAt(next.effectiveAt, language: l10n.language)
+            if let nextIndex = lines.firstIndex(where: { $0.title == l10n.text(.rateLimitResetTodayNextScheduled) }) {
+                lines[nextIndex] = DetailLine(
+                    title: l10n.text(.rateLimitResetTodayNextScheduled),
+                    value: nextValue)
+            } else {
+                lines.insert(
+                    DetailLine(
+                        title: l10n.text(.rateLimitResetTodayNextScheduled),
+                        value: nextValue),
+                    at: min(1, lines.count))
+            }
+        } else {
+            lines.removeAll { $0.title == l10n.text(.rateLimitResetTodayNextScheduled) }
+        }
         rateLimitResetTodayLines = lines
     }
 
@@ -1099,24 +1116,45 @@ final class RunwayModel: ObservableObject {
 
     private func applyRateLimitResetToday(_ snapshot: RateLimitResetTodaySnapshot) {
         rateLimitResetToday = snapshot
-        let state = snapshot.resolvedState()
+        let now = Date()
+        let state = snapshot.resolvedState(now: now)
         rateLimitResetTodayText = rateLimitResetTodayStateText(state)
         var lines: [DetailLine] = [
-            DetailLine(title: l10n.text(.status), value: rateLimitResetTodayHintText(state)),
+            DetailLine(title: l10n.text(.status), value: rateLimitResetTodayHintText(snapshot, now: now)),
         ]
+        if let next = snapshot.nextScheduledReset(now: now) {
+            lines.append(
+                DetailLine(
+                    title: l10n.text(.rateLimitResetTodayNextScheduled),
+                    value: ResetCreditDateFormatter.updatedAt(next.effectiveAt, language: l10n.language)))
+        }
         if let checkedAt = snapshot.lastSuccessfulCheckAt {
             lines.append(
                 DetailLine(
                     title: l10n.text(.rateLimitResetTodayLastCheck),
                     value: DurationFormatter.relativePast(since: checkedAt, language: l10n.language)))
         }
-        if let evidence = snapshot.evidenceLine(l10n: l10n) {
+        if let evidence = snapshot.evidenceLine(l10n: l10n, now: now) {
             lines.append(
                 DetailLine(
                     title: l10n.text(.rateLimitResetTodayLatestEvidence),
                     value: evidence))
         }
-        if let resetAt = snapshot.latestResetAt() {
+        if let event = snapshot.primaryEvidenceEvent(now: now),
+           let scope = snapshot.scopeSummary(for: event, l10n: l10n)
+        {
+            lines.append(
+                DetailLine(
+                    title: l10n.text(.rateLimitResetTodayPlans),
+                    value: scope))
+        }
+        if let event = snapshot.primaryEvidenceEvent(now: now) {
+            lines.append(
+                DetailLine(
+                    title: l10n.text(.rateLimitResetTodayConfidence),
+                    value: "\(Int((event.confidence * 100).rounded()))%"))
+        }
+        if let resetAt = snapshot.latestResetAt(now: now) {
             lines.append(
                 DetailLine(
                     title: l10n.text(.lastReset),
@@ -1140,11 +1178,22 @@ final class RunwayModel: ObservableObject {
         }
     }
 
-    private func rateLimitResetTodayHintText(_ state: RateLimitResetTodayState) -> String {
-        switch state {
+    private func rateLimitResetTodayHintText(
+        _ snapshot: RateLimitResetTodaySnapshot,
+        now: Date) -> String
+    {
+        switch snapshot.resolvedState(now: now) {
         case .yes:
+            if let resetAt = snapshot.latestResetAt(now: now) {
+                let when = ResetCreditDateFormatter.updatedAt(resetAt, language: l10n.language)
+                return String(format: l10n.text(.rateLimitResetTodayYesHintWithTime), when)
+            }
             return l10n.text(.rateLimitResetTodayYesHint)
         case .no:
+            if let next = snapshot.nextScheduledReset(now: now) {
+                let when = ResetCreditDateFormatter.updatedAt(next.effectiveAt, language: l10n.language)
+                return String(format: l10n.text(.rateLimitResetTodayNoHintWithNext), when)
+            }
             return l10n.text(.rateLimitResetTodayNoHint)
         case .unknown:
             return l10n.text(.rateLimitResetTodayUnknownHint)

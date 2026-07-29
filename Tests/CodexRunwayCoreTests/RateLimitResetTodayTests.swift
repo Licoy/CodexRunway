@@ -4,12 +4,53 @@ import Testing
 
 @Suite("Rate limit reset today")
 struct RateLimitResetTodayTests {
-    @Test("uses the Codex Runway Pages endpoints")
-    func usesCodexRunwayPagesEndpoints() {
-        #expect(RateLimitResetTodayClient.siteURL.absoluteString == "https://licoy.github.io/codex-runway/")
+    @Test("uses the Codex reset CDN endpoints")
+    func usesCodexResetCDNEndpoints() {
+        #expect(RateLimitResetTodayClient.siteURL.absoluteString == "https://codexreset.gitcdn.top/")
         #expect(
             RateLimitResetTodayClient.statusURL.absoluteString
-                == "https://licoy.github.io/codex-runway/api/status.json")
+                == "https://codexreset.gitcdn.top/api/status.json")
+    }
+
+    @Test("primary evidence and next schedule prefer actionable events")
+    func primaryEvidenceAndNextSchedulePreferActionableEvents() throws {
+        let now = try resetStatusDate("2026-07-29T12:00:00Z")
+        let snapshot = try ResetStatusFeedFixture(
+            eventsJSON: """
+            {
+              "kind": "reset_scheduled",
+              "announcedAt": "2026-07-29T05:44:16.000Z",
+              "effectiveAt": "2026-07-31T12:00:00.000Z",
+              "scope": {"plans": ["all"], "windows": ["unknown"]},
+              "source": {
+                "handle": "thsottiaux",
+                "postId": "2082341416681001277",
+                "url": "https://x.com/thsottiaux/status/2082341416681001277"
+              },
+              "confidence": 0.85,
+              "rationale": "Explicit Codex quota reset schedule."
+            },
+            {
+              "kind": "reset_completed",
+              "announcedAt": "2026-07-29T04:09:02.000Z",
+              "effectiveAt": null,
+              "scope": {"plans": ["all"], "windows": ["weekly"]},
+              "source": {
+                "handle": "thsottiaux",
+                "postId": "2082317452755751098",
+                "url": "https://x.com/thsottiaux/status/2082317452755751098"
+              },
+              "confidence": 0.95,
+              "rationale": "Explicit Codex quota reset announcement."
+            }
+            """,
+            now: now)
+            .decode()
+
+        #expect(snapshot.state == .yes)
+        #expect(snapshot.primaryEvidenceEvent(now: now)?.source.postID == "2082317452755751098")
+        #expect(snapshot.nextScheduledReset(now: now)?.event.source.postID == "2082341416681001277")
+        #expect(snapshot.evidenceURL?.absoluteString.contains("2082317452755751098") == true)
     }
 
     @Test("decodes the complete API v1 event")

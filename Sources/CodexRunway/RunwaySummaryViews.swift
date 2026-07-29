@@ -286,6 +286,9 @@ struct RateLimitResetTodayView: View {
                 TimelineView(.periodic(from: .now, by: 60)) { context in
                     hero(now: context.date)
                 }
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    nextScheduledSection(now: context.date)
+                }
                 if snapshot != nil {
                     zoneRule
                     localDayBoundaryRow
@@ -293,6 +296,17 @@ struct RateLimitResetTodayView: View {
                 if hasEvidenceRow {
                     zoneRule
                     evidenceRow
+                }
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    if let scope = scopeSummaryText(now: context.date) {
+                        zoneRule
+                        Text(scope)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 8)
+                    }
                 }
                 if let footerText = footerMetaText {
                     zoneRule
@@ -364,6 +378,26 @@ struct RateLimitResetTodayView: View {
         .padding(.top, 8)
     }
 
+    @ViewBuilder
+    private func nextScheduledSection(now: Date) -> some View {
+        if let next = snapshot?.nextScheduledReset(now: now) {
+            zoneRule
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Text("\(l10n.text(.rateLimitResetTodayNextScheduled)): \(ResetCreditDateFormatter.updatedAt(next.effectiveAt, language: l10n.language))")
+                    .font(.caption)
+                    .foregroundStyle(.primary.opacity(0.9))
+                    .lineLimit(2)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 8)
+        }
+    }
+
     private var evidenceRow: some View {
         Group {
             if let url = snapshot?.evidenceURL, let onOpenEvidence {
@@ -389,7 +423,7 @@ struct RateLimitResetTodayView: View {
             Text(evidenceLineText)
                 .font(.caption)
                 .foregroundStyle(.primary.opacity(0.85))
-                .lineLimit(1)
+                .lineLimit(2)
                 .truncationMode(.tail)
 
             Spacer(minLength: 4)
@@ -400,6 +434,13 @@ struct RateLimitResetTodayView: View {
                     .foregroundStyle(.tertiary)
             }
         }
+    }
+
+    private func scopeSummaryText(now: Date) -> String? {
+        guard let snapshot,
+              let event = snapshot.primaryEvidenceEvent(now: now)
+        else { return nil }
+        return snapshot.scopeSummary(for: event, l10n: l10n)
     }
 
     private func lastFetchedCaption(now: Date) -> String? {
@@ -424,8 +465,12 @@ struct RateLimitResetTodayView: View {
         if let resetAt = snapshot.latestResetAt() {
             parts.append(
                 "\(l10n.text(.lastReset)) \(DurationFormatter.relativePast(since: resetAt, language: l10n.language))")
-        } else if snapshot.resolvedState() == .no {
+        } else if snapshot.resolvedState() == .no, snapshot.nextScheduledReset() == nil {
             parts.append(l10n.text(.rateLimitResetTodayAwaiting))
+        }
+        if let confidence = snapshot.primaryEvidenceEvent()?.confidence {
+            parts.append(
+                "\(l10n.text(.rateLimitResetTodayConfidence)) \(Int((confidence * 100).rounded()))%")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
@@ -459,12 +504,23 @@ struct RateLimitResetTodayView: View {
         if snapshot == nil {
             return l10n.text(isRefreshing ? .calculating : .notLoaded)
         }
-        switch snapshot?.resolvedState(now: now) {
+        guard let snapshot else {
+            return l10n.text(.rateLimitResetTodayUnknownHint)
+        }
+        switch snapshot.resolvedState(now: now) {
         case .yes:
+            if let resetAt = snapshot.latestResetAt(now: now) {
+                let when = ResetCreditDateFormatter.updatedAt(resetAt, language: l10n.language)
+                return String(format: l10n.text(.rateLimitResetTodayYesHintWithTime), when)
+            }
             return l10n.text(.rateLimitResetTodayYesHint)
         case .no:
+            if let next = snapshot.nextScheduledReset(now: now) {
+                let when = ResetCreditDateFormatter.updatedAt(next.effectiveAt, language: l10n.language)
+                return String(format: l10n.text(.rateLimitResetTodayNoHintWithNext), when)
+            }
             return l10n.text(.rateLimitResetTodayNoHint)
-        case .unknown, .none:
+        case .unknown:
             return l10n.text(.rateLimitResetTodayUnknownHint)
         }
     }

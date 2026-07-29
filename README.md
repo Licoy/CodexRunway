@@ -94,7 +94,7 @@ swift run CodexRunway --self-check
 
 ## 数据来源
 
-- **今日是否重置**：状态来自本仓库通过 GitHub Actions 生成并由 [GitHub Pages](https://licoy.github.io/codex-runway/api/status.json) 发布的静态 feed。后台使用 Grok X Search 检索 `@thsottiaux` 的公开动态并生成结构化事件，应用再按用户本地自然日计算结果。该结果由 AI 分析，非官方且仅供参考；定时任务和 Pages 都是尽力运行，可能延迟或暂时不可用。
+- **今日是否重置**：状态来自本仓库监控任务发布的静态 feed（应用默认读取 [codexreset.gitcdn.top/api/status.json](https://codexreset.gitcdn.top/api/status.json)）。后台使用 Grok 检索 `@thsottiaux` 的公开动态并生成结构化事件，应用再按用户本地自然日计算结果。该结果由 AI 分析，非官方且仅供参考；定时任务和发布都是尽力运行，可能延迟或暂时不可用。
 - **配额 / reset credits / Token 用量官方统计 / 部分在线用量**：在你已登录的前提下，通过本机凭据访问官方 ChatGPT / Codex 后端接口；官方 Token 统计仅对应当前账号，并显示服务端统计截至日期。
 - **Token 用量本机日志 / API 等价成本 / 最近会话**：默认基于本机 `~/.codex` 会话日志与本地索引计算。本机历史日志没有可靠的账号归属，因此可能包含多个账号的数据。
 
