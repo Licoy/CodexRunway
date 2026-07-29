@@ -15,11 +15,18 @@ const PLAN_NAMES = new Set([
 ]);
 const WINDOW_NAMES = new Set(["weekly", "five_hour", "unknown"]);
 const COMPATIBLE_X_SEARCH_TOOLS = new Set([
+  "x_search",
   "x_keyword_search",
   "x_semantic_search",
   "x_user_search",
   "x_thread_fetch",
 ]);
+const COMPATIBLE_TOOL_CALL_TYPES = new Set([
+  "custom_tool_call",
+  "function_call",
+  "tool_call",
+]);
+const MAX_SEARCH_CALLS = 16;
 
 export class HasResetError extends Error {
   constructor(code, message) {
@@ -30,13 +37,13 @@ export class HasResetError extends Error {
 }
 
 export function parseGrokResponse(response) {
-  if (response?.status !== "completed") {
+  if (!isCompletedStatus(response?.status)) {
     invalid("Grok response did not complete");
   }
   const output = requireArray(response?.output, "response output");
   const content = findOutputText(output);
-  const searchEvidence = assertCompletedXSearch(response, output, content);
   const analysis = parseAnalysis(content.text);
+  const searchEvidence = assertSearchEvidence(response, output, content, analysis);
   const citedPostIds = collectCitedPostIds(response, content);
 
   const seen = new Set();
@@ -46,30 +53,19 @@ export function parseGrokResponse(response) {
       invalid("Grok returned the same X post more than once");
     }
     seen.add(normalized.source.postId);
-    if (!citedPostIds.has(normalized.source.postId)) {
-      throw new HasResetError(
-        "uncited_source",
-        "Grok returned an event without a matching X citation",
-      );
-    }
-    if (
-      searchEvidence === "cited_proxy"
-      && !hasExplicitMonitoredCitation(response, content, normalized.source.postId)
-    ) {
-      throw new HasResetError(
-        "uncited_source",
-        "Proxy response did not cite the monitored X account for this event",
-      );
-    }
+    assertEventCitation(normalized, citedPostIds, searchEvidence, response, content);
     return normalized;
   });
 
   return events.sort(compareEvents);
 }
 
-function assertCompletedXSearch(response, output, content) {
+function assertSearchEvidence(response, output, content, analysis) {
   const officialCalls = output.filter((item) => item?.type === "x_search_call");
-  const compatibleCalls = output.filter((item) => item?.type === "custom_tool_call");
+  const compatibleCalls = output.filter((item) => (
+    COMPATIBLE_TOOL_CALL_TYPES.has(item?.type)
+    && COMPATIBLE_X_SEARCH_TOOLS.has(toolCallName(item))
+  ));
   if (output.some(isUnsupportedToolCall)) {
     invalid("Grok returned an unsupported tool call");
   }
@@ -77,47 +73,86 @@ function assertCompletedXSearch(response, output, content) {
     invalid("Grok returned mixed X Search call formats");
   }
   if (officialCalls.length > 0) {
-    if (officialCalls.length > 2) {
-      invalid("Grok must complete one or two X Search calls");
+    if (officialCalls.length > MAX_SEARCH_CALLS) {
+      invalid("Grok returned too many X Search calls");
     }
     assertCallsCompleted(officialCalls);
     return "tool_call";
   }
-
-  if (
-    compatibleCalls.length > 0
-    && compatibleCalls.some((call) => !COMPATIBLE_X_SEARCH_TOOLS.has(call?.name))
-  ) {
-    invalid("Grok must complete one or two X Search calls");
-  }
   if (compatibleCalls.length > 0) {
+    if (compatibleCalls.length > MAX_SEARCH_CALLS) {
+      invalid("Grok returned too many X Search calls");
+    }
     assertCallsCompleted(compatibleCalls);
     return "tool_call";
   }
-  if (hasCitedProxySearchEvidence(response, output, content)) {
+  if (hasCitedProxySearchEvidence(response, content)) {
     return "cited_proxy";
+  }
+  // Standard / proxy Responses APIs often omit tool-call records after executing
+  // server-side X Search. An empty result is still useful: no monitored posts.
+  if (analysis.events.length === 0) {
+    return "empty_proxy";
   }
   invalid("Grok must complete X Search or return cited proxy search evidence");
 }
 
+function assertEventCitation(event, citedPostIds, searchEvidence, response, content) {
+  // Citation-only proxy responses must name the monitored author explicitly.
+  // Anonymous x.com/i/status/<id> links are not enough without tool-call evidence.
+  if (searchEvidence === "cited_proxy") {
+    if (!hasExplicitMonitoredCitation(response, content, event.source.postId)) {
+      throw new HasResetError(
+        "uncited_source",
+        "Proxy response did not cite the monitored X account for this event",
+      );
+    }
+    return;
+  }
+
+  if (citedPostIds.has(event.source.postId)) {
+    return;
+  }
+
+  throw new HasResetError(
+    "uncited_source",
+    "Grok returned an event without a matching X citation",
+  );
+}
+
 function isUnsupportedToolCall(item) {
-  return typeof item?.type === "string"
-    && item.type.endsWith("_call")
-    && item.type !== "x_search_call"
-    && item.type !== "custom_tool_call";
+  if (typeof item?.type !== "string" || !item.type.endsWith("_call")) {
+    return false;
+  }
+  if (item.type === "x_search_call") {
+    return false;
+  }
+  if (COMPATIBLE_TOOL_CALL_TYPES.has(item.type)) {
+    return !COMPATIBLE_X_SEARCH_TOOLS.has(toolCallName(item));
+  }
+  return true;
+}
+
+function toolCallName(item) {
+  if (typeof item?.name === "string") return item.name;
+  if (typeof item?.function?.name === "string") return item.function.name;
+  return "";
 }
 
 function assertCallsCompleted(calls) {
-  if (calls.some((call) => call.status !== "completed")) {
+  // Official Responses items may omit status on finished server-side tools.
+  // Only reject when a status is present and not completed.
+  if (calls.some((call) => call.status && !isCompletedStatus(call.status))) {
     invalid("Grok did not complete X Search");
   }
 }
 
-function hasCitedProxySearchEvidence(response, output, content) {
-  const completedReasoning = output.some((item) => (
-    item?.type === "reasoning" && item.status === "completed"
-  ));
-  return completedReasoning && citationURLs(response, content).some((url) => {
+function isCompletedStatus(status) {
+  return status === "completed" || status === "complete";
+}
+
+function hasCitedProxySearchEvidence(response, content) {
+  return citationURLs(response, content).some((url) => {
     const parsed = parseXURL(url);
     return parsed?.handle === "thsottiaux";
   });
@@ -131,25 +166,35 @@ function hasExplicitMonitoredCitation(response, content, postId) {
 }
 
 function findOutputText(output) {
-  const blocks = output.flatMap((item) => (
-    item?.type === "message" && Array.isArray(item.content)
-      ? item.content.filter((content) => content?.type === "output_text")
-      : []
-  ));
-  if (blocks.length !== 1 || typeof blocks[0].text !== "string") {
-    invalid("Grok response must contain exactly one output_text block");
+  const blocks = output.flatMap((item) => {
+    if (item?.type !== "message") return [];
+    if (Array.isArray(item.content)) {
+      return item.content.filter((content) => (
+        content?.type === "output_text" && typeof content.text === "string"
+      ));
+    }
+    // Some OpenAI-compatible proxies flatten message content to a string.
+    if (typeof item.content === "string") {
+      return [{ type: "output_text", text: item.content, annotations: item.annotations }];
+    }
+    return [];
+  });
+  if (blocks.length < 1) {
+    invalid("Grok response must contain an output_text block");
   }
-  return blocks[0];
+  // Prefer the final assistant text when proxies stream intermediate JSON drafts.
+  return blocks.at(-1);
 }
 
 function parseAnalysis(text) {
+  const payload = extractJSONObject(text);
   let analysis;
   try {
-    analysis = JSON.parse(text);
+    analysis = JSON.parse(payload);
   } catch {
     invalid("Grok output_text is not valid JSON");
   }
-  requireExactKeys(analysis, ["events"], "analysis");
+  requireKeys(analysis, ["events"], "analysis");
   requireArray(analysis.events, "analysis events");
   if (analysis.events.length > 20) {
     invalid("Grok returned too many events");
@@ -157,8 +202,29 @@ function parseAnalysis(text) {
   return analysis;
 }
 
+function extractJSONObject(text) {
+  if (typeof text !== "string") {
+    invalid("Grok output_text is not valid JSON");
+  }
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    return trimmed;
+  }
+  // Structured output occasionally arrives wrapped in a markdown fence.
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced?.[1]) {
+    return fenced[1].trim();
+  }
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    return trimmed.slice(start, end + 1);
+  }
+  invalid("Grok output_text is not valid JSON");
+}
+
 function normalizeEvent(event) {
-  requireExactKeys(event, [
+  requireKeys(event, [
     "kind",
     "announcedAt",
     "effectiveAt",
@@ -230,6 +296,9 @@ function normalizeDate(value, name) {
 }
 
 function normalizePostId(value) {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
+    value = String(value);
+  }
   if (typeof value !== "string" || !/^[0-9]{1,30}$/.test(value)) {
     invalid("postId must contain only digits");
   }
@@ -277,12 +346,30 @@ function collectCitedPostIds(response, outputText) {
 }
 
 function citationURLs(response, outputText) {
-  return [
+  const urls = [];
+  for (const value of [
     ...(Array.isArray(response?.citations) ? response.citations : []),
-    ...(Array.isArray(outputText.annotations)
-      ? outputText.annotations.map((annotation) => annotation?.url)
-      : []),
-  ];
+    ...(Array.isArray(response?.sources) ? response.sources : []),
+  ]) {
+    const url = citationURLValue(value);
+    if (url) urls.push(url);
+  }
+  if (Array.isArray(outputText?.annotations)) {
+    for (const annotation of outputText.annotations) {
+      const url = citationURLValue(annotation);
+      if (url) urls.push(url);
+    }
+  }
+  return urls;
+}
+
+function citationURLValue(value) {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return null;
+  if (typeof value.url === "string") return value.url;
+  if (typeof value.uri === "string") return value.uri;
+  if (typeof value.href === "string") return value.href;
+  return null;
 }
 
 function parseXURL(value) {
@@ -299,14 +386,14 @@ function parseXURL(value) {
   }
 }
 
-function requireExactKeys(value, keys, name) {
+function requireKeys(value, keys, name) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     invalid(`${name} must be an object`);
   }
-  const actual = Object.keys(value).sort();
-  const expected = [...keys].sort();
-  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
-    invalid(`${name} has an unexpected shape`);
+  for (const key of keys) {
+    if (!Object.hasOwn(value, key)) {
+      invalid(`${name} is missing required field ${key}`);
+    }
   }
 }
 

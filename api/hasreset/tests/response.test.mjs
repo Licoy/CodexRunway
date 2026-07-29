@@ -94,6 +94,52 @@ test("parseGrokResponse accepts cited proxy responses that omit X Search call re
   assert.equal(parseGrokResponse(response).length, 2);
 });
 
+test("parseGrokResponse accepts cited proxy responses without a reasoning item", () => {
+  const response = structuredClone(validResponse);
+  response.citations = [
+    { url: "https://x.com/thsottiaux/status/200" },
+    { uri: "https://x.com/thsottiaux/status/100" },
+  ];
+  response.output = [response.output[1]];
+
+  assert.equal(parseGrokResponse(response).length, 2);
+});
+
+test("parseGrokResponse accepts empty proxy results that omit X Search call records", () => {
+  const response = structuredClone(validResponse);
+  response.citations = [];
+  response.output = [response.output[1]];
+  response.output[0].content[0].text = JSON.stringify({ events: [] });
+  response.output[0].content[0].annotations = [];
+
+  assert.deepEqual(parseGrokResponse(response), []);
+});
+
+test("parseGrokResponse accepts function_call X Search tool records from standard proxies", () => {
+  const response = structuredClone(validResponse);
+  response.output = [
+    {
+      type: "function_call",
+      name: "x_search",
+      status: "completed",
+      arguments: "{}",
+    },
+    response.output[1],
+  ];
+
+  assert.equal(parseGrokResponse(response).length, 2);
+});
+
+test("parseGrokResponse accepts finished tool calls that omit status", () => {
+  const response = structuredClone(validResponse);
+  response.output[0] = {
+    type: "x_search_call",
+    id: "search_fixture",
+  };
+
+  assert.equal(parseGrokResponse(response).length, 2);
+});
+
 test("parseGrokResponse rejects proxy responses without X citation evidence", () => {
   const response = structuredClone(validResponse);
   response.citations = [];
@@ -196,17 +242,6 @@ test("parseGrokResponse rejects unknown or incomplete compatible tools", () => {
     () => parseGrokResponse(incomplete),
     (error) => error.code === "invalid_response",
   );
-
-  const missingStatus = structuredClone(validResponse);
-  missingStatus.output[0] = {
-    type: "custom_tool_call",
-    name: "x_keyword_search",
-    input: "{}",
-  };
-  assert.throws(
-    () => parseGrokResponse(missingStatus),
-    (error) => error.code === "invalid_response",
-  );
 });
 
 test("parseGrokResponse rejects an event without a matching X citation", () => {
@@ -254,16 +289,32 @@ test("parseGrokResponse rejects incomplete or malformed structured output", () =
   );
 });
 
-test("parseGrokResponse publishes only fixed derived rationale text", () => {
+test("parseGrokResponse ignores model-supplied rationale and extra event fields", () => {
   const response = structuredClone(validResponse);
   const analysis = JSON.parse(response.output[1].content[0].text);
   analysis.events[0].rationale = "Copied source text must not be published.";
+  analysis.events[0].note = "extra field from a non-strict proxy";
+  analysis.summary = "extra analysis field";
   response.output[1].content[0].text = JSON.stringify(analysis);
 
-  assert.throws(
-    () => parseGrokResponse(response),
-    (error) => error.code === "invalid_response",
-  );
+  const events = parseGrokResponse(response);
+  assert.equal(events[1].rationale, "Quota limit increase announcement; not a reset.");
+  assert.equal(events[0].rationale, "Explicit Codex quota reset announcement.");
+});
+
+test("parseGrokResponse coerces numeric post IDs from non-strict structured output", () => {
+  const response = structuredClone(validResponse);
+  const analysis = JSON.parse(response.output[1].content[0].text);
+  analysis.events = [{
+    ...analysis.events[1],
+    postId: 200,
+    sourceUrl: "https://x.com/thsottiaux/status/200",
+  }];
+  response.output[1].content[0].text = JSON.stringify(analysis);
+  response.citations = ["https://x.com/thsottiaux/status/200"];
+
+  const [event] = parseGrokResponse(response);
+  assert.equal(event.source.postId, "200");
 });
 
 test("parseGrokResponse accepts a cited completed reset with a distinct effective time", () => {

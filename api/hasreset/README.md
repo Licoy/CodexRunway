@@ -26,9 +26,9 @@ flowchart LR
 - 仅启用 `x_search`，只允许检索 `@thsottiaux`。
 - 搜索最近 48 小时，请求最多两个 X Search 工具调用。
 - 兼容代理可将一次 X Search 展开为多个已完成的内部 X 搜索调用。
-- 兼容代理也可省略工具调用记录，但必须返回已完成 reasoning；每个事件仍须有受监控账号、同 Post ID 的 X citation。
+- 兼容代理也可省略工具调用记录：非空事件须有受监控账号、同 Post ID 的 X citation；空事件可直接作为“无相关公告”。
 - 关闭图片和视频理解，设置 `store: false`。
-- 只有 citation 与事件中的 X Post ID 匹配时才接受事件。
+- 只有 citation 与事件中的 X Post ID 匹配时才接受非空事件。
 - 不发布 X 正文、Grok 原始响应、请求头或密钥。
 - 无语义变化时不提交、不部署；UTC 每天最多发布一次健康心跳。
 
@@ -173,14 +173,19 @@ X 原文。
 地址仍会进入 `configuration_error`。GitHub Actions 无法访问开发机上的
 loopback 地址。
 
-响应既支持官方 `x_search_call`，也兼容部分代理返回的
-`custom_tool_call`。兼容调用只接受 `x_keyword_search`、
-`x_semantic_search`、`x_user_search` 和 `x_thread_fetch`；无论使用哪种
-调用格式，非空事件都仍须通过 X citation、账号和 Post ID 校验。部分代理会
-省略 X Search 调用记录；此时服务仅在已完成 reasoning 且每个事件都有受监控账号、
-同 Post ID 的 X citation 时接受响应，并拒绝任何其他工具调用。代理若返回
-缺少 `effectiveAt` 的 `reset_scheduled`，服务会将其安全降级为
-`uncertain`，不会当作已经生效的重置。
+响应既支持官方 `x_search_call`，也兼容标准 Responses 代理常见的
+`custom_tool_call` / `function_call` / `tool_call`。兼容调用只接受
+`x_search`、`x_keyword_search`、`x_semantic_search`、`x_user_search` 和
+`x_thread_fetch`；无论使用哪种调用格式，非空事件都仍须通过 X citation、
+账号和 Post ID 校验。部分代理会省略 X Search 调用记录；此时：
+
+- 非空事件：每个事件必须有受监控账号（`@thsottiaux`）、同 Post ID 的 X citation；
+- 空事件：允许作为“最近 48 小时无相关公告”的合法结果；
+- 仍拒绝 `web_search` 等非 X 工具调用。
+
+代理若返回缺少 `effectiveAt` 的 `reset_scheduled`，服务会将其安全降级为
+`uncertain`，不会当作已经生效的重置。非严格 Structured Output 多出的字段
+会被忽略；模型自带的 `rationale` 不会写入公开状态。
 
 运行测试不需要任何 API Key，所有外部响应均来自 fixtures：
 
