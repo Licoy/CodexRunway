@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="system">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,47 +8,114 @@
       content="default-src 'self'; connect-src 'self'; img-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
     >
     <meta name="color-scheme" content="light dark">
-    <meta
-      name="description"
-      content=""
-      data-i18n-content="metaDescription"
-    >
+    <meta name="description" content="" data-i18n-content="metaDescription">
     <title data-i18n="pageTitle"></title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="./styles.css">
     <script type="module" src="./app.js"></script>
   </head>
   <body>
-    <main>
-      <header>
-        <p class="eyebrow" data-i18n="eyebrow"></p>
-        <h1 data-i18n="pageTitle"></h1>
-        <p class="intro" data-i18n="intro"></p>
-      </header>
+    <div class="atmosphere" aria-hidden="true">
+      <div class="atmosphere-grid"></div>
+      <div class="atmosphere-beam"></div>
+    </div>
 
-      <section class="status-card" aria-live="polite" aria-busy="true" id="status-card">
-        <div>
-          <p class="label" data-i18n="currentVerdict"></p>
-          <p class="status-value" id="status-value" data-i18n="loading"></p>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">⌘</span>
+          <div class="brand-text">
+            <strong data-i18n="brandName"></strong>
+            <span data-i18n="brandTag"></span>
+          </div>
+          <span class="live-pill" id="live-pill" hidden>
+            <span class="live-dot" aria-hidden="true"></span>
+            <span id="live-label" data-i18n="liveLabel"></span>
+          </span>
         </div>
-        <span class="status-dot" id="status-dot" aria-hidden="true"></span>
-        <p class="status-detail" id="status-detail" data-i18n="loadingDetail"></p>
-        <p class="updated" id="updated"></p>
-      </section>
 
-      <section class="events-section" aria-labelledby="events-title">
-        <div class="section-heading">
-          <h2 id="events-title" data-i18n="recentEvidence"></h2>
-          <a href="./api/status.json" data-i18n="viewJSON"></a>
+        <div class="controls" role="group">
+          <button type="button" class="control-btn" id="lang-btn" aria-label="">
+            <span class="control-emoji" id="lang-emoji">🇺🇸</span>
+            <span class="control-copy">
+              <span class="control-kicker" data-i18n="controlLang"></span>
+              <span class="control-value" id="lang-value">English</span>
+            </span>
+          </button>
+          <button type="button" class="control-btn" id="theme-btn" aria-label="">
+            <span class="control-emoji" id="theme-emoji">🖥️</span>
+            <span class="control-copy">
+              <span class="control-kicker" data-i18n="controlTheme"></span>
+              <span class="control-value" id="theme-value">Auto</span>
+            </span>
+          </button>
         </div>
-        <ol class="events" id="events"></ol>
-        <p class="empty" id="empty" data-i18n="emptyEvents" hidden></p>
-      </section>
+      </div>
+    </header>
 
-      <footer>
-        <p data-i18n="disclaimer"></p>
-        <p data-i18n="privacy"></p>
-      </footer>
-    </main>
+    <div class="frame">
+      <main>
+        <section
+          class="dashboard"
+          id="status-card"
+          data-state="unknown"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div class="verdict-stage">
+            <p class="verdict-kicker" data-i18n="currentVerdict"></p>
+            <div class="verdict-row">
+              <span class="verdict-emoji" id="status-emoji" aria-hidden="true">❔</span>
+              <h1 class="verdict-word" id="status-value" data-i18n="loading"></h1>
+              <span class="state-badge" id="state-badge" data-i18n="loading"></span>
+            </div>
+            <p class="verdict-detail" id="status-detail" data-i18n="loadingDetail"></p>
+          </div>
+
+          <aside class="signal-rail" aria-label="status metadata">
+            <div class="signal-item" id="monitor-chip" data-monitor="degraded">
+              <span class="signal-label" data-i18n="monitorLabel"></span>
+              <strong class="signal-value" id="monitor-value">—</strong>
+            </div>
+            <div class="signal-item">
+              <span class="signal-label" data-i18n="checkedLabel"></span>
+              <strong class="signal-value" id="updated">—</strong>
+            </div>
+            <div class="signal-item" id="next-chip">
+              <span class="signal-label" data-i18n="nextLabel"></span>
+              <strong class="signal-value" id="next-value">—</strong>
+            </div>
+            <a class="signal-link" href="./api/status.json" data-i18n="viewJSON"></a>
+          </aside>
+        </section>
+
+        <section class="timeline" aria-labelledby="events-title">
+          <div class="timeline-head">
+            <div>
+              <p class="section-kicker" data-i18n="evidenceKicker"></p>
+              <h2 id="events-title" data-i18n="recentEvidence"></h2>
+            </div>
+          </div>
+          <ol class="events" id="events"></ol>
+          <p class="empty" id="empty" data-i18n="emptyEvents" hidden></p>
+        </section>
+
+        <footer>
+          <div class="footer-links">
+            <a
+              class="github-link"
+              href="https://github.com/Licoy/codex-runway"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              <span aria-hidden="true">⭐</span>
+              <span data-i18n="githubLink"></span>
+            </a>
+          </div>
+          <p data-i18n="disclaimer"></p>
+          <p data-i18n="privacy"></p>
+        </footer>
+      </main>
+    </div>
   </body>
 </html>
