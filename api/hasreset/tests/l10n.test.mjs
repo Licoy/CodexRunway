@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   createTranslator,
+  detectBrowserLanguage,
+  normalizeLanguage,
   translationKeys,
 } from "../public/l10n.js";
 
@@ -25,4 +27,11 @@ test("public page follows browser language priority and interpolates values", ()
     chinese.text("lastChecked", { date: "2026-07-28 12:00" }),
     "最近成功检查：2026-07-28 12:00",
   );
+});
+
+test("language helpers normalize and detect browser languages", () => {
+  assert.equal(normalizeLanguage("zh-Hans-CN"), "zh-CN");
+  assert.equal(normalizeLanguage("en-GB"), "en");
+  assert.equal(detectBrowserLanguage(["fr-FR", "zh-CN"]), "zh-CN");
+  assert.equal(createTranslator("zh-CN").language, "zh-CN");
 });
