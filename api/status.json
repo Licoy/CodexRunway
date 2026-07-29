@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-29T21:12:19.738Z",
-  "lastSuccessfulCheckAt": "2026-07-29T21:12:19.738Z",
+  "generatedAt": "2026-07-29T22:13:08.857Z",
+  "lastSuccessfulCheckAt": "2026-07-29T22:13:08.857Z",
   "monitor": {
     "status": "ok",
     "errorCode": null
@@ -24,7 +24,7 @@
         "postId": "2082341416681001277",
         "url": "https://x.com/thsottiaux/status/2082341416681001277"
       },
-      "confidence": 0.86,
+      "confidence": 0.85,
       "rationale": "Explicit Codex quota reset schedule."
     },
     {
@@ -53,7 +53,11 @@
       "effectiveAt": null,
       "scope": {
         "plans": [
-          "all"
+          "business",
+          "enterprise",
+          "plus",
+          "pro",
+          "team"
         ],
         "windows": [
           "weekly"
@@ -64,7 +68,7 @@
         "postId": "2082317452755751098",
         "url": "https://x.com/thsottiaux/status/2082317452755751098"
       },
-      "confidence": 0.96,
+      "confidence": 0.95,
       "rationale": "Explicit Codex quota reset announcement."
     },
     {
@@ -88,7 +92,7 @@
         "postId": "2081940052154933696",
         "url": "https://x.com/thsottiaux/status/2081940052154933696"
       },
-      "confidence": 0.96,
+      "confidence": 0.95,
       "rationale": "Explicit Codex quota reset announcement."
     },
     {
@@ -108,7 +112,7 @@
         "postId": "2081899343091843463",
         "url": "https://x.com/thsottiaux/status/2081899343091843463"
       },
-      "confidence": 0.94,
+      "confidence": 0.9,
       "rationale": "Explicit Codex quota reset schedule."
     }
   ]
