@@ -662,19 +662,31 @@ time {
 .chip {
   display: inline-flex;
   align-items: center;
-  padding: 0.16rem 0.48rem;
+  max-width: 100%;
+  padding: 0.2rem 0.55rem;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--bg-soft);
   color: var(--text-3);
-  font-family: var(--font-mono);
-  font-size: 0.64rem;
+  font-family: var(--font-sans, inherit);
+  font-size: 0.72rem;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.chip[data-kind="plan-unknown"],
+.chip[data-kind="window-unknown"] {
+  border-style: dashed;
+  color: var(--text-3);
+  opacity: 0.92;
 }
 
 .chip-confidence {
   border-color: color-mix(in srgb, var(--accent) 28%, transparent);
   background: var(--accent-soft);
   color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
 }
 
 .source-link {

@@ -179,9 +179,10 @@ function renderFeed(feed, now) {
 
 function renderEvents(events, l10n) {
   elements.events.replaceChildren();
-  elements.empty.hidden = events.length !== 0;
+  const ordered = sortEventsByNewest(Array.isArray(events) ? events : []);
+  elements.empty.hidden = ordered.length !== 0;
 
-  events.slice(0, 8).forEach((event, index) => {
+  ordered.slice(0, 8).forEach((event, index) => {
     const item = document.createElement("li");
 
     const indexEl = document.createElement("span");
@@ -220,15 +221,16 @@ function renderEvents(events, l10n) {
 
     const chips = document.createElement("div");
     chips.className = "event-chips";
-    for (const plan of event?.scope?.plans ?? []) {
-      chips.append(chip(`${l10n.text("chipPlan")}:${plan}`));
+    for (const plan of uniqueStrings(event?.scope?.plans)) {
+      chips.append(chip(formatPlanChip(plan, l10n), `plan-${plan}`));
     }
-    for (const window of event?.scope?.windows ?? []) {
-      chips.append(chip(`${l10n.text("chipWindow")}:${window}`));
+    for (const windowName of uniqueStrings(event?.scope?.windows)) {
+      chips.append(chip(formatWindowChip(windowName, l10n), `window-${windowName}`));
     }
     if (typeof event.confidence === "number") {
       const confidence = chip(
         `${l10n.text("chipConfidence")} ${formatConfidence(event.confidence)}`,
+        "confidence",
       );
       confidence.classList.add("chip-confidence");
       chips.append(confidence);
@@ -243,9 +245,67 @@ function renderEvents(events, l10n) {
   });
 }
 
-function chip(text) {
+function sortEventsByNewest(events) {
+  return [...events].sort((left, right) => {
+    const byTime = String(right?.announcedAt ?? "").localeCompare(String(left?.announcedAt ?? ""));
+    if (byTime !== 0) return byTime;
+    return String(right?.source?.postId ?? "").localeCompare(String(left?.source?.postId ?? ""));
+  });
+}
+
+function uniqueStrings(values) {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values.filter((value) => typeof value === "string" && value.length > 0))];
+}
+
+function formatPlanChip(plan, l10n) {
+  return `${l10n.text("chipPlan")} · ${planLabel(plan, l10n)}`;
+}
+
+function formatWindowChip(windowName, l10n) {
+  return `${l10n.text("chipWindow")} · ${windowLabel(windowName, l10n)}`;
+}
+
+function planLabel(plan, l10n) {
+  switch (plan) {
+    case "all":
+      return l10n.text("planAll");
+    case "free":
+      return l10n.text("planFree");
+    case "plus":
+      return l10n.text("planPlus");
+    case "pro":
+      return l10n.text("planPro");
+    case "team":
+      return l10n.text("planTeam");
+    case "business":
+      return l10n.text("planBusiness");
+    case "enterprise":
+      return l10n.text("planEnterprise");
+    case "unknown":
+      return l10n.text("planUnknown");
+    default:
+      return plan;
+  }
+}
+
+function windowLabel(windowName, l10n) {
+  switch (windowName) {
+    case "weekly":
+      return l10n.text("windowWeekly");
+    case "five_hour":
+      return l10n.text("windowFiveHour");
+    case "unknown":
+      return l10n.text("windowUnknown");
+    default:
+      return windowName;
+  }
+}
+
+function chip(text, kind = null) {
   const el = document.createElement("span");
   el.className = "chip";
+  if (kind) el.dataset.kind = kind;
   el.textContent = text;
   return el;
 }
