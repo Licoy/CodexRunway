@@ -14,6 +14,12 @@ const PLAN_NAMES = new Set([
   "unknown",
 ]);
 const WINDOW_NAMES = new Set(["weekly", "five_hour", "unknown"]);
+const COMPATIBLE_X_SEARCH_TOOLS = new Set([
+  "x_keyword_search",
+  "x_semantic_search",
+  "x_user_search",
+  "x_thread_fetch",
+]);
 
 export class HasResetError extends Error {
   constructor(code, message) {
@@ -53,11 +59,30 @@ export function parseGrokResponse(response) {
 }
 
 function assertCompletedXSearch(output) {
-  const calls = output.filter((item) => item?.type === "x_search_call");
-  if (calls.length < 1 || calls.length > 2) {
+  const officialCalls = output.filter((item) => item?.type === "x_search_call");
+  const compatibleCalls = output.filter((item) => item?.type === "custom_tool_call");
+  if (officialCalls.length > 0 && compatibleCalls.length > 0) {
+    invalid("Grok returned mixed X Search call formats");
+  }
+  if (officialCalls.length > 0) {
+    if (officialCalls.length > 2) {
+      invalid("Grok must complete one or two X Search calls");
+    }
+    assertCallsCompleted(officialCalls);
+    return;
+  }
+
+  if (
+    compatibleCalls.length < 1
+    || compatibleCalls.some((call) => !COMPATIBLE_X_SEARCH_TOOLS.has(call?.name))
+  ) {
     invalid("Grok must complete one or two X Search calls");
   }
-  if (calls.some((call) => call.status && call.status !== "completed")) {
+  assertCallsCompleted(compatibleCalls);
+}
+
+function assertCallsCompleted(calls) {
+  if (calls.some((call) => call.status !== "completed")) {
     invalid("Grok did not complete X Search");
   }
 }
@@ -100,18 +125,16 @@ function normalizeEvent(event) {
     "sourceUrl",
     "confidence",
   ], "event");
-  if (!EVENT_KINDS.has(event.kind)) {
-    invalid("Grok returned an unsupported event kind");
-  }
 
+  const kind = normalizeEventKind(event);
   const announcedAt = normalizeDate(event.announcedAt, "announcedAt");
-  const effectiveAt = normalizeEffectiveAt(event);
+  const effectiveAt = normalizeEffectiveAt(event, kind);
   const postId = normalizePostId(event.postId);
   validateSourceURL(event.sourceUrl, postId);
   const confidence = normalizeConfidence(event.confidence);
 
   return {
-    kind: event.kind,
+    kind,
     announcedAt,
     effectiveAt,
     scope: {
@@ -124,18 +147,24 @@ function normalizeEvent(event) {
       url: `https://x.com/thsottiaux/status/${postId}`,
     },
     confidence,
-    rationale: derivedRationale(event.kind),
+    rationale: derivedRationale(kind),
   };
 }
 
-function normalizeEffectiveAt(event) {
-  if (event.kind === "reset_scheduled") {
-    if (event.effectiveAt === null) {
-      invalid("A scheduled reset must have an effectiveAt time");
-    }
+function normalizeEventKind(event) {
+  if (!EVENT_KINDS.has(event.kind)) {
+    invalid("Grok returned an unsupported event kind");
+  }
+  return event.kind === "reset_scheduled" && event.effectiveAt === null
+    ? "uncertain"
+    : event.kind;
+}
+
+function normalizeEffectiveAt(event, kind) {
+  if (kind === "reset_scheduled") {
     return normalizeDate(event.effectiveAt, "effectiveAt");
   }
-  if (event.kind === "reset_completed") {
+  if (kind === "reset_completed") {
     return event.effectiveAt === null
       ? null
       : normalizeDate(event.effectiveAt, "effectiveAt");

@@ -24,7 +24,8 @@ flowchart LR
 
 - 每轮最多发起一次 Grok HTTP 请求，不重试。
 - 仅启用 `x_search`，只允许检索 `@thsottiaux`。
-- 搜索最近 48 小时，最多两个 X Search 工具调用。
+- 搜索最近 48 小时，请求最多两个 X Search 工具调用。
+- 兼容代理可将一次 X Search 展开为多个已完成的内部 X 搜索调用。
 - 关闭图片和视频理解，设置 `store: false`。
 - 只有 citation 与事件中的 X Post ID 匹配时才接受事件。
 - 不发布 X 正文、Grok 原始响应、请求头或密钥。
@@ -165,6 +166,18 @@ X 原文。
 ## 本地开发
 
 要求 Node.js 20 或更高版本；GitHub Actions 当前使用 Node.js 24。
+
+正式部署的 Base URL 必须使用 HTTPS。本地调试额外允许
+`http://localhost`、`http://127.0.0.1` 和 `http://[::1]`，其他 HTTP
+地址仍会进入 `configuration_error`。GitHub Actions 无法访问开发机上的
+loopback 地址。
+
+响应既支持官方 `x_search_call`，也兼容部分代理返回的
+`custom_tool_call`。兼容调用只接受 `x_keyword_search`、
+`x_semantic_search`、`x_user_search` 和 `x_thread_fetch`；无论使用哪种
+调用格式，非空事件都仍须通过 X citation、账号和 Post ID 校验。代理若返回
+缺少 `effectiveAt` 的 `reset_scheduled`，服务会将其安全降级为
+`uncertain`，不会当作已经生效的重置。
 
 运行测试不需要任何 API Key，所有外部响应均来自 fixtures：
 

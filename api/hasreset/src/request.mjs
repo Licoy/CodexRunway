@@ -4,6 +4,7 @@ const analysisSchema = JSON.parse(readFileSync(
   new URL("../schemas/grok-analysis.schema.json", import.meta.url),
   "utf8",
 ));
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 const SYSTEM_PROMPT = [
   "You classify Codex quota announcements using only X posts returned by X Search.",
@@ -61,8 +62,10 @@ export function buildGrokRequest({ model, now = new Date() }) {
 export function responsesURL(baseURL) {
   assertNonEmpty(baseURL, "GROK_API_BASE_URL");
   const parsed = new URL(baseURL);
-  if (parsed.protocol !== "https:") {
-    throw new Error("GROK_API_BASE_URL must use HTTPS");
+  const secure = parsed.protocol === "https:";
+  const localHTTP = parsed.protocol === "http:" && LOOPBACK_HOSTS.has(parsed.hostname);
+  if (!secure && !localHTTP) {
+    throw new Error("GROK_API_BASE_URL must use HTTPS unless it is loopback HTTP");
   }
   if (parsed.username || parsed.password || parsed.search || parsed.hash) {
     throw new Error("GROK_API_BASE_URL must not contain credentials, a query, or a fragment");
