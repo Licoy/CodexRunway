@@ -34,8 +34,8 @@ export function parseGrokResponse(response) {
     invalid("Grok response did not complete");
   }
   const output = requireArray(response?.output, "response output");
-  assertCompletedXSearch(output);
   const content = findOutputText(output);
+  const searchEvidence = assertCompletedXSearch(response, output, content);
   const analysis = parseAnalysis(content.text);
   const citedPostIds = collectCitedPostIds(response, content);
 
@@ -52,15 +52,27 @@ export function parseGrokResponse(response) {
         "Grok returned an event without a matching X citation",
       );
     }
+    if (
+      searchEvidence === "cited_proxy"
+      && !hasExplicitMonitoredCitation(response, content, normalized.source.postId)
+    ) {
+      throw new HasResetError(
+        "uncited_source",
+        "Proxy response did not cite the monitored X account for this event",
+      );
+    }
     return normalized;
   });
 
   return events.sort(compareEvents);
 }
 
-function assertCompletedXSearch(output) {
+function assertCompletedXSearch(response, output, content) {
   const officialCalls = output.filter((item) => item?.type === "x_search_call");
   const compatibleCalls = output.filter((item) => item?.type === "custom_tool_call");
+  if (output.some(isUnsupportedToolCall)) {
+    invalid("Grok returned an unsupported tool call");
+  }
   if (officialCalls.length > 0 && compatibleCalls.length > 0) {
     invalid("Grok returned mixed X Search call formats");
   }
@@ -69,22 +81,53 @@ function assertCompletedXSearch(output) {
       invalid("Grok must complete one or two X Search calls");
     }
     assertCallsCompleted(officialCalls);
-    return;
+    return "tool_call";
   }
 
   if (
-    compatibleCalls.length < 1
-    || compatibleCalls.some((call) => !COMPATIBLE_X_SEARCH_TOOLS.has(call?.name))
+    compatibleCalls.length > 0
+    && compatibleCalls.some((call) => !COMPATIBLE_X_SEARCH_TOOLS.has(call?.name))
   ) {
     invalid("Grok must complete one or two X Search calls");
   }
-  assertCallsCompleted(compatibleCalls);
+  if (compatibleCalls.length > 0) {
+    assertCallsCompleted(compatibleCalls);
+    return "tool_call";
+  }
+  if (hasCitedProxySearchEvidence(response, output, content)) {
+    return "cited_proxy";
+  }
+  invalid("Grok must complete X Search or return cited proxy search evidence");
+}
+
+function isUnsupportedToolCall(item) {
+  return typeof item?.type === "string"
+    && item.type.endsWith("_call")
+    && item.type !== "x_search_call"
+    && item.type !== "custom_tool_call";
 }
 
 function assertCallsCompleted(calls) {
   if (calls.some((call) => call.status !== "completed")) {
     invalid("Grok did not complete X Search");
   }
+}
+
+function hasCitedProxySearchEvidence(response, output, content) {
+  const completedReasoning = output.some((item) => (
+    item?.type === "reasoning" && item.status === "completed"
+  ));
+  return completedReasoning && citationURLs(response, content).some((url) => {
+    const parsed = parseXURL(url);
+    return parsed?.handle === "thsottiaux";
+  });
+}
+
+function hasExplicitMonitoredCitation(response, content, postId) {
+  return citationURLs(response, content).some((url) => {
+    const parsed = parseXURL(url);
+    return parsed?.handle === "thsottiaux" && parsed.postId === postId;
+  });
 }
 
 function findOutputText(output) {
@@ -225,18 +268,21 @@ function normalizeStringSet(value, allowed, name) {
 }
 
 function collectCitedPostIds(response, outputText) {
-  const urls = [
+  return new Set(
+    citationURLs(response, outputText)
+      .map(parseXURL)
+      .filter((item) => item && ["thsottiaux", "i"].includes(item.handle))
+      .map((item) => item.postId),
+  );
+}
+
+function citationURLs(response, outputText) {
+  return [
     ...(Array.isArray(response?.citations) ? response.citations : []),
     ...(Array.isArray(outputText.annotations)
       ? outputText.annotations.map((annotation) => annotation?.url)
       : []),
   ];
-  return new Set(
-    urls
-      .map(parseXURL)
-      .filter((item) => item && ["thsottiaux", "i"].includes(item.handle))
-      .map((item) => item.postId),
-  );
 }
 
 function parseXURL(value) {

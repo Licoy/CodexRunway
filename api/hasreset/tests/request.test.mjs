@@ -34,6 +34,10 @@ test("buildGrokRequest limits Grok to Tibo X posts in the prior 48-hour date win
 
 test("responsesURL accepts HTTPS and loopback HTTP API version base URLs", () => {
   assert.equal(
+    responsesURL("https://api.x.ai").href,
+    "https://api.x.ai/v1/responses",
+  );
+  assert.equal(
     responsesURL("https://api.x.ai/v1/").href,
     "https://api.x.ai/v1/responses",
   );
@@ -52,9 +56,5 @@ test("responsesURL accepts HTTPS and loopback HTTP API version base URLs", () =>
   assert.throws(
     () => responsesURL("http://api.x.ai/v1"),
     /HTTPS/,
-  );
-  assert.throws(
-    () => responsesURL("https://api.x.ai"),
-    /version directory/,
   );
 });

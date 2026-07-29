@@ -72,6 +72,10 @@ export function responsesURL(baseURL) {
   }
 
   const segments = parsed.pathname.split("/").filter(Boolean);
+  if (segments.length === 0) {
+    parsed.pathname = "/v1/responses";
+    return parsed;
+  }
   if (!/^v[0-9]+$/i.test(segments.at(-1) ?? "")) {
     throw new Error("GROK_API_BASE_URL must end with an API version directory");
   }

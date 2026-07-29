@@ -75,6 +75,91 @@ test("parseGrokResponse accepts completed compatible X Search tool calls", () =>
   assert.equal(parseGrokResponse(response).length, 2);
 });
 
+test("parseGrokResponse accepts cited proxy responses that omit X Search call records", () => {
+  const response = structuredClone(validResponse);
+  response.citations = [];
+  response.output = [
+    {
+      type: "reasoning",
+      status: "completed",
+      encrypted_content: "redacted",
+    },
+    response.output[1],
+  ];
+  response.output[1].content[0].annotations = [
+    { url: "https://x.com/thsottiaux/status/200" },
+    { url: "https://x.com/thsottiaux/status/100" },
+  ];
+
+  assert.equal(parseGrokResponse(response).length, 2);
+});
+
+test("parseGrokResponse rejects proxy responses without X citation evidence", () => {
+  const response = structuredClone(validResponse);
+  response.citations = [];
+  response.output = [
+    {
+      type: "reasoning",
+      status: "completed",
+      encrypted_content: "redacted",
+    },
+    response.output[1],
+  ];
+
+  assert.throws(
+    () => parseGrokResponse(response),
+    (error) => error.code === "invalid_response",
+  );
+});
+
+test("parseGrokResponse rejects citation-only proxy events without an explicit author citation", () => {
+  const response = structuredClone(validResponse);
+  response.citations = [];
+  response.output = [
+    {
+      type: "reasoning",
+      status: "completed",
+      encrypted_content: "redacted",
+    },
+    response.output[1],
+  ];
+  response.output[1].content[0].annotations = [
+    { url: "https://x.com/i/status/200" },
+    { url: "https://x.com/thsottiaux/status/100" },
+  ];
+
+  assert.throws(
+    () => parseGrokResponse(response),
+    (error) => error.code === "uncited_source",
+  );
+});
+
+test("parseGrokResponse rejects citation-only proxy responses with another tool call", () => {
+  const response = structuredClone(validResponse);
+  response.citations = [];
+  response.output = [
+    {
+      type: "web_search_call",
+      status: "completed",
+    },
+    {
+      type: "reasoning",
+      status: "completed",
+      encrypted_content: "redacted",
+    },
+    response.output[1],
+  ];
+  response.output[2].content[0].annotations = [
+    { url: "https://x.com/thsottiaux/status/200" },
+    { url: "https://x.com/thsottiaux/status/100" },
+  ];
+
+  assert.throws(
+    () => parseGrokResponse(response),
+    (error) => error.code === "invalid_response",
+  );
+});
+
 test("parseGrokResponse rejects unknown or incomplete compatible tools", () => {
   const unknown = structuredClone(validResponse);
   unknown.output[0] = {
