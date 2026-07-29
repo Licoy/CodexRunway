@@ -20,8 +20,8 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    # Dual-pass Grok search (recent + optional full window) needs headroom.
-    timeout-minutes: 8
+    # Discovery + optional schedule-reply pass + classification needs headroom.
+    timeout-minutes: 12
     permissions:
       contents: write
     # Use yes/no (not true/false). Values like "true" collide with secrets such as

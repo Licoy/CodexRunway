@@ -1,5 +1,8 @@
 export {
+  buildClassificationRequest,
+  buildDiscoveryRequest,
   buildGrokRequest,
+  buildScheduleReplyDiscoveryRequest,
   buildWebSocketCreateMessage,
   responsesURL,
   responsesWebSocketURL,
@@ -8,6 +11,12 @@ export {
   HasResetError,
   parseGrokResponse,
 } from "./response.mjs";
+export {
+  attachCandidateCitations,
+  extractDiscoveryCandidates,
+  hasFutureScheduleSignal,
+  mergeDiscoveryCandidates,
+} from "./discovery.mjs";
 export { decidePublication } from "./status.mjs";
 export { validateStatus } from "./validation.mjs";
 export {

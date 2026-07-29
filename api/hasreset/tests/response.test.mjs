@@ -177,13 +177,21 @@ test("parseGrokResponse accepts citation-only proxy events cited as x.com/i/stat
   assert.equal(parseGrokResponse(response).length, 2);
 });
 
-test("parseGrokResponse rejects citation-only proxy responses with another tool call", () => {
+test("parseGrokResponse accepts official web_search_call alongside citations", () => {
   const response = structuredClone(validResponse);
   response.citations = [];
   response.output = [
     {
       type: "web_search_call",
       status: "completed",
+      action: {
+        type: "search",
+        query: "thsottiaux reset",
+        sources: [
+          { url: "https://x.com/thsottiaux/status/200" },
+          { url: "https://x.com/thsottiaux/status/100" },
+        ],
+      },
     },
     {
       type: "reasoning",
@@ -192,22 +200,16 @@ test("parseGrokResponse rejects citation-only proxy responses with another tool 
     },
     response.output[1],
   ];
-  response.output[2].content[0].annotations = [
-    { url: "https://x.com/thsottiaux/status/200" },
-    { url: "https://x.com/thsottiaux/status/100" },
-  ];
+  response.output[2].content[0].annotations = [];
 
-  assert.throws(
-    () => parseGrokResponse(response),
-    (error) => error.code === "invalid_response",
-  );
+  assert.equal(parseGrokResponse(response).length, 2);
 });
 
 test("parseGrokResponse rejects unknown or incomplete compatible tools", () => {
   const unknown = structuredClone(validResponse);
   unknown.output[0] = {
     type: "custom_tool_call",
-    name: "web_search",
+    name: "file_search",
     status: "completed",
     input: "{}",
   };
@@ -219,7 +221,7 @@ test("parseGrokResponse rejects unknown or incomplete compatible tools", () => {
   const mixed = structuredClone(validResponse);
   mixed.output.splice(1, 0, {
     type: "custom_tool_call",
-    name: "web_search",
+    name: "file_search",
     status: "completed",
     input: "{}",
   });

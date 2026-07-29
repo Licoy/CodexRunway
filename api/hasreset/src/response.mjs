@@ -14,19 +14,25 @@ const PLAN_NAMES = new Set([
   "unknown",
 ]);
 const WINDOW_NAMES = new Set(["weekly", "five_hour", "unknown"]);
-const COMPATIBLE_X_SEARCH_TOOLS = new Set([
+const COMPATIBLE_SEARCH_TOOLS = new Set([
   "x_search",
   "x_keyword_search",
   "x_semantic_search",
   "x_user_search",
   "x_thread_fetch",
+  "web_search",
+]);
+const OFFICIAL_SEARCH_CALL_TYPES = new Set([
+  "x_search_call",
+  "web_search_call",
 ]);
 const COMPATIBLE_TOOL_CALL_TYPES = new Set([
   "custom_tool_call",
   "function_call",
   "tool_call",
 ]);
-const MAX_SEARCH_CALLS = 16;
+// Agentic web+X probes often issue many short searches.
+const MAX_SEARCH_CALLS = 64;
 
 export class HasResetError extends Error {
   constructor(code, message) {
@@ -61,10 +67,10 @@ export function parseGrokResponse(response) {
 }
 
 function assertSearchEvidence(response, output, content, analysis) {
-  const officialCalls = output.filter((item) => item?.type === "x_search_call");
+  const officialCalls = output.filter((item) => OFFICIAL_SEARCH_CALL_TYPES.has(item?.type));
   const compatibleCalls = output.filter((item) => (
     COMPATIBLE_TOOL_CALL_TYPES.has(item?.type)
-    && COMPATIBLE_X_SEARCH_TOOLS.has(toolCallName(item))
+    && COMPATIBLE_SEARCH_TOOLS.has(toolCallName(item))
   ));
   if (output.some(isUnsupportedToolCall)) {
     invalid("Grok returned an unsupported tool call");
@@ -114,11 +120,11 @@ function isUnsupportedToolCall(item) {
   if (typeof item?.type !== "string" || !item.type.endsWith("_call")) {
     return false;
   }
-  if (item.type === "x_search_call") {
+  if (OFFICIAL_SEARCH_CALL_TYPES.has(item.type)) {
     return false;
   }
   if (COMPATIBLE_TOOL_CALL_TYPES.has(item.type)) {
-    return !COMPATIBLE_X_SEARCH_TOOLS.has(toolCallName(item));
+    return !COMPATIBLE_SEARCH_TOOLS.has(toolCallName(item));
   }
   return true;
 }
@@ -359,6 +365,21 @@ function citationURLs(response, outputText) {
     for (const annotation of outputText.annotations) {
       const url = citationURLValue(annotation);
       if (url) urls.push(url);
+    }
+  }
+  // Official web_search_call items often embed result URLs under action.sources.
+  if (Array.isArray(response?.output)) {
+    for (const item of response.output) {
+      if (!OFFICIAL_SEARCH_CALL_TYPES.has(item?.type)) continue;
+      const action = item.action;
+      if (!action || typeof action !== "object") continue;
+      if (typeof action.url === "string") urls.push(action.url);
+      if (Array.isArray(action.sources)) {
+        for (const source of action.sources) {
+          const url = citationURLValue(source);
+          if (url) urls.push(url);
+        }
+      }
     }
   }
   return urls;

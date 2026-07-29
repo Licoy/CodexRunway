@@ -12,9 +12,10 @@ Pages。
 
 ```mermaid
 flowchart LR
-    schedule["GitHub Actions<br/>每小时第 17 分钟"] --> recent["Grok 近 36h<br/>优先扫今日"]
-    recent --> backfill["缺今日 completed<br/>则再扫 72h"]
-    backfill --> verify["Schema、citation<br/>与 Post ID 校验"]
+    schedule["GitHub Actions<br/>每小时第 17 分钟"] --> discover["Grok discovery<br/>x_search + web_search"]
+    discover --> replies["补充计划类回复检索"]
+    replies --> classify["Structured 分类<br/>无工具"]
+    classify --> verify["Schema、citation<br/>与 Post ID 校验"]
     verify --> state["事件合并与<br/>发布决策"]
     state --> branch["orphan gh-pages"]
     state --> pages["GitHub Pages artifact"]
@@ -23,13 +24,12 @@ flowchart LR
 
 服务遵循以下边界：
 
-- 默认 **双阶段** Grok 请求：先扫近 36 小时（抓 UTC 当天），若没有当天
-  `reset_completed` 再扫完整 72 小时；单次失败仍不重试。
-- **默认使用 HTTP** `POST /v1/responses`；仅当 `GROK_USE_WS=true` 时改用
-  WebSocket `wss://…/v1/responses`（`response.create` + 等待
-  `response.completed`）。
-- 仅启用 `x_search`，只允许检索 `@thsottiaux`；`reasoning.effort=high`。
-- 近窗最多 10 次、全窗最多 8 次 X Search 工具调用；事件按 `announcedAt` 新→旧。
+- **两阶段管线**：① free-form discovery（`x_search` + `web_search`）收集候选帖；
+  ② 无工具 Structured Output 分类。另有计划类回复补扫与今日 completed 重试。
+- **默认使用 HTTP** `POST /v1/responses`；HTTP 失败时自动回退 WebSocket；
+  也可设 `GROK_USE_WS=true` 全程 WebSocket。
+- `reasoning.effort=low`（避免 Cloudflare 504）；discovery 允许 `web_search_call`。
+- 事件按 `announcedAt` 新→旧；只接受 `@thsottiaux` 且 citation 匹配的 Post ID。
 - 明确区分已完成重置 / 计划重置；相对日期（明天、数小时内、31 号等）需解析为 ISO `effectiveAt`。
 - “I'm feeling like a limit reset / see you in a few hours” 记为 `reset_scheduled`，`effectiveAt` 默认公告后 3 小时，不是 `uncertain`。
 - 回复讨论下次重置日期（如 “I read your tweets…” + 线程中的 July 31）记为 `reset_scheduled`。
@@ -103,7 +103,7 @@ WebSocket；未设置、空字符串或其它值一律走 HTTP。
 1. 将代码推送到仓库默认分支。
 2. 配置三个必需的 Repository Secrets（以及可选的 `GROK_USE_WS`）和上述仓库设置。
 3. 打开 **Actions → Update reset-today status → Run workflow**。
-4. 确认本次运行产生 1～2 次 Grok 请求（近窗优先；缺今日 completed 时再全窗补扫）。
+4. 确认本次运行产生多次 Grok 请求（discovery + 计划回复补扫 + classification；HTTP 失败时可能再走 WebSocket）。
 5. 检查 `gh-pages` 分支及以下地址：
    - 页面：`https://<owner>.github.io/<repository>/`
    - JSON：`https://<owner>.github.io/<repository>/api/status.json`
