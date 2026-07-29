@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-29T12:30:22.393Z",
-  "lastSuccessfulCheckAt": "2026-07-29T12:30:22.393Z",
+  "generatedAt": "2026-07-29T12:41:42.682Z",
+  "lastSuccessfulCheckAt": "2026-07-29T12:41:42.682Z",
   "monitor": {
     "status": "ok",
     "errorCode": null
@@ -28,13 +28,13 @@
         "postId": "2081940052154933696",
         "url": "https://x.com/thsottiaux/status/2081940052154933696"
       },
-      "confidence": 0.95,
+      "confidence": 0.99,
       "rationale": "Explicit Codex quota reset announcement."
     },
     {
-      "kind": "uncertain",
+      "kind": "reset_scheduled",
       "announcedAt": "2026-07-28T00:27:37.000Z",
-      "effectiveAt": null,
+      "effectiveAt": "2026-07-28T03:27:37.000Z",
       "scope": {
         "plans": [
           "business",
@@ -52,8 +52,8 @@
         "postId": "2081899343091843463",
         "url": "https://x.com/thsottiaux/status/2081899343091843463"
       },
-      "confidence": 0.85,
-      "rationale": "Relevant announcement could not be classified safely."
+      "confidence": 0.95,
+      "rationale": "Explicit Codex quota reset schedule."
     }
   ]
 }
