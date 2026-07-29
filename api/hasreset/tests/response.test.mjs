@@ -158,7 +158,7 @@ test("parseGrokResponse rejects proxy responses without X citation evidence", ()
   );
 });
 
-test("parseGrokResponse rejects citation-only proxy events without an explicit author citation", () => {
+test("parseGrokResponse accepts citation-only proxy events cited as x.com/i/status IDs", () => {
   const response = structuredClone(validResponse);
   response.citations = [];
   response.output = [
@@ -171,13 +171,10 @@ test("parseGrokResponse rejects citation-only proxy events without an explicit a
   ];
   response.output[1].content[0].annotations = [
     { url: "https://x.com/i/status/200" },
-    { url: "https://x.com/thsottiaux/status/100" },
+    { url: "https://x.com/i/status/100" },
   ];
 
-  assert.throws(
-    () => parseGrokResponse(response),
-    (error) => error.code === "uncited_source",
-  );
+  assert.equal(parseGrokResponse(response).length, 2);
 });
 
 test("parseGrokResponse rejects citation-only proxy responses with another tool call", () => {

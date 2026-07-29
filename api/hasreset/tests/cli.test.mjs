@@ -120,6 +120,64 @@ function cliArguments(previousDir, outputDir, decisionFile) {
   ];
 }
 
+test("runCLI uses WebSocket transport when GROK_USE_WS is true", async (context) => {
+  const root = await mkdtemp(join(tmpdir(), "hasreset-cli-ws-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const previousDir = join(root, "missing-previous");
+  const outputDir = join(root, "site");
+  const decisionFile = join(root, "decision.json");
+  let requestCount = 0;
+  let usedWebSocket = false;
+
+  const exitCode = await runCLI({
+    argv: cliArguments(previousDir, outputDir, decisionFile),
+    env: {
+      GROK_API_BASE_URL: "https://api.x.ai/v1",
+      GROK_MODEL: "grok-4.5",
+      GROK_API_KEY: "test-secret",
+      GROK_USE_WS: "true",
+    },
+    now: new Date("2026-07-29T10:17:00.000Z"),
+    openWebSocketImpl: async () => {
+      usedWebSocket = true;
+      const listeners = new Map();
+      return {
+        send() {
+          requestCount += 1;
+          queueMicrotask(() => {
+            for (const callback of listeners.get("message") ?? []) {
+              callback(JSON.stringify({
+                type: "response.completed",
+                response: validResponse,
+              }));
+            }
+          });
+        },
+        close() {},
+        on(type, callback) {
+          const list = listeners.get(type) ?? [];
+          list.push(callback);
+          listeners.set(type, list);
+          return () => {};
+        },
+      };
+    },
+    fetchImpl: async () => {
+      throw new Error("HTTP transport should not be used when GROK_USE_WS=true");
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(usedWebSocket, true);
+  assert.equal(requestCount, 1);
+  assert.deepEqual(await readJSON(decisionFile), {
+    publish: true,
+    degraded: false,
+    errorCode: null,
+    reason: "initial_publish",
+  });
+});
+
 async function readJSON(path) {
   return JSON.parse(await readFile(path, "utf8"));
 }

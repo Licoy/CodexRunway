@@ -9,66 +9,96 @@ const validResponse = JSON.parse(await readFile(
   "utf8",
 ));
 
-test("fetchGrokEvents performs exactly one authenticated Responses API request", async () => {
-  const requests = [];
-  const fetchImpl = async (url, options) => {
-    requests.push({ url, options });
-    return new Response(JSON.stringify(validResponse), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+function mockWebSocket(handler) {
+  return async (url, options) => {
+    const listeners = new Map();
+    const session = {
+      sent: [],
+      url,
+      options,
+      send(text) {
+        this.sent.push(text);
+        queueMicrotask(() => handler(session, text));
+      },
+      close() {},
+      on(type, callback) {
+        const list = listeners.get(type) ?? [];
+        list.push(callback);
+        listeners.set(type, list);
+        return () => {
+          listeners.set(type, (listeners.get(type) ?? []).filter((item) => item !== callback));
+        };
+      },
+      emit(type, payload) {
+        for (const callback of listeners.get(type) ?? []) callback(payload);
+      },
+    };
+    return session;
   };
+}
 
+test("fetchGrokEvents performs exactly one authenticated Responses WebSocket request", async () => {
+  let opened = 0;
   const events = await fetchGrokEvents({
     baseURL: "https://api.x.ai/v1",
     model: "grok-4.5",
     apiKey: "test-secret",
     now: new Date("2026-07-28T12:00:00.000Z"),
-    fetchImpl,
     timeoutMs: 1_000,
+    transport: "websocket",
+    openWebSocketImpl: mockWebSocket((session, text) => {
+      opened += 1;
+      assert.equal(session.url, "wss://api.x.ai/v1/responses");
+      assert.equal(session.options.headers.Authorization, "Bearer test-secret");
+      const message = JSON.parse(text);
+      assert.equal(message.type, "response.create");
+      assert.equal(message.max_tool_calls, 2);
+      assert.equal(message.input[0].type, "message");
+      session.emit("message", JSON.stringify({
+        type: "response.completed",
+        response: validResponse,
+      }));
+    }),
   });
 
   assert.equal(events.length, 2);
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].url, "https://api.x.ai/v1/responses");
-  assert.equal(requests[0].options.method, "POST");
-  assert.equal(requests[0].options.headers.Authorization, "Bearer test-secret");
-  assert.equal(JSON.parse(requests[0].options.body).max_tool_calls, 2);
+  assert.equal(opened, 1);
 });
 
-test("fetchGrokEvents does not retry a failed request", async () => {
+test("fetchGrokEvents does not retry a failed WebSocket request", async () => {
   let callCount = 0;
-  const fetchImpl = async () => {
-    callCount += 1;
-    throw new Error("fixture network failure");
-  };
 
   await assert.rejects(
     fetchGrokEvents({
       baseURL: "https://api.x.ai/v1",
       model: "grok-4.5",
       apiKey: "test-secret",
-      fetchImpl,
+      transport: "websocket",
+      openWebSocketImpl: async () => {
+        callCount += 1;
+        throw new Error("fixture network failure");
+      },
     }),
     (error) => error instanceof HasResetError && error.code === "request_failed",
   );
   assert.equal(callCount, 1);
 });
 
-test("fetchGrokEvents reports an unsuccessful HTTP status without its body", async () => {
+test("fetchGrokEvents reports a failed WebSocket upgrade without upstream body details", async () => {
   await assert.rejects(
     fetchGrokEvents({
       baseURL: "https://api.x.ai/v1",
       model: "grok-4.5",
       apiKey: "test-secret",
-      fetchImpl: async () => new Response("sensitive upstream body", {
-        status: 503,
-      }),
+      transport: "websocket",
+      openWebSocketImpl: async () => {
+        throw new Error("WebSocket upgrade failed with HTTP 503: sensitive upstream body");
+      },
     }),
     (error) => (
       error instanceof HasResetError
       && error.code === "request_failed"
-      && error.message === "Grok returned HTTP 503"
+      && error.message === "Grok WebSocket upgrade failed (HTTP 503)"
       && !error.message.includes("sensitive")
     ),
   );
@@ -87,12 +117,37 @@ test("fetchGrokEvents ignores posts outside the strict prior 48 hours", async ()
     model: "grok-4.5",
     apiKey: "test-secret",
     now: new Date("2026-07-28T12:00:00.000Z"),
-    fetchImpl: async () => {
+    transport: "websocket",
+    openWebSocketImpl: mockWebSocket((session) => {
       callCount += 1;
-      return new Response(JSON.stringify(response), { status: 200 });
-    },
+      session.emit("message", JSON.stringify({
+        type: "response.completed",
+        response,
+      }));
+    }),
   });
 
   assert.deepEqual(events, []);
   assert.equal(callCount, 1);
+});
+
+test("fetchGrokEvents defaults to HTTP transport", async () => {
+  const requests = [];
+  const events = await fetchGrokEvents({
+    baseURL: "https://api.x.ai/v1",
+    model: "grok-4.5",
+    apiKey: "test-secret",
+    now: new Date("2026-07-28T12:00:00.000Z"),
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return new Response(JSON.stringify(validResponse), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+  });
+
+  assert.equal(events.length, 2);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "https://api.x.ai/v1/responses");
 });

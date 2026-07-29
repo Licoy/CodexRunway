@@ -73,6 +73,8 @@ jobs:
           GROK_API_BASE_URL: ${{ secrets.GROK_API_BASE_URL }}
           GROK_MODEL: ${{ secrets.GROK_MODEL }}
           GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+          # Optional. true/1/yes/on enables Responses WebSocket; otherwise HTTP.
+          GROK_USE_WS: ${{ secrets.GROK_USE_WS }}
         run: |
           set +e
           node api/hasreset/src/cli.mjs \

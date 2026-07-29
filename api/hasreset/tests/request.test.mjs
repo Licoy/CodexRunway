@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   buildGrokRequest,
+  buildWebSocketCreateMessage,
   responsesURL,
+  responsesWebSocketURL,
 } from "../src/index.mjs";
 
 test("buildGrokRequest limits Grok to Tibo X posts in the prior 48-hour date window", () => {
@@ -57,4 +59,30 @@ test("responsesURL accepts HTTPS and loopback HTTP API version base URLs", () =>
     () => responsesURL("http://api.x.ai/v1"),
     /HTTPS/,
   );
+});
+
+test("responsesWebSocketURL maps the Responses endpoint to wss/ws", () => {
+  assert.equal(
+    responsesWebSocketURL("https://api.x.ai/v1").href,
+    "wss://api.x.ai/v1/responses",
+  );
+  assert.equal(
+    responsesWebSocketURL("http://127.0.0.1:8317/v1").href,
+    "ws://127.0.0.1:8317/v1/responses",
+  );
+});
+
+test("buildWebSocketCreateMessage wraps the Responses body for response.create", () => {
+  const request = buildGrokRequest({
+    model: "grok-4.5",
+    now: new Date("2026-07-28T12:00:00.000Z"),
+  });
+  const message = buildWebSocketCreateMessage(request);
+  assert.equal(message.type, "response.create");
+  assert.equal(message.model, "grok-4.5");
+  assert.equal(message.input[0].type, "message");
+  assert.equal(message.input[0].role, "system");
+  assert.equal(message.input[0].content[0].type, "input_text");
+  assert.equal(message.input[1].role, "user");
+  assert.equal("stream" in message, false);
 });

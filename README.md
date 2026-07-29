@@ -111,7 +111,7 @@ swift build -c release
 
 服务源码位于 [`api/hasreset`](api/hasreset)，定时发布由 `.github/workflows/update-hasreset.yml` 负责。部署自己的 fork 时：
 
-1. 在仓库的 Actions Secrets 中添加 `GROK_API_BASE_URL`、`GROK_MODEL`、`GROK_API_KEY`。Base URL 应为 HTTPS API 版本根路径，例如 `https://api.x.ai/v1`；所选模型需支持 Responses API、X Search 和 Structured Outputs。
+1. 在仓库的 Actions Secrets 中添加 `GROK_API_BASE_URL`、`GROK_MODEL`、`GROK_API_KEY`。Base URL 应为 HTTPS API 版本根路径，例如 `https://api.x.ai/v1`；所选模型需支持 Responses API、X Search 和 Structured Outputs。可选设置 `GROK_USE_WS=true` 以改用 WebSocket（默认 HTTP）。
 2. 在 **Settings > Actions > General > Workflow permissions** 中允许 `GITHUB_TOKEN` 读写仓库内容；无需创建 PAT。
 3. 在 **Settings > Pages** 中把 Source 设为 **GitHub Actions**。
 4. 手动运行一次 **Update reset-today status** workflow 完成首次发布，并检查 Pages 页面和 `api/status.json`。

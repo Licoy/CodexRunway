@@ -19,6 +19,8 @@ export async function runCLI({
   env = process.env,
   now = new Date(),
   fetchImpl = globalThis.fetch,
+  openWebSocketImpl,
+  transport,
   publicDir = defaultPublicDir,
   onMonitorError = () => {},
 }) {
@@ -39,6 +41,8 @@ export async function runCLI({
         apiKey: env.GROK_API_KEY,
         now,
         fetchImpl,
+        openWebSocketImpl,
+        transport: resolveTransport(transport, env),
       });
     } catch (error) {
       const diagnostic = safeErrorDiagnostic(error);
@@ -100,6 +104,18 @@ async function loadPrevious(previousDir) {
     }
     return { status: null, errorCode: "invalid_response" };
   }
+}
+
+function resolveTransport(transport, env) {
+  if (transport === "websocket" || transport === "http") {
+    return transport;
+  }
+  return isEnabledEnvFlag(env?.GROK_USE_WS) ? "websocket" : "http";
+}
+
+function isEnabledEnvFlag(value) {
+  if (typeof value !== "string") return false;
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
 function safeErrorCode(error) {

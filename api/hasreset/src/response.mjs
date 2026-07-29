@@ -53,7 +53,7 @@ export function parseGrokResponse(response) {
       invalid("Grok returned the same X post more than once");
     }
     seen.add(normalized.source.postId);
-    assertEventCitation(normalized, citedPostIds, searchEvidence, response, content);
+    assertEventCitation(normalized, citedPostIds);
     return normalized;
   });
 
@@ -97,19 +97,9 @@ function assertSearchEvidence(response, output, content, analysis) {
   invalid("Grok must complete X Search or return cited proxy search evidence");
 }
 
-function assertEventCitation(event, citedPostIds, searchEvidence, response, content) {
-  // Citation-only proxy responses must name the monitored author explicitly.
-  // Anonymous x.com/i/status/<id> links are not enough without tool-call evidence.
-  if (searchEvidence === "cited_proxy") {
-    if (!hasExplicitMonitoredCitation(response, content, event.source.postId)) {
-      throw new HasResetError(
-        "uncited_source",
-        "Proxy response did not cite the monitored X account for this event",
-      );
-    }
-    return;
-  }
-
+function assertEventCitation(event, citedPostIds) {
+  // Official xAI and compatible proxies often cite posts as x.com/i/status/<id>.
+  // Event sourceUrl already enforces thsottiaux|i + matching postId.
   if (citedPostIds.has(event.source.postId)) {
     return;
   }
@@ -152,16 +142,11 @@ function isCompletedStatus(status) {
 }
 
 function hasCitedProxySearchEvidence(response, content) {
+  // Proxies frequently omit x_search_call records and only attach X status URLs
+  // as annotations (often under the anonymous /i/status/<id> form).
   return citationURLs(response, content).some((url) => {
     const parsed = parseXURL(url);
-    return parsed?.handle === "thsottiaux";
-  });
-}
-
-function hasExplicitMonitoredCitation(response, content, postId) {
-  return citationURLs(response, content).some((url) => {
-    const parsed = parseXURL(url);
-    return parsed?.handle === "thsottiaux" && parsed.postId === postId;
+    return parsed && ["thsottiaux", "i"].includes(parsed.handle);
   });
 }
 

@@ -22,13 +22,17 @@ flowchart LR
 
 服务遵循以下边界：
 
-- 每轮最多发起一次 Grok HTTP 请求，不重试。
+- 每轮最多发起一次 Grok Responses 请求，不重试。
+- **默认使用 HTTP** `POST /v1/responses`；仅当 `GROK_USE_WS=true` 时改用
+  WebSocket `wss://…/v1/responses`（`response.create` + 等待
+  `response.completed`）。
 - 仅启用 `x_search`，只允许检索 `@thsottiaux`。
 - 搜索最近 48 小时，请求最多两个 X Search 工具调用。
 - 兼容代理可将一次 X Search 展开为多个已完成的内部 X 搜索调用。
-- 兼容代理也可省略工具调用记录：非空事件须有受监控账号、同 Post ID 的 X citation；空事件可直接作为“无相关公告”。
+- 兼容代理也可省略工具调用记录：非空事件须有同 Post ID 的 X citation（`thsottiaux` 或 `i/status`）；空事件可直接作为“无相关公告”。
 - 关闭图片和视频理解，设置 `store: false`。
 - 只有 citation 与事件中的 X Post ID 匹配时才接受非空事件。
+- WebSocket 路径会发送 keepalive ping，降低 Cloudflare 等代理掐断长连接的概率。
 - 不发布 X 正文、Grok 原始响应、请求头或密钥。
 - 无语义变化时不提交、不部署；UTC 每天最多发布一次健康心跳。
 
@@ -49,20 +53,24 @@ api/hasreset/
 
 ## GitHub 配置
 
-### Actions Secrets
+### Actions Secrets / Variables
 
-在仓库的 **Settings → Secrets and variables → Actions → Repository
-secrets** 中添加：
+在仓库的 **Settings → Secrets and variables → Actions** 中配置：
 
-| Secret | 建议值 | 说明 |
-| --- | --- | --- |
-| `GROK_API_BASE_URL` | `https://api.x.ai/v1` | 必须使用 HTTPS；可填裸域名或 API 版本目录，不要附加 `/responses` |
-| `GROK_MODEL` | `grok-4.5` | 必须同时支持 Responses API、X Search 和 Structured Outputs |
-| `GROK_API_KEY` | xAI API Console 生成的密钥 | 填写原始密钥，不要添加 `Bearer ` 前缀 |
+| 名称 | 类型 | 建议值 | 说明 |
+| --- | --- | --- | --- |
+| `GROK_API_BASE_URL` | Secret | `https://api.x.ai/v1` | 必须使用 HTTPS；可填裸域名或 API 版本目录，不要附加 `/responses` |
+| `GROK_MODEL` | Secret | `grok-4.5` | 必须同时支持 Responses API、X Search 和 Structured Outputs |
+| `GROK_API_KEY` | Secret | xAI API Console 生成的密钥 | 填写原始密钥，不要添加 `Bearer ` 前缀 |
+| `GROK_USE_WS` | Secret 或 Variable | `false`（默认） / `true` | 是否使用 WebSocket 调用 Responses API |
 
-裸域名会自动补为 `/v1/responses`；已经包含版本目录的地址仍按原样使用。当前 Workflow 将这三个值都作为 Repository Secrets 读取。即使 Base URL 和
-模型名称本身不敏感，也必须使用上述名称配置，否则运行会进入
-`configuration_error`。
+裸域名会自动补为 `/v1/responses`；已经包含版本目录的地址仍按原样使用。当前
+Workflow 读取 `GROK_API_BASE_URL`、`GROK_MODEL`、`GROK_API_KEY` 与可选的
+`GROK_USE_WS`。即使 Base URL、模型名称和传输开关本身不敏感，也必须使用上述
+名称配置，否则运行会进入 `configuration_error`（传输开关缺失时默认 HTTP）。
+
+`GROK_USE_WS` 仅在值为 `true` / `1` / `yes` / `on`（大小写不敏感）时启用
+WebSocket；未设置、空字符串或其它值一律走 HTTP。
 
 不需要配置：
 
@@ -81,9 +89,9 @@ secrets** 中添加：
 ## 首次部署
 
 1. 将代码推送到仓库默认分支。
-2. 配置三个 Repository Secrets 和上述仓库设置。
+2. 配置三个必需的 Repository Secrets（以及可选的 `GROK_USE_WS`）和上述仓库设置。
 3. 打开 **Actions → Update reset-today status → Run workflow**。
-4. 确认本次运行只产生一次 Grok HTTP 请求。
+4. 确认本次运行只产生一次 Grok 请求（HTTP 或 WebSocket，取决于 `GROK_USE_WS`）。
 5. 检查 `gh-pages` 分支及以下地址：
    - 页面：`https://<owner>.github.io/<repository>/`
    - JSON：`https://<owner>.github.io/<repository>/api/status.json`
@@ -173,13 +181,24 @@ X 原文。
 地址仍会进入 `configuration_error`。GitHub Actions 无法访问开发机上的
 loopback 地址。
 
+### 传输方式
+
+| `GROK_USE_WS` | 传输 | 端点行为 |
+| --- | --- | --- |
+| 未设置 / `false` / 其它值 | **HTTP（默认）** | `POST https://…/v1/responses`，等待完整 JSON |
+| `true` / `1` / `yes` / `on` | WebSocket | `wss://…/v1/responses`，发送 `response.create`，等待 `response.completed` |
+
+当上游挂在 Cloudflare Free 等短超时网关后面时，完整 agentic `x_search`
+请求的 HTTP 路径更容易出现 **504**；此时可把 `GROK_USE_WS` 设为 `true`
+尝试 WebSocket 长连接。官方直连 `api.x.ai` 时，默认 HTTP 通常即可。
+
 响应既支持官方 `x_search_call`，也兼容标准 Responses 代理常见的
 `custom_tool_call` / `function_call` / `tool_call`。兼容调用只接受
 `x_search`、`x_keyword_search`、`x_semantic_search`、`x_user_search` 和
-`x_thread_fetch`；无论使用哪种调用格式，非空事件都仍须通过 X citation、
-账号和 Post ID 校验。部分代理会省略 X Search 调用记录；此时：
+`x_thread_fetch`；无论使用哪种调用格式，非空事件都仍须通过 X citation
+与 Post ID 校验。部分代理会省略 X Search 调用记录；此时：
 
-- 非空事件：每个事件必须有受监控账号（`@thsottiaux`）、同 Post ID 的 X citation；
+- 非空事件：每个事件必须有同 Post ID 的 X citation（`@thsottiaux` 或 `x.com/i/status/<id>`）；
 - 空事件：允许作为“最近 48 小时无相关公告”的合法结果；
 - 仍拒绝 `web_search` 等非 X 工具调用。
 
@@ -200,12 +219,18 @@ cd api/hasreset
 npm test
 ```
 
-手动执行 CLI 时，需要先在当前 shell 中设置三个 `GROK_*` 环境变量，并使用仓库
+手动执行 CLI 时，需要先在当前 shell 中设置 `GROK_*` 环境变量，并使用仓库
 之外的临时目录作为输入和输出：
 
 ```bash
 hasreset_workdir="$(mktemp -d)"
 mkdir -p "${hasreset_workdir}/previous"
+
+export GROK_API_BASE_URL="https://api.x.ai/v1"
+export GROK_MODEL="grok-4.5"
+export GROK_API_KEY="..."
+# 可选：遇到 HTTP 网关超时时启用
+# export GROK_USE_WS=true
 
 node api/hasreset/src/cli.mjs \
   --previous-dir "${hasreset_workdir}/previous" \

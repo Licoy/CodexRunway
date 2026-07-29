@@ -111,7 +111,7 @@ swift build -c release
 
 The service source lives in [`api/hasreset`](api/hasreset), and `.github/workflows/update-hasreset.yml` performs scheduled publication. To deploy your own fork:
 
-1. Add `GROK_API_BASE_URL`, `GROK_MODEL`, and `GROK_API_KEY` as repository Actions Secrets. The base URL must be an HTTPS API-version root such as `https://api.x.ai/v1`; the selected model must support the Responses API, X Search, and Structured Outputs.
+1. Add `GROK_API_BASE_URL`, `GROK_MODEL`, and `GROK_API_KEY` as repository Actions Secrets. The base URL must be an HTTPS API-version root such as `https://api.x.ai/v1`; the selected model must support the Responses API, X Search, and Structured Outputs. Optionally set `GROK_USE_WS=true` to use WebSocket instead of the default HTTP transport.
 2. Under **Settings > Actions > General > Workflow permissions**, allow `GITHUB_TOKEN` read and write access to repository contents. No PAT is required.
 3. In **Settings > Pages**, set Source to **GitHub Actions**.
 4. Manually run the **Update reset-today status** workflow once, then verify the Pages site and `api/status.json`.

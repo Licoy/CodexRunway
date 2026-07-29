@@ -60,10 +60,39 @@ export function buildGrokRequest({ model, now = new Date() }) {
 }
 
 export function responsesURL(baseURL) {
+  return responsesEndpointURL(baseURL, { websocket: false });
+}
+
+export function responsesWebSocketURL(baseURL) {
+  return responsesEndpointURL(baseURL, { websocket: true });
+}
+
+/**
+ * Build a WebSocket `response.create` envelope from the HTTP Responses body.
+ * xAI WebSocket mode streams events; omit transport-only fields.
+ */
+export function buildWebSocketCreateMessage(request) {
+  if (!request || typeof request !== "object" || Array.isArray(request)) {
+    throw new Error("Grok request body is required");
+  }
+  const {
+    stream: _stream,
+    background: _background,
+    ...rest
+  } = request;
+  return {
+    type: "response.create",
+    ...rest,
+    input: normalizeWebSocketInput(rest.input),
+  };
+}
+
+function responsesEndpointURL(baseURL, { websocket }) {
   assertNonEmpty(baseURL, "GROK_API_BASE_URL");
   const parsed = new URL(baseURL);
-  const secure = parsed.protocol === "https:";
-  const localHTTP = parsed.protocol === "http:" && LOOPBACK_HOSTS.has(parsed.hostname);
+  const secure = parsed.protocol === "https:" || parsed.protocol === "wss:";
+  const localHTTP = (parsed.protocol === "http:" || parsed.protocol === "ws:")
+    && LOOPBACK_HOSTS.has(parsed.hostname);
   if (!secure && !localHTTP) {
     throw new Error("GROK_API_BASE_URL must use HTTPS unless it is loopback HTTP");
   }
@@ -74,14 +103,35 @@ export function responsesURL(baseURL) {
   const segments = parsed.pathname.split("/").filter(Boolean);
   if (segments.length === 0) {
     parsed.pathname = "/v1/responses";
-    return parsed;
-  }
-  if (!/^v[0-9]+$/i.test(segments.at(-1) ?? "")) {
+  } else if (!/^v[0-9]+$/i.test(segments.at(-1) ?? "")) {
     throw new Error("GROK_API_BASE_URL must end with an API version directory");
+  } else {
+    parsed.pathname = `${parsed.pathname.replace(/\/+$/, "")}/responses`;
   }
 
-  parsed.pathname = `${parsed.pathname.replace(/\/+$/, "")}/responses`;
+  if (websocket) {
+    parsed.protocol = secure ? "wss:" : "ws:";
+  } else {
+    parsed.protocol = secure || parsed.protocol === "wss:" ? "https:" : "http:";
+  }
   return parsed;
+}
+
+function normalizeWebSocketInput(input) {
+  if (!Array.isArray(input)) return input;
+  return input.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+    if (item.type) return item;
+    if (typeof item.role !== "string") return item;
+    if (typeof item.content === "string") {
+      return {
+        type: "message",
+        role: item.role,
+        content: [{ type: "input_text", text: item.content }],
+      };
+    }
+    return { type: "message", ...item };
+  });
 }
 
 function assertNonEmpty(value, name) {
