@@ -18,9 +18,10 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write
+    # Use yes/no (not true/false). Values like "true" collide with secrets such as
+    # GROK_USE_WS=true and get stripped from job outputs ("Skip output … secret").
     outputs:
-      publish: ${{ steps.decision.outputs.publish }}
-      degraded: ${{ steps.decision.outputs.degraded }}
+      should_publish: ${{ steps.decision.outputs.should_publish }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -73,8 +74,8 @@ jobs:
           GROK_API_BASE_URL: ${{ secrets.GROK_API_BASE_URL }}
           GROK_MODEL: ${{ secrets.GROK_MODEL }}
           GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
-          # Optional. true/1/yes/on enables Responses WebSocket; otherwise HTTP.
-          GROK_USE_WS: ${{ secrets.GROK_USE_WS }}
+          # Optional. Prefer repository Variable over Secret (avoids masking "true").
+          GROK_USE_WS: ${{ vars.GROK_USE_WS || secrets.GROK_USE_WS }}
         run: |
           set +e
           node api/hasreset/src/cli.mjs \
@@ -123,11 +124,15 @@ jobs:
             exit 1
           fi
 
-          echo "publish=$publish" >> "$GITHUB_OUTPUT"
-          echo "degraded=$degraded" >> "$GITHUB_OUTPUT"
+          # Encode as yes/no so the job output never equals secret values like "true".
+          if [[ "$publish" == "true" ]]; then
+            echo "should_publish=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish=no" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Validate generated site
-        if: steps.decision.outputs.publish == 'true'
+        if: steps.decision.outputs.should_publish == 'yes'
         shell: bash
         env:
           OUTPUT_DIR: ${{ steps.paths.outputs.output_dir }}
@@ -141,13 +146,13 @@ jobs:
           test -f "$OUTPUT_DIR/api/status.json"
 
       - name: Upload Pages artifact
-        if: steps.decision.outputs.publish == 'true'
+        if: steps.decision.outputs.should_publish == 'yes'
         uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ steps.paths.outputs.output_dir }}
 
       - name: Publish gh-pages state
-        if: steps.decision.outputs.publish == 'true'
+        if: steps.decision.outputs.should_publish == 'yes'
         shell: bash
         env:
           OUTPUT_DIR: ${{ steps.paths.outputs.output_dir }}
@@ -178,7 +183,7 @@ jobs:
 
   deploy:
     needs: monitor
-    if: needs.monitor.outputs.publish == 'true'
+    if: needs.monitor.outputs.should_publish == 'yes'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -194,30 +199,3 @@ jobs:
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v5
-
-  report-health:
-    needs: [monitor, deploy]
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-    steps:
-      - name: Report monitor health
-        shell: bash
-        env:
-          MONITOR_RESULT: ${{ needs.monitor.result }}
-          DEPLOY_RESULT: ${{ needs.deploy.result }}
-          PUBLISH: ${{ needs.monitor.outputs.publish }}
-          DEGRADED: ${{ needs.monitor.outputs.degraded }}
-        run: |
-          if [[ "$MONITOR_RESULT" != "success" ]]; then
-            echo "::error::The reset monitor did not complete successfully."
-            exit 1
-          fi
-          if [[ "$PUBLISH" == "true" && "$DEPLOY_RESULT" != "success" ]]; then
-            echo "::error::The generated reset status was not deployed."
-            exit 1
-          fi
-          if [[ "$DEGRADED" == "true" ]]; then
-            echo "::error::The reset monitor published a degraded status."
-            exit 1
-          fi

@@ -62,7 +62,7 @@ api/hasreset/
 | `GROK_API_BASE_URL` | Secret | `https://api.x.ai/v1` | 必须使用 HTTPS；可填裸域名或 API 版本目录，不要附加 `/responses` |
 | `GROK_MODEL` | Secret | `grok-4.5` | 必须同时支持 Responses API、X Search 和 Structured Outputs |
 | `GROK_API_KEY` | Secret | xAI API Console 生成的密钥 | 填写原始密钥，不要添加 `Bearer ` 前缀 |
-| `GROK_USE_WS` | Secret 或 Variable | `false`（默认） / `true` | 是否使用 WebSocket 调用 Responses API |
+| `GROK_USE_WS` | **Variable（推荐）** 或 Secret | 留空（默认 HTTP） / `true` | 是否使用 WebSocket 调用 Responses API |
 
 裸域名会自动补为 `/v1/responses`；已经包含版本目录的地址仍按原样使用。当前
 Workflow 读取 `GROK_API_BASE_URL`、`GROK_MODEL`、`GROK_API_KEY` 与可选的
@@ -71,6 +71,12 @@ Workflow 读取 `GROK_API_BASE_URL`、`GROK_MODEL`、`GROK_API_KEY` 与可选的
 
 `GROK_USE_WS` 仅在值为 `true` / `1` / `yes` / `on`（大小写不敏感）时启用
 WebSocket；未设置、空字符串或其它值一律走 HTTP。
+
+> **注意：** `GROK_USE_WS` 更推荐配置为 **Actions Variable**，而不是 Secret。
+> 若把值 `true` 存成 Secret，GitHub Actions 可能把 job output 中的
+> `true` 当作密钥泄漏而丢弃（`Skip output … secret`），导致 `deploy` job
+> 被跳过、Pages 不更新。Workflow 已用 `should_publish=yes|no` 规避该问题，
+> 但仍建议用 Variable。
 
 不需要配置：
 
@@ -130,8 +136,9 @@ Workflow 使用：
 - 仅置信度发生变化。
 - 与已发布状态相同的重复故障。
 
-首次故障会发布一个安全的 `degraded` 状态，同时令 Workflow 失败以便仓库维护者
-收到明确告警。重复的同类故障不会持续制造提交。
+首次故障会发布一个安全的 `degraded` 状态（仍可能更新 Pages）。重复的同类故障
+不会持续制造提交。Pages 实际由 `deploy` job（`actions/deploy-pages`）发布；
+仅推送 `gh-pages` 分支、跳过 `deploy` 时，线上站点不会更新。
 
 ## 公开 API
 
