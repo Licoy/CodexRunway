@@ -12,8 +12,9 @@ Pages。
 
 ```mermaid
 flowchart LR
-    schedule["GitHub Actions<br/>每小时第 17 分钟"] --> grok["xAI Responses API<br/>X Search"]
-    grok --> verify["Schema、citation<br/>与 Post ID 校验"]
+    schedule["GitHub Actions<br/>每小时第 17 分钟"] --> recent["Grok 近 36h<br/>优先扫今日"]
+    recent --> backfill["缺今日 completed<br/>则再扫 72h"]
+    backfill --> verify["Schema、citation<br/>与 Post ID 校验"]
     verify --> state["事件合并与<br/>发布决策"]
     state --> branch["orphan gh-pages"]
     state --> pages["GitHub Pages artifact"]
@@ -22,14 +23,16 @@ flowchart LR
 
 服务遵循以下边界：
 
-- 每轮最多发起一次 Grok Responses 请求，不重试。
+- 默认 **双阶段** Grok 请求：先扫近 36 小时（抓 UTC 当天），若没有当天
+  `reset_completed` 再扫完整 72 小时；单次失败仍不重试。
 - **默认使用 HTTP** `POST /v1/responses`；仅当 `GROK_USE_WS=true` 时改用
   WebSocket `wss://…/v1/responses`（`response.create` + 等待
   `response.completed`）。
-- 仅启用 `x_search`，只允许检索 `@thsottiaux`。
-- 搜索最近 72 小时的 `@thsottiaux` 原帖与回复，最多 8 次 X Search 工具调用；优先覆盖 UTC 当天与回复。
+- 仅启用 `x_search`，只允许检索 `@thsottiaux`；`reasoning.effort=high`。
+- 近窗最多 10 次、全窗最多 8 次 X Search 工具调用；事件按 `announcedAt` 新→旧。
 - 明确区分已完成重置 / 计划重置；相对日期（明天、数小时内、31 号等）需解析为 ISO `effectiveAt`。
 - “I'm feeling like a limit reset / see you in a few hours” 记为 `reset_scheduled`，`effectiveAt` 默认公告后 3 小时，不是 `uncertain`。
+- 回复讨论下次重置日期（如 “I read your tweets…” + 线程中的 July 31）记为 `reset_scheduled`。
 - 长帖只要含明确“已重置”表述仍记为 `reset_completed`；同日 `uncertain` 不得覆盖已确认重置。
 - 兼容代理可将一次 X Search 展开为多个已完成的内部 X 搜索调用。
 - 兼容代理也可省略工具调用记录：非空事件须有同 Post ID 的 X citation（`thsottiaux` 或 `i/status`）；空事件可直接作为“无相关公告”。
@@ -100,7 +103,7 @@ WebSocket；未设置、空字符串或其它值一律走 HTTP。
 1. 将代码推送到仓库默认分支。
 2. 配置三个必需的 Repository Secrets（以及可选的 `GROK_USE_WS`）和上述仓库设置。
 3. 打开 **Actions → Update reset-today status → Run workflow**。
-4. 确认本次运行只产生一次 Grok 请求（HTTP 或 WebSocket，取决于 `GROK_USE_WS`）。
+4. 确认本次运行产生 1～2 次 Grok 请求（近窗优先；缺今日 completed 时再全窗补扫）。
 5. 检查 `gh-pages` 分支及以下地址：
    - 页面：`https://<owner>.github.io/<repository>/`
    - JSON：`https://<owner>.github.io/<repository>/api/status.json`

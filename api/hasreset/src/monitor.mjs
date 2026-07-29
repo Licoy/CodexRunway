@@ -28,7 +28,37 @@ export async function fetchGrokEvents({
     transport,
     timeoutMs,
   });
-  const request = buildGrokRequest({ model: configuration.model, now });
+
+  // Dual-pass: recent-first catches same-day resets that a single 72h search
+  // often ranks below older viral posts. Backfill the full window when needed.
+  const perCallTimeoutMs = Math.min(configuration.timeoutMs, 110_000);
+  const recentEvents = await runGrokSearch({
+    configuration,
+    now,
+    focus: "recent",
+    timeoutMs: perCallTimeoutMs,
+  });
+
+  let events = recentEvents;
+  if (needsFullWindowBackfill(recentEvents, now)) {
+    const fullEvents = await runGrokSearch({
+      configuration,
+      now,
+      focus: "full",
+      timeoutMs: perCallTimeoutMs,
+    });
+    events = mergeEventsByPostId(recentEvents, fullEvents);
+  }
+
+  return filterRecentEvents(events, now);
+}
+
+async function runGrokSearch({ configuration, now, focus, timeoutMs }) {
+  const request = buildGrokRequest({
+    model: configuration.model,
+    now,
+    focus,
+  });
 
   let payload;
   if (configuration.transport === "websocket") {
@@ -36,7 +66,7 @@ export async function fetchGrokEvents({
       url: configuration.wsURL,
       apiKey: configuration.apiKey,
       request,
-      timeoutMs: configuration.timeoutMs,
+      timeoutMs,
       openWebSocketImpl: configuration.openWebSocketImpl,
     });
   } else {
@@ -44,12 +74,70 @@ export async function fetchGrokEvents({
       url: configuration.httpURL,
       apiKey: configuration.apiKey,
       request,
-      timeoutMs: configuration.timeoutMs,
+      timeoutMs,
       fetchImpl: configuration.fetchImpl,
     });
   }
 
-  return filterRecentEvents(parseGrokResponse(payload), now);
+  return parseGrokResponse(payload);
+}
+
+/**
+ * Run a second full-window search when the recent pass lacks a same-UTC-day
+ * completed reset, or returned nothing usable.
+ */
+export function needsFullWindowBackfill(events, now = new Date()) {
+  if (!Array.isArray(events) || events.length === 0) return true;
+  const today = isoDateUTC(now);
+  return !events.some((event) => (
+    event?.kind === "reset_completed"
+    && typeof event.announcedAt === "string"
+    && event.announcedAt.slice(0, 10) === today
+  ));
+}
+
+export function mergeEventsByPostId(...groups) {
+  const byPostID = new Map();
+  for (const group of groups) {
+    if (!Array.isArray(group)) continue;
+    for (const event of group) {
+      const postId = event?.source?.postId;
+      if (typeof postId !== "string" || postId.length === 0) continue;
+      const existing = byPostID.get(postId);
+      if (!existing || preferEvent(event, existing)) {
+        byPostID.set(postId, event);
+      }
+    }
+  }
+  return [...byPostID.values()].sort(compareEventsNewestFirst);
+}
+
+function preferEvent(candidate, existing) {
+  // Prefer more decisive kinds, then higher confidence, then newer announcement.
+  const kindScore = (kind) => ({
+    reset_completed: 5,
+    reset_scheduled: 4,
+    banked_reset: 3,
+    limit_increase: 2,
+    uncertain: 1,
+  }[kind] ?? 0);
+  const kindDelta = kindScore(candidate.kind) - kindScore(existing.kind);
+  if (kindDelta !== 0) return kindDelta > 0;
+  if (candidate.confidence !== existing.confidence) {
+    return candidate.confidence > existing.confidence;
+  }
+  return compareEventsNewestFirst(candidate, existing) < 0;
+}
+
+function compareEventsNewestFirst(left, right) {
+  return right.announcedAt.localeCompare(left.announcedAt)
+    || right.source.postId.padStart(30, "0").localeCompare(
+      left.source.postId.padStart(30, "0"),
+    );
+}
+
+function isoDateUTC(value) {
+  return value.toISOString().slice(0, 10);
 }
 
 async function fetchViaWebSocket({

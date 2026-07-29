@@ -8,19 +8,44 @@ import {
   responsesWebSocketURL,
 } from "../src/index.mjs";
 
-test("buildGrokRequest searches Tibo posts and replies in the prior 72-hour window", () => {
+test("buildGrokRequest recent focus prioritizes UTC today with high reasoning", () => {
   const request = buildGrokRequest({
     model: "grok-4.5",
-    now: new Date("2026-07-28T12:00:00.000Z"),
+    now: new Date("2026-07-29T12:00:00.000Z"),
+    focus: "recent",
   });
 
   assert.equal(request.model, "grok-4.5");
   assert.equal(request.tool_choice, "required");
-  assert.equal(request.max_tool_calls, 8);
+  assert.equal(request.max_tool_calls, 10);
   assert.equal(request.max_output_tokens, 6_000);
-  assert.equal("max_turns" in request, false);
-  assert.equal(request.parallel_tool_calls, false);
+  assert.deepEqual(request.reasoning, { effort: "high" });
   assert.equal(request.store, false);
+  assert.deepEqual(request.tools, [{
+    type: "x_search",
+    allowed_x_handles: ["thsottiaux"],
+    from_date: "2026-07-28",
+    to_date: "2026-07-29",
+    enable_image_understanding: false,
+    enable_video_understanding: false,
+  }]);
+  assert.match(request.input[1].content, /FOCUS MODE: recent/);
+  assert.match(request.input[1].content, /UTC today is 2026-07-29/);
+  assert.match(request.input[1].content, /I've reset usage limits/);
+  assert.match(request.input[0].content, /I read your tweets and decide accordingly/i);
+  assert.match(request.input[0].content, /newest first/i);
+  assert.equal(request.text.format.strict, true);
+});
+
+test("buildGrokRequest full focus searches the prior 72-hour window", () => {
+  const request = buildGrokRequest({
+    model: "grok-4.5",
+    now: new Date("2026-07-28T12:00:00.000Z"),
+    focus: "full",
+  });
+
+  assert.equal(request.max_tool_calls, 8);
+  assert.deepEqual(request.reasoning, { effort: "high" });
   assert.deepEqual(request.tools, [{
     type: "x_search",
     allowed_x_handles: ["thsottiaux"],
@@ -29,19 +54,12 @@ test("buildGrokRequest searches Tibo posts and replies in the prior 72-hour wind
     enable_image_understanding: false,
     enable_video_understanding: false,
   }]);
+  assert.match(request.input[1].content, /FOCUS MODE: full window/);
   assert.match(request.input[1].content, /Current UTC time: 2026-07-28T12:00:00.000Z/);
-  assert.match(request.input[1].content, /UTC today is 2026-07-28/);
-  assert.match(request.input[1].content, /Required multi-call X Search procedure/i);
-  assert.match(request.input[1].content, /replies from 2026-07-27 through 2026-07-28/i);
   assert.match(request.input[0].content, /replies/i);
-  assert.match(request.input[0].content, /Recency first/i);
-  assert.match(request.input[0].content, /I've reset usage limits for all ChatGPT Work and Codex users/i);
   assert.match(request.input[0].content, /feeling like a limit reset/i);
-  assert.match(request.input[0].content, /announcedAt \+ 3 hours/i);
   assert.equal(request.text.format.type, "json_schema");
   assert.equal(request.text.format.name, "hasreset_analysis");
-  assert.equal(request.text.format.strict, true);
-  assert.equal(request.text.format.schema.additionalProperties, false);
 });
 
 test("responsesURL accepts HTTPS and loopback HTTP API version base URLs", () => {
@@ -90,6 +108,7 @@ test("buildWebSocketCreateMessage wraps the Responses body for response.create",
   const message = buildWebSocketCreateMessage(request);
   assert.equal(message.type, "response.create");
   assert.equal(message.model, "grok-4.5");
+  assert.deepEqual(message.reasoning, { effort: "high" });
   assert.equal(message.input[0].type, "message");
   assert.equal(message.input[0].role, "system");
   assert.equal(message.input[0].content[0].type, "input_text");

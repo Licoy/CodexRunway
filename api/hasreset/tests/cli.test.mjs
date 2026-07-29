@@ -16,6 +16,26 @@ const validResponse = JSON.parse(await readFile(
   "utf8",
 ));
 
+/** Fixture with a UTC-today completed reset so dual-pass stops after the recent pass. */
+function todayCompletedResponse(nowISO = "2026-07-29T10:00:00.000Z") {
+  const response = structuredClone(validResponse);
+  const analysis = {
+    events: [{
+      kind: "reset_completed",
+      announcedAt: nowISO,
+      effectiveAt: null,
+      plans: ["all"],
+      windows: ["weekly", "five_hour"],
+      postId: "200",
+      sourceUrl: "https://x.com/i/status/200",
+      confidence: 0.98,
+    }],
+  };
+  response.output[1].content[0].text = JSON.stringify(analysis);
+  response.citations = ["https://x.com/i/status/200"];
+  return response;
+}
+
 test("runCLI stages a safe first-run degraded site and returns exit code 2", async (context) => {
   const root = await mkdtemp(join(tmpdir(), "hasreset-cli-"));
   context.after(() => rm(root, { recursive: true, force: true }));
@@ -70,9 +90,10 @@ test("runCLI returns zero and avoids a same-day no-op publication", async (conte
     GROK_API_KEY: "test-secret",
   };
   let requestCount = 0;
+  const payload = todayCompletedResponse("2026-07-29T09:00:00.000Z");
   const fetchImpl = async () => {
     requestCount += 1;
-    return new Response(JSON.stringify(validResponse), { status: 200 });
+    return new Response(JSON.stringify(payload), { status: 200 });
   };
 
   const firstExit = await runCLI({
@@ -90,6 +111,7 @@ test("runCLI returns zero and avoids a same-day no-op publication", async (conte
 
   assert.equal(firstExit, 0);
   assert.equal(secondExit, 0);
+  // Dual-pass short-circuits after recent pass when UTC-today completed is found.
   assert.equal(requestCount, 2);
   assert.deepEqual(await readJSON(firstDecision), {
     publish: true,
@@ -148,7 +170,7 @@ test("runCLI uses WebSocket transport when GROK_USE_WS is true", async (context)
             for (const callback of listeners.get("message") ?? []) {
               callback(JSON.stringify({
                 type: "response.completed",
-                response: validResponse,
+                response: todayCompletedResponse("2026-07-29T09:00:00.000Z"),
               }));
             }
           });

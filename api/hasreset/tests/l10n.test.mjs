@@ -29,6 +29,23 @@ test("public page follows browser language priority and interpolates values", ()
   );
 });
 
+test("scope chip labels use plain language instead of raw enum values", () => {
+  const english = createTranslator("en");
+  const chinese = createTranslator("zh-CN");
+
+  assert.equal(english.text("windowUnknown"), "Window not specified");
+  assert.equal(english.text("windowFiveHour"), "5-hour window");
+  assert.equal(english.text("windowWeekly"), "Weekly limit");
+  assert.equal(english.text("planAll"), "All plans");
+  assert.equal(chinese.text("windowUnknown"), "窗口未指明");
+  assert.equal(chinese.text("windowFiveHour"), "5 小时窗口");
+  assert.equal(chinese.text("windowWeekly"), "周额度");
+  assert.equal(chinese.text("planAll"), "全部套餐");
+  assert.equal(chinese.text("planUnknown"), "套餐未指明");
+  assert.equal(chinese.text("chipWindow"), "额度窗口");
+  assert.equal(chinese.text("chipConfidence"), "置信度");
+});
+
 test("language helpers normalize and detect browser languages", () => {
   assert.equal(normalizeLanguage("zh-Hans-CN"), "zh-CN");
   assert.equal(normalizeLanguage("en-GB"), "en");
