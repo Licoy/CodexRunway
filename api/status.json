@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-29T13:36:31.105Z",
-  "lastSuccessfulCheckAt": "2026-07-29T13:36:31.105Z",
+  "generatedAt": "2026-07-29T15:19:15.325Z",
+  "lastSuccessfulCheckAt": "2026-07-29T15:19:15.325Z",
   "monitor": {
     "status": "ok",
     "errorCode": null
@@ -16,7 +16,7 @@
           "all"
         ],
         "windows": [
-          "unknown"
+          "weekly"
         ]
       },
       "source": {
@@ -60,7 +60,7 @@
           "team"
         ],
         "windows": [
-          "unknown"
+          "weekly"
         ]
       },
       "source": {
@@ -80,7 +80,7 @@
           "all"
         ],
         "windows": [
-          "unknown"
+          "weekly"
         ]
       },
       "source": {
