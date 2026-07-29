@@ -19,27 +19,54 @@
     <script type="module" src="./app.js"></script>
   </head>
   <body>
-    <main>
-      <header>
-        <p class="eyebrow" data-i18n="eyebrow"></p>
+    <div class="bg-grid" aria-hidden="true"></div>
+    <div class="bg-glow" aria-hidden="true"></div>
+
+    <main class="shell">
+      <header class="hero">
+        <div class="hero-top">
+          <span class="live-pill" id="live-pill">
+            <span class="live-dot" aria-hidden="true"></span>
+            <span data-i18n="liveLabel"></span>
+          </span>
+          <p class="eyebrow" data-i18n="eyebrow"></p>
+        </div>
         <h1 data-i18n="pageTitle"></h1>
         <p class="intro" data-i18n="intro"></p>
       </header>
 
-      <section class="status-card" aria-live="polite" aria-busy="true" id="status-card">
-        <div>
+      <section
+        class="status-panel"
+        aria-live="polite"
+        aria-busy="true"
+        id="status-card"
+        data-state="unknown"
+      >
+        <div class="status-panel-head">
           <p class="label" data-i18n="currentVerdict"></p>
-          <p class="status-value" id="status-value" data-i18n="loading"></p>
+          <span class="state-badge" id="state-badge" data-i18n="loading"></span>
         </div>
-        <span class="status-dot" id="status-dot" aria-hidden="true"></span>
+        <p class="status-value" id="status-value" data-i18n="loading"></p>
         <p class="status-detail" id="status-detail" data-i18n="loadingDetail"></p>
-        <p class="updated" id="updated"></p>
+        <div class="status-meta">
+          <span class="meta-chip" id="monitor-chip">
+            <span class="meta-key" data-i18n="monitorLabel"></span>
+            <span class="meta-val" id="monitor-value">—</span>
+          </span>
+          <span class="meta-chip" id="updated-chip">
+            <span class="meta-key" data-i18n="checkedLabel"></span>
+            <span class="meta-val" id="updated">—</span>
+          </span>
+        </div>
       </section>
 
       <section class="events-section" aria-labelledby="events-title">
         <div class="section-heading">
-          <h2 id="events-title" data-i18n="recentEvidence"></h2>
-          <a href="./api/status.json" data-i18n="viewJSON"></a>
+          <div>
+            <p class="section-kicker" data-i18n="evidenceKicker"></p>
+            <h2 id="events-title" data-i18n="recentEvidence"></h2>
+          </div>
+          <a class="json-link" href="./api/status.json" data-i18n="viewJSON"></a>
         </div>
         <ol class="events" id="events"></ol>
         <p class="empty" id="empty" data-i18n="emptyEvents" hidden></p>
