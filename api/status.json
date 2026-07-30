@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-30T00:37:07.304Z",
-  "lastSuccessfulCheckAt": "2026-07-30T00:37:07.304Z",
+  "generatedAt": "2026-07-30T06:11:43.804Z",
+  "lastSuccessfulCheckAt": "2026-07-30T06:11:43.804Z",
   "monitor": {
     "status": "ok",
     "errorCode": null
@@ -56,6 +56,7 @@
           "all"
         ],
         "windows": [
+          "five_hour",
           "weekly"
         ]
       },
