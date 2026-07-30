@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-30T15:34:59.389Z",
-  "lastSuccessfulCheckAt": "2026-07-30T15:34:59.389Z",
+  "generatedAt": "2026-07-30T16:02:21.568Z",
+  "lastSuccessfulCheckAt": "2026-07-30T16:02:21.568Z",
   "monitor": {
     "status": "ok",
     "errorCode": null
@@ -36,7 +36,7 @@
           "all"
         ],
         "windows": [
-          "weekly"
+          "unknown"
         ]
       },
       "source": {
@@ -44,7 +44,7 @@
         "postId": "2082341416681001277",
         "url": "https://x.com/thsottiaux/status/2082341416681001277"
       },
-      "confidence": 0.95,
+      "confidence": 0.86,
       "rationale": "Explicit Codex quota reset schedule."
     },
     {
@@ -64,7 +64,7 @@
         "postId": "2082340992871760182",
         "url": "https://x.com/thsottiaux/status/2082340992871760182"
       },
-      "confidence": 0.7,
+      "confidence": 0.9,
       "rationale": "Explicit Codex quota reset announcement."
     },
     {
@@ -76,6 +76,7 @@
           "all"
         ],
         "windows": [
+          "five_hour",
           "weekly"
         ]
       },
@@ -96,7 +97,7 @@
           "all"
         ],
         "windows": [
-          "weekly"
+          "unknown"
         ]
       },
       "source": {
@@ -116,7 +117,7 @@
           "all"
         ],
         "windows": [
-          "weekly"
+          "unknown"
         ]
       },
       "source": {
