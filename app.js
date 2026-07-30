@@ -16,13 +16,13 @@ const state = {
   feed: null,
   loadError: false,
   l10n: null,
+  countdownTimer: null,
 };
 
 const elements = {
   html: document.documentElement,
   card: document.querySelector("#status-card"),
   value: document.querySelector("#status-value"),
-  emoji: document.querySelector("#status-emoji"),
   badge: document.querySelector("#state-badge"),
   detail: document.querySelector("#status-detail"),
   updated: document.querySelector("#updated"),
@@ -32,12 +32,11 @@ const elements = {
   nextValue: document.querySelector("#next-value"),
   events: document.querySelector("#events"),
   empty: document.querySelector("#empty"),
-  livePill: document.querySelector("#live-pill"),
   langBtn: document.querySelector("#lang-btn"),
-  langEmoji: document.querySelector("#lang-emoji"),
+  langIcon: document.querySelector("#lang-icon"),
   langValue: document.querySelector("#lang-value"),
   themeBtn: document.querySelector("#theme-btn"),
-  themeEmoji: document.querySelector("#theme-emoji"),
+  themeIcon: document.querySelector("#theme-icon"),
   themeValue: document.querySelector("#theme-value"),
 };
 
@@ -48,6 +47,9 @@ function bootstrap() {
   applyLanguage(state.language);
   elements.langBtn?.addEventListener("click", cycleLanguage);
   elements.themeBtn?.addEventListener("click", cycleTheme);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") updateCountdowns();
+  });
   loadStatus();
 }
 
@@ -112,21 +114,21 @@ function updateControlLabels() {
   const theme = THEME_OPTIONS.find((item) => item.id === state.theme)
     ?? THEME_OPTIONS[0];
 
-  if (elements.langEmoji) elements.langEmoji.textContent = language.emoji;
+  if (elements.langIcon) elements.langIcon.className = `control-icon ${language.icon}`;
   if (elements.langValue) elements.langValue.textContent = language.label;
   if (elements.langBtn) {
     elements.langBtn.setAttribute(
       "aria-label",
-      `${l10n.text("langButtonAria")}: ${language.emoji} ${language.label}`,
+      `${l10n.text("langButtonAria")}: ${language.label}`,
     );
   }
 
-  if (elements.themeEmoji) elements.themeEmoji.textContent = theme.emoji;
+  if (elements.themeIcon) elements.themeIcon.className = `control-icon ${theme.icon}`;
   if (elements.themeValue) elements.themeValue.textContent = l10n.text(theme.labelKey);
   if (elements.themeBtn) {
     elements.themeBtn.setAttribute(
       "aria-label",
-      `${l10n.text("themeButtonAria")}: ${theme.emoji} ${l10n.text(theme.labelKey)}`,
+      `${l10n.text("themeButtonAria")}: ${l10n.text(theme.labelKey)}`,
     );
   }
 }
@@ -147,8 +149,7 @@ function renderFeed(feed, now) {
 
   const label = l10n.text(statusLabelKey(result.state));
   elements.value.textContent = label;
-  elements.badge.textContent = label;
-  elements.emoji.textContent = l10n.text(statusEmojiKey(result.state));
+  setConfidenceBadge(result.confidence, l10n);
   elements.detail.textContent = statusDetail(result, l10n);
   elements.updated.textContent = formatUpdatedShort(feed.lastSuccessfulCheckAt, l10n);
 
@@ -157,10 +158,6 @@ function renderFeed(feed, now) {
   elements.monitorValue.textContent = monitorStatus === "ok"
     ? l10n.text("monitorOk")
     : l10n.text("monitorDegraded");
-
-  if (elements.livePill) {
-    elements.livePill.hidden = monitorStatus !== "ok";
-  }
 
   const upcoming = result.reason === "scheduled" && result.scheduledAt
     ? { effectiveAt: result.scheduledAt }
@@ -174,16 +171,42 @@ function renderFeed(feed, now) {
     elements.nextValue.textContent = l10n.text("nextNone");
   }
 
-  renderEvents(Array.isArray(feed.events) ? feed.events : [], l10n);
+  renderEvents(Array.isArray(feed.events) ? feed.events : [], l10n, now);
 }
 
-function renderEvents(events, l10n) {
+function setConfidenceBadge(confidence, l10n) {
+  if (!elements.badge) return;
+  if (typeof confidence !== "number" || !Number.isFinite(confidence)) {
+    elements.badge.hidden = true;
+    elements.badge.replaceChildren();
+    elements.badge.textContent = "";
+    return;
+  }
+
+  const label = `${l10n.text("chipConfidence")} ${formatConfidence(confidence)}`.trim();
+  if (!label) {
+    elements.badge.hidden = true;
+    elements.badge.replaceChildren();
+    return;
+  }
+
+  elements.badge.hidden = false;
+  elements.badge.replaceChildren(
+    icon("czs-bar-chart-l"),
+    document.createTextNode(label),
+  );
+}
+
+function renderEvents(events, l10n, now = new Date()) {
   elements.events.replaceChildren();
   const ordered = sortEventsByNewest(Array.isArray(events) ? events : []);
   elements.empty.hidden = ordered.length !== 0;
 
   ordered.slice(0, 8).forEach((event, index) => {
     const item = document.createElement("li");
+    item.dataset.kind = event.kind || "uncertain";
+    const pendingSchedule = isPendingScheduled(event, now);
+    if (pendingSchedule) item.dataset.pending = "true";
 
     const indexEl = document.createElement("span");
     indexEl.className = "event-index";
@@ -198,11 +221,18 @@ function renderEvents(events, l10n) {
     const badge = document.createElement("span");
     badge.className = "kind-badge";
     badge.dataset.kind = event.kind || "uncertain";
-    badge.textContent = `${eventKindEmoji(event.kind)} ${l10n.text(eventLabelKey(event.kind))}`;
+    if (pendingSchedule) badge.dataset.pending = "true";
+    badge.append(
+      icon(eventKindIcon(event.kind)),
+      document.createTextNode(l10n.text(eventLabelKey(event.kind))),
+    );
 
     const time = document.createElement("time");
     time.dateTime = event.announcedAt;
-    time.textContent = formatDate(event.announcedAt, l10n);
+    time.append(
+      icon("czs-time-l"),
+      document.createTextNode(formatDate(event.announcedAt, l10n)),
+    );
 
     top.append(badge, time);
 
@@ -213,24 +243,55 @@ function renderEvents(events, l10n) {
     if (event.kind === "reset_scheduled" && event.effectiveAt) {
       const schedule = document.createElement("p");
       schedule.className = "schedule";
-      schedule.textContent = l10n.text("eventScheduledFor", {
-        date: formatDate(event.effectiveAt, l10n),
-      });
+      schedule.append(icon("czs-calendar-l"));
+
+      if (pendingSchedule) {
+        schedule.append(
+          document.createTextNode(`${l10n.text("eventScheduledForLabel")} `),
+        );
+        const when = document.createElement("strong");
+        when.className = "schedule-when";
+        when.textContent = formatDate(event.effectiveAt, l10n);
+        schedule.append(when);
+
+        const countdown = formatCountdown(event.effectiveAt, now, l10n);
+        if (countdown) {
+          const rel = document.createElement("span");
+          rel.className = "schedule-relative";
+          rel.dataset.effectiveAt = event.effectiveAt;
+          rel.textContent = ` (${countdown})`;
+          schedule.append(rel);
+        }
+      } else {
+        schedule.append(document.createTextNode(l10n.text("eventScheduledFor", {
+          date: formatDate(event.effectiveAt, l10n),
+        })));
+      }
+
       body.append(schedule);
     }
 
     const chips = document.createElement("div");
     chips.className = "event-chips";
     for (const plan of uniqueStrings(event?.scope?.plans)) {
-      chips.append(chip(formatPlanChip(plan, l10n), `plan-${plan}`));
+      chips.append(chip(
+        formatPlanChip(plan, l10n),
+        `plan-${plan}`,
+        "czs-tag-l",
+      ));
     }
     for (const windowName of uniqueStrings(event?.scope?.windows)) {
-      chips.append(chip(formatWindowChip(windowName, l10n), `window-${windowName}`));
+      chips.append(chip(
+        formatWindowChip(windowName, l10n),
+        `window-${windowName}`,
+        "czs-clock-l",
+      ));
     }
     if (typeof event.confidence === "number") {
       const confidence = chip(
         `${l10n.text("chipConfidence")} ${formatConfidence(event.confidence)}`,
         "confidence",
+        "czs-bar-chart-l",
       );
       confidence.classList.add("chip-confidence");
       chips.append(confidence);
@@ -243,6 +304,58 @@ function renderEvents(events, l10n) {
     item.append(indexEl, body);
     elements.events.append(item);
   });
+
+  syncCountdownTicker();
+}
+
+function syncCountdownTicker() {
+  const hasLive = document.querySelector(".schedule-relative[data-effective-at]");
+  if (!hasLive) {
+    stopCountdownTicker();
+    return;
+  }
+  if (state.countdownTimer == null) {
+    state.countdownTimer = setInterval(updateCountdowns, 1000);
+  }
+  updateCountdowns();
+}
+
+function stopCountdownTicker() {
+  if (state.countdownTimer != null) {
+    clearInterval(state.countdownTimer);
+    state.countdownTimer = null;
+  }
+}
+
+function updateCountdowns() {
+  const l10n = state.l10n;
+  if (!l10n) return;
+
+  const nodes = document.querySelectorAll(".schedule-relative[data-effective-at]");
+  if (nodes.length === 0) {
+    stopCountdownTicker();
+    return;
+  }
+
+  const now = new Date();
+  let stillPending = false;
+  for (const el of nodes) {
+    const text = formatCountdown(el.dataset.effectiveAt, now, l10n);
+    if (text) {
+      el.textContent = ` (${text})`;
+      el.hidden = false;
+      stillPending = true;
+    } else {
+      el.textContent = "";
+      el.hidden = true;
+    }
+  }
+
+  // Countdown hit zero: re-render so pending styles / next schedule refresh.
+  if (!stillPending && state.feed && !state.loadError) {
+    stopCountdownTicker();
+    render();
+  }
 }
 
 function sortEventsByNewest(events) {
@@ -302,11 +415,19 @@ function windowLabel(windowName, l10n) {
   }
 }
 
-function chip(text, kind = null) {
+function chip(text, kind = null, iconName = null) {
   const el = document.createElement("span");
   el.className = "chip";
   if (kind) el.dataset.kind = kind;
-  el.textContent = text;
+  if (iconName) el.append(icon(iconName));
+  el.append(document.createTextNode(text));
+  return el;
+}
+
+function icon(name) {
+  const el = document.createElement("i");
+  el.className = name;
+  el.setAttribute("aria-hidden", "true");
   return el;
 }
 
@@ -319,7 +440,10 @@ function safeSourceLink(value, l10n) {
     link.href = url.href;
     link.rel = "noopener noreferrer";
     link.target = "_blank";
-    link.textContent = `↗ ${l10n.text("sourceLink")}`;
+    link.append(
+      icon("czs-out-l"),
+      document.createTextNode(l10n.text("sourceLink")),
+    );
     return link;
   } catch {
     return null;
@@ -328,19 +452,17 @@ function safeSourceLink(value, l10n) {
 
 function renderUnavailable() {
   const l10n = state.l10n;
+  stopCountdownTicker();
   elements.card.dataset.state = "unknown";
   elements.card.setAttribute("aria-busy", "false");
-  const label = l10n.text("statusUnknown");
-  elements.value.textContent = label;
-  elements.badge.textContent = label;
-  elements.emoji.textContent = l10n.text("statusUnknownEmoji");
+  elements.value.textContent = l10n.text("statusUnknown");
+  setConfidenceBadge(null, l10n);
   elements.detail.textContent = l10n.text("statusReadFailed");
   elements.updated.textContent = "—";
   elements.monitorChip.dataset.monitor = "degraded";
   elements.monitorValue.textContent = l10n.text("monitorDegraded");
   elements.nextChip.dataset.hasNext = "false";
   elements.nextValue.textContent = l10n.text("nextNone");
-  if (elements.livePill) elements.livePill.hidden = true;
   elements.events.replaceChildren();
   elements.empty.hidden = false;
 }
@@ -388,6 +510,27 @@ function formatDate(value, l10n) {
     : date.toLocaleString(localeFor(state.language));
 }
 
+/**
+ * Live countdown in the browser's local timezone: "N小时N分钟N秒后" / "Nh Nm Ns later".
+ */
+function formatCountdown(value, now = new Date(), l10n = state.l10n) {
+  const target = new Date(value ?? "");
+  if (Number.isNaN(target.getTime()) || !l10n) return null;
+  const diffMs = target.getTime() - now.getTime();
+  if (diffMs <= 0) return null;
+
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return l10n.text("relativeCountdown", {
+    hours: String(hours),
+    minutes: String(minutes),
+    seconds: String(seconds),
+  });
+}
+
 function localeFor(language) {
   return language === "zh-CN" ? "zh-CN" : "en-US";
 }
@@ -402,14 +545,6 @@ function statusLabelKey(stateName) {
     no: "statusNo",
     unknown: "statusUnknown",
   }[stateName] ?? "statusUnknown";
-}
-
-function statusEmojiKey(stateName) {
-  return {
-    yes: "statusYesEmoji",
-    no: "statusNoEmoji",
-    unknown: "statusUnknownEmoji",
-  }[stateName] ?? "statusUnknownEmoji";
 }
 
 function statusDetail(result, l10n) {
@@ -440,14 +575,21 @@ function eventLabelKey(kind) {
   }[kind] ?? "eventFallback";
 }
 
-function eventKindEmoji(kind) {
+function eventKindIcon(kind) {
   return {
-    reset_completed: "⚡",
-    reset_scheduled: "📅",
-    banked_reset: "🏦",
-    limit_increase: "📈",
-    uncertain: "❔",
-  }[kind] ?? "•";
+    reset_completed: "czs-lightning",
+    reset_scheduled: "czs-calendar",
+    banked_reset: "czs-box",
+    limit_increase: "czs-bar-chart",
+    uncertain: "czs-warning-l",
+  }[kind] ?? "czs-label-info-l";
+}
+
+/** Scheduled reset that has not become effective yet. */
+function isPendingScheduled(event, now = new Date()) {
+  if (event?.kind !== "reset_scheduled") return false;
+  const when = new Date(event.effectiveAt ?? "");
+  return !Number.isNaN(when.getTime()) && when.getTime() > now.getTime();
 }
 
 function rationaleKey(kind) {

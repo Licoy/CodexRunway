@@ -1,0 +1,30 @@
+{
+  "name": "Codex Runway Reset Watch",
+  "short_name": "Codex Reset",
+  "description": "Unofficial live status for whether Codex quota has reset today.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#111827",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "./favicon-32.png",
+      "type": "image/png",
+      "sizes": "32x32",
+      "purpose": "any"
+    },
+    {
+      "src": "./apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180",
+      "purpose": "any"
+    },
+    {
+      "src": "./og-image.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    }
+  ]
+}
