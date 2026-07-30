@@ -12,17 +12,25 @@ export function classifyStatus(feed, now = new Date()) {
   // Confirmed same-day resets win over uncertain commentary/replies.
   const reset = events.find((event) => isEffectiveResetToday(event, now));
   if (reset) {
-    return status("yes", "reset", reset.kind);
+    return status("yes", "reset", reset.kind, null, confidenceOf(reset));
   }
-  if (events.some((event) => (
+
+  const uncertain = events.find((event) => (
     event?.kind === "uncertain" && isSameLocalDay(event.announcedAt, now)
-  ))) {
-    return status("unknown", "uncertain");
+  ));
+  if (uncertain) {
+    return status("unknown", "uncertain", "uncertain", null, confidenceOf(uncertain));
   }
 
   const upcoming = nextScheduledReset(events, now);
   if (upcoming) {
-    return status("no", "scheduled", "reset_scheduled", upcoming.effectiveAt);
+    return status(
+      "no",
+      "scheduled",
+      "reset_scheduled",
+      upcoming.effectiveAt,
+      confidenceOf(upcoming.event),
+    );
   }
   return status("no", "none");
 }
@@ -59,6 +67,12 @@ function isSameLocalDay(value, now) {
     && date.getDate() === now.getDate();
 }
 
-function status(state, reason, eventKind = null, scheduledAt = null) {
-  return { state, reason, eventKind, scheduledAt };
+function status(state, reason, eventKind = null, scheduledAt = null, confidence = null) {
+  return { state, reason, eventKind, scheduledAt, confidence };
+}
+
+function confidenceOf(event) {
+  return typeof event?.confidence === "number" && Number.isFinite(event.confidence)
+    ? event.confidence
+    : null;
 }

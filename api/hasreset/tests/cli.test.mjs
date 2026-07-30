@@ -101,7 +101,7 @@ test("runCLI stages a safe first-run degraded site and returns exit code 2", asy
   assert.deepEqual(status.events, []);
   await Promise.all([
     access(join(outputDir, ".nojekyll")),
-    access(join(outputDir, "favicon.svg")),
+    access(join(outputDir, "favicon-32.png")),
     access(join(outputDir, "index.html")),
     access(join(outputDir, "app.js")),
     access(join(outputDir, "l10n.js")),
