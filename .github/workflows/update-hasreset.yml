@@ -162,7 +162,8 @@ jobs:
           OUTPUT_DIR: ${{ steps.paths.outputs.output_dir }}
         run: |
           test -f "$OUTPUT_DIR/.nojekyll"
-          test -f "$OUTPUT_DIR/favicon.svg"
+          test -f "$OUTPUT_DIR/favicon-16.png"
+          test -f "$OUTPUT_DIR/favicon-32.png"
           test -f "$OUTPUT_DIR/index.html"
           test -f "$OUTPUT_DIR/app.js"
           test -f "$OUTPUT_DIR/l10n.js"

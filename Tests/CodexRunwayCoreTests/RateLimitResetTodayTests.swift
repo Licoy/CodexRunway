@@ -109,7 +109,8 @@ struct RateLimitResetTodayTests {
         #expect(snapshot.state == .yes)
         #expect(snapshot.primaryEvidenceEvent(now: now)?.source.postID == "2082317452755751098")
         #expect(snapshot.nextScheduledReset(now: now)?.event.source.postID == "2082341416681001277")
-        #expect(snapshot.evidenceURL?.absoluteString.contains("2082317452755751098") == true)
+        #expect(
+            snapshot.evidenceURL(now: now)?.absoluteString.contains("2082317452755751098") == true)
     }
 
     @Test("decodes the complete API v1 event")
@@ -161,7 +162,7 @@ struct RateLimitResetTodayTests {
         #expect(
             snapshot.evidenceLine(l10n: L10n(language: .simplifiedChinese))
                 == "发现明确的 Codex 配额重置公告。")
-        #expect(snapshot.evidenceURL == event.source.url)
+        #expect(snapshot.evidenceURL(now: now) == event.source.url)
     }
 
     @Test("completed reset is evaluated using the injected local calendar day")

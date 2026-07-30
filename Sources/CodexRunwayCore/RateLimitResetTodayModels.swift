@@ -170,8 +170,12 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         }
     }
 
-    public var evidenceURL: URL? {
-        primaryEvidenceEvent()?.source.url ?? latestEvent?.source.url
+    public func evidenceURL(
+        now: Date = Date(),
+        calendar: Calendar = .current) -> URL?
+    {
+        primaryEvidenceEvent(now: now, calendar: calendar)?.source.url
+            ?? latestEvent?.source.url
     }
 
     /// Maps the event kind to app-owned copy; feed text is never shown directly.

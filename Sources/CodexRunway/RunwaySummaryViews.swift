@@ -461,13 +461,13 @@ struct RateLimitResetTodayView: View {
 
             Spacer(minLength: 4)
 
-            if snapshot?.evidenceURL != nil {
+            if snapshot?.evidenceURL() != nil {
                 Image(systemName: "arrow.up.right")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
         }
-        if let url = snapshot?.evidenceURL, let onOpenEvidence {
+        if let url = snapshot?.evidenceURL(), let onOpenEvidence {
             EvidenceRowButton(
                 action: { onOpenEvidence(url) },
                 help: l10n.text(.rateLimitResetTodayOpenEvidence))
@@ -519,7 +519,7 @@ struct RateLimitResetTodayView: View {
     }
 
     private var hasEvidenceRow: Bool {
-        snapshot?.evidenceURL != nil || snapshot?.evidenceLine(l10n: l10n) != nil
+        snapshot?.evidenceURL() != nil || snapshot?.evidenceLine(l10n: l10n) != nil
     }
 
     private var evidenceLineText: String {
