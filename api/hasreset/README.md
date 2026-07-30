@@ -12,7 +12,7 @@ Pages。
 
 ```mermaid
 flowchart LR
-    schedule["GitHub Actions<br/>每小时第 17 分钟"] --> discover["Grok discovery<br/>x_search + web_search"]
+    schedule["GitHub Actions<br/>:13/:43 槽 · 每 UTC 小时最多一次"] --> discover["Grok discovery<br/>x_search + web_search"]
     discover --> replies["补充计划类回复检索"]
     replies --> classify["Structured 分类<br/>无工具"]
     classify --> verify["Schema、citation<br/>与 Post ID 校验"]
@@ -123,10 +123,12 @@ Swift 客户端默认读取 CDN 地址。Fork 如果要改用自己的状态源�
 
 Workflow 使用：
 
-- cron：`17 * * * *`
-- 手动触发：`workflow_dispatch`
-- 固定 concurrency group：`update-hasreset`
-- 单个 job 超时：最多 5 分钟
+- cron：`13 * * * *` 与 `43 * * * *`（同一 UTC 小时的主槽 + 备份槽，错开整点高峰）
+- 小时节流：自动触发（`schedule` / `repository_dispatch`）在同一 UTC 自然小时内，若已有成功 run 则直接跳过，保证每小时最多完整跑一次；首槽失败不计入，备份槽仍可重试
+- 手动触发：`workflow_dispatch`（不受小时节流限制）
+- 外部保活：`repository_dispatch`（`event_type=update-hasreset`）
+- 固定 concurrency group：`update-hasreset`（重叠触发串行，不取消进行中的 run）
+- monitor job 超时：最多 12 分钟；deploy job 最多 5 分钟
 
 以下情况会发布：
 
@@ -300,8 +302,9 @@ decision 文件严格包含：
 - Actions 只承担低频定时分析和静态发布，不作为按请求运行的 serverless 后端。
 - 不要直接提高到 5/15 分钟轮询，也不要在未重新评估条款的情况下商业化或改造成
   通用 API。
-- GitHub schedule 可能延迟、丢失运行，或因公共仓库长期无活动被停用；客户端的
-  30 小时 stale 判断和手动触发是必要的故障边界。
+- GitHub schedule 可能延迟、丢失运行，或因公共仓库长期无活动被停用；双 cron
+  与可选的 `repository_dispatch` 只能降低空窗概率，不能保证准时。客户端的
+  30 小时 stale 判断和手动触发仍是必要的故障边界。
 
 扩大频率、数据来源或服务用途前，应重新核对 GitHub Actions、GitHub Pages 和
 xAI API 的现行条款。需要正式 safe harbor 时，应向相应平台支持渠道取得书面

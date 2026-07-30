@@ -2,13 +2,22 @@ name: Update reset-today status
 
 on:
   schedule:
-    - cron: "17 * * * *"
+    # GitHub does not guarantee schedule delivery. High load (especially near the
+    # top of each hour) can delay runs by tens of minutes or drop them entirely.
+    # Two off-hour slots are backups for the same UTC hour; the throttle step
+    # below ensures at most one successful automated run per UTC hour.
+    - cron: "13 * * * *"
+    - cron: "43 * * * *"
   workflow_dispatch:
     inputs:
       force_deploy:
         description: Redeploy GitHub Pages even if the monitor decided not to publish
         type: boolean
         default: true
+  # Optional external keepalive (cron-job.org, etc.) when GitHub drops schedules:
+  # POST /repos/{owner}/{repo}/dispatches  {"event_type":"update-hasreset"}
+  repository_dispatch:
+    types: [update-hasreset]
 
 permissions:
   contents: read
@@ -24,22 +33,82 @@ jobs:
     timeout-minutes: 12
     permissions:
       contents: write
+      actions: read
     # Use yes/no (not true/false). Values like "true" collide with secrets such as
     # GROK_USE_WS=true and get stripped from job outputs ("Skip output … secret").
     outputs:
       should_deploy: ${{ steps.decision.outputs.should_deploy }}
     steps:
+      # Dual cron is for delivery redundancy, not double polling. Skip automated
+      # triggers when this workflow already completed successfully earlier in the
+      # same UTC hour. workflow_dispatch always proceeds. Failed first slots do
+      # not count, so the :43 backup can still retry.
+      - name: Limit automated runs to once per UTC hour
+        id: throttle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "skip=no" >> "$GITHUB_OUTPUT"
+            echo "workflow_dispatch bypasses the hourly throttle."
+            exit 0
+          fi
+
+          hour_start="$(date -u +%Y-%m-%dT%H:00:00Z)"
+          echo "UTC hour window: ${hour_start} .. +1h (run_id=${RUN_ID})"
+
+          set +e
+          payload="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/update-hasreset.yml/runs?per_page=30")"
+          api_status=$?
+          set -e
+
+          if [[ "$api_status" -ne 0 || -z "$payload" ]]; then
+            echo "::warning::Could not list prior workflow runs; continuing without throttle."
+            echo "skip=no" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          count="$(
+            printf '%s' "$payload" | jq --arg start "$hour_start" --argjson me "$RUN_ID" '
+              [
+                .workflow_runs[]
+                | select(.id != $me)
+                | select(.status == "completed")
+                | select(.conclusion == "success")
+                | select(.run_started_at >= $start)
+              ]
+              | length
+            '
+          )"
+
+          if [[ "$count" -gt 0 ]]; then
+            echo "skip=yes" >> "$GITHUB_OUTPUT"
+            echo "Found ${count} successful run(s) already started this UTC hour — skipping."
+          else
+            echo "skip=no" >> "$GITHUB_OUTPUT"
+            echo "No successful run yet this UTC hour — continuing."
+          fi
+
       - uses: actions/checkout@v7
+        if: steps.throttle.outputs.skip != 'yes'
         with:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
 
       - uses: actions/setup-node@v7
+        if: steps.throttle.outputs.skip != 'yes'
         with:
           node-version: "24"
 
       - name: Prepare Pages state
         id: paths
+        if: steps.throttle.outputs.skip != 'yes'
         shell: bash
         run: |
           previous_dir="${RUNNER_TEMP}/hasreset-previous"
@@ -75,6 +144,7 @@ jobs:
 
       - name: Run reset monitor
         id: monitor
+        if: steps.throttle.outputs.skip != 'yes'
         shell: bash
         env:
           GROK_API_BASE_URL: ${{ secrets.GROK_API_BASE_URL }}
@@ -94,6 +164,7 @@ jobs:
 
       - name: Validate publish decision
         id: decision
+        if: steps.throttle.outputs.skip != 'yes'
         shell: bash
         env:
           DECISION_FILE: ${{ steps.paths.outputs.decision_file }}
@@ -156,7 +227,7 @@ jobs:
           echo "decision_reason=$reason publish=$publish deploy=$should_deploy force=$FORCE_DEPLOY"
 
       - name: Validate generated site
-        if: steps.decision.outputs.should_deploy == 'yes'
+        if: steps.throttle.outputs.skip != 'yes' && steps.decision.outputs.should_deploy == 'yes'
         shell: bash
         env:
           OUTPUT_DIR: ${{ steps.paths.outputs.output_dir }}
@@ -171,13 +242,13 @@ jobs:
           test -f "$OUTPUT_DIR/api/status.json"
 
       - name: Upload Pages artifact
-        if: steps.decision.outputs.should_deploy == 'yes'
+        if: steps.throttle.outputs.skip != 'yes' && steps.decision.outputs.should_deploy == 'yes'
         uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ steps.paths.outputs.output_dir }}
 
       - name: Publish gh-pages state
-        if: steps.decision.outputs.should_update_branch == 'yes'
+        if: steps.throttle.outputs.skip != 'yes' && steps.decision.outputs.should_update_branch == 'yes'
         shell: bash
         env:
           OUTPUT_DIR: ${{ steps.paths.outputs.output_dir }}

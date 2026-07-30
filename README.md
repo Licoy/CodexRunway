@@ -116,7 +116,7 @@ swift build -c release
 3. 在 **Settings > Pages** 中把 Source 设为 **GitHub Actions**。
 4. 手动运行一次 **Update reset-today status** workflow 完成首次发布，并检查 Pages 页面和 `api/status.json`。
 
-workflow 每小时第 17 分钟运行一次，每轮最多发起一次 Grok 请求，不重试；只有状态变化或每日心跳时才更新 orphan `gh-pages` 分支并部署 Pages。GitHub 的定时任务不是实时调度，可能延迟、丢失运行，或因公共仓库长期无活动而停用，可用 `workflow_dispatch` 手动补跑。
+workflow 在 UTC 每小时第 13 / 43 分钟各有一个触发槽（主槽 + 备份，错开整点高峰）；同一 UTC 小时内若已有成功 run，后续自动触发会跳过，因此完整监控每小时最多一次。不重试失败的上游请求；只有状态变化或每日心跳时才更新 orphan `gh-pages` 分支并部署 Pages。GitHub 的定时任务不是实时调度，仍可能延迟或丢失；也可用 `workflow_dispatch` 手动补跑，或用外部 cron 发 `repository_dispatch`（`event_type=update-hasreset`）保活。
 
 此设计将 Actions 限制为低频、低负载的项目静态内容发布，不把它作为按请求执行的 serverless 服务。不要直接改成 5/15 分钟轮询、商业服务或通用 API；扩大频率或用途前应重新核对 GitHub 的 [Actions 附加条款](https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features#actions) 与 [Pages 限制](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)，必要时联系 GitHub Support。
 
