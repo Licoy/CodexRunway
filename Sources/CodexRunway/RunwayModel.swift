@@ -1641,7 +1641,7 @@ final class RunwayModel: ObservableObject {
         if let secondary = quota.secondary {
             quotaLines.append(DetailLine(title: l10n.text(.weeklyUsage), value: windowText(secondary, now: quota.updatedAt)))
         }
-        for extra in quota.additionalWindows {
+        for extra in visibleAdditionalQuotaWindows(from: quota) {
             quotaLines.append(DetailLine(title: extra.name, value: windowText(extra.window, now: quota.updatedAt)))
         }
         if let balance = quota.creditsBalance {
@@ -2029,10 +2029,14 @@ final class RunwayModel: ObservableObject {
         if let secondary = quota.secondary {
             meters.append(QuotaMeter(title: l10n.text(.weeklyUsage), window: secondary, now: quota.updatedAt, markerPercents: [20, 50, 80]))
         }
-        meters.append(contentsOf: quota.additionalWindows.map {
+        meters.append(contentsOf: visibleAdditionalQuotaWindows(from: quota).map {
             QuotaMeter(title: $0.name, window: $0.window, now: quota.updatedAt, markerPercents: [20, 50, 80])
         })
         return meters
+    }
+
+    private func visibleAdditionalQuotaWindows(from quota: QuotaSnapshot) -> [NamedRateWindow] {
+        settings.preferences.showsModelSpecificQuotaUsage ? quota.additionalWindows : []
     }
 
     private func quotaWindowTitle(_ window: RateWindow) -> String {

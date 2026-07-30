@@ -108,6 +108,32 @@ struct PreferencesTests {
         #expect(preferences.showsTokenUsageHeatmap)
     }
 
+    @Test("model-specific quota usage defaults off and persists opt-in")
+    func modelSpecificQuotaUsagePreference() throws {
+        #expect(RunwayPreferences().showsModelSpecificQuotaUsage == false)
+
+        let oldData = """
+        {
+          "language": "english",
+          "appearance": "dark",
+          "refreshIntervalSeconds": 300
+        }
+        """.data(using: .utf8)!
+        let oldPreferences = try JSONDecoder().decode(RunwayPreferences.self, from: oldData)
+        #expect(oldPreferences.showsModelSpecificQuotaUsage == false)
+
+        let suiteName = "CodexRunwayModelQuotaPreferences-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = PreferencesStore(defaults: defaults)
+        var optedIn = RunwayPreferences()
+        optedIn.showsModelSpecificQuotaUsage = true
+
+        store.save(optedIn)
+
+        #expect(store.load().showsModelSpecificQuotaUsage)
+    }
+
     @Test("old preferences default token usage heatmap on")
     func oldPreferencesDefaultTokenUsageHeatmap() throws {
         let data = """

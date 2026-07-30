@@ -102,6 +102,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case general
     case hours
     case modelBreakdown
+    case modelSpecificQuotaUsageDescription
     case noModelCostData
     case nonCachedInput
     case inputShort
@@ -248,6 +249,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case selfCheck
     case showDetails
     case showCostSummary
+    case showModelSpecificQuotaUsage
     case showRateLimitResetToday
     case showRecentSessions
     case showSessionRepairSummary

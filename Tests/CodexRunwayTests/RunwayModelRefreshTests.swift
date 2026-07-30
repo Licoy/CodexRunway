@@ -574,6 +574,46 @@ struct RunwayModelRefreshTests {
         #expect(fiveHourModel.quotaMeters.first?.title == fiveHourSettings.l10n.text(.fiveHourUsage))
     }
 
+    @Test("model-specific quota usage is hidden until opted in")
+    func modelSpecificQuotaUsageIsOptIn() async throws {
+        let modelTitle = "GPT-5.3-Codex-Spark"
+        let quota = Self.quotaSnapshot(additionalWindows: [
+            NamedRateWindow(
+                name: modelTitle,
+                window: RateWindow(
+                    usedPercent: 0,
+                    windowMinutes: 10_080,
+                    resetsAt: Date(timeIntervalSince1970: 1_783_314_000))),
+        ])
+
+        let defaultSettings = RunwaySettings(store: PreferencesStore(defaults: scopedDefaults()))
+        let defaultModel = makeModel(
+            settings: defaultSettings,
+            services: Self.costRangeServices(quota: quota, recorder: CostBatchRecorder()))
+        defaultModel.refreshQuota()
+        try await waitForQuota(in: defaultModel)
+
+        #expect(defaultModel.quotaMeters.map(\.title) == [
+            defaultSettings.l10n.text(.fiveHourUsage),
+            defaultSettings.l10n.text(.weeklyUsage),
+        ])
+        #expect(!defaultModel.quotaLines.contains { $0.title == modelTitle })
+
+        let optedInDefaults = scopedDefaults()
+        var optedInPreferences = RunwayPreferences()
+        optedInPreferences.showsModelSpecificQuotaUsage = true
+        PreferencesStore(defaults: optedInDefaults).save(optedInPreferences)
+        let optedInSettings = RunwaySettings(store: PreferencesStore(defaults: optedInDefaults))
+        let optedInModel = makeModel(
+            settings: optedInSettings,
+            services: Self.costRangeServices(quota: quota, recorder: CostBatchRecorder()))
+        optedInModel.refreshQuota()
+        try await waitForQuota(in: optedInModel)
+
+        #expect(optedInModel.quotaMeters.contains { $0.title == modelTitle })
+        #expect(optedInModel.quotaLines.contains { $0.title == modelTitle })
+    }
+
     private func scopedDefaults() -> UserDefaults {
         let suite = "codex-runway-refresh-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -662,13 +702,17 @@ struct RunwayModelRefreshTests {
         Issue.record("Timed out waiting for token heatmap refresh")
     }
 
-    nonisolated private static func quotaSnapshot(primaryMinutes: Int = 300, secondaryReset: Date? = nil) -> QuotaSnapshot {
+    nonisolated private static func quotaSnapshot(
+        primaryMinutes: Int = 300,
+        secondaryReset: Date? = nil,
+        additionalWindows: [NamedRateWindow] = []) -> QuotaSnapshot
+    {
         let now = Date(timeIntervalSince1970: 1_782_710_000)
         return QuotaSnapshot(
             plan: "pro",
             primary: RateWindow(usedPercent: 20, windowMinutes: primaryMinutes, resetsAt: now.addingTimeInterval(3_600)),
             secondary: RateWindow(usedPercent: 30, windowMinutes: 10_080, resetsAt: secondaryReset ?? now.addingTimeInterval(10_080 * 60)),
-            additionalWindows: [],
+            additionalWindows: additionalWindows,
             creditsBalance: nil,
             updatedAt: now)
     }

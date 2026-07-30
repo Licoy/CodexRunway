@@ -149,6 +149,10 @@ struct ControlPanelView: View {
                     }
                 }
                 PreferenceToggleRow(
+                    title: l10n.text(.showModelSpecificQuotaUsage),
+                    subtitle: l10n.text(.modelSpecificQuotaUsageDescription),
+                    binding: modelSpecificQuotaUsageBinding)
+                PreferenceToggleRow(
                     title: l10n.text(.showTokenUsageHeatmap),
                     subtitle: l10n.text(.tokenUsageHeatmapDescription),
                     binding: tokenUsageHeatmapBinding)
@@ -314,6 +318,12 @@ struct ControlPanelView: View {
 
     private var costSummaryBinding: Binding<Bool> {
         Binding(get: { settings.preferences.showsCostSummary }, set: { settings.updateShowsCostSummary($0) })
+    }
+
+    private var modelSpecificQuotaUsageBinding: Binding<Bool> {
+        Binding(
+            get: { settings.preferences.showsModelSpecificQuotaUsage },
+            set: { settings.updateShowsModelSpecificQuotaUsage($0) })
     }
 
     private var tokenUsageHeatmapBinding: Binding<Bool> {

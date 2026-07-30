@@ -337,7 +337,7 @@ struct RateLimitResetTodayView: View {
 
     /// Large answer on the left, detail on the right — time/countdown stay caption-sized.
     private func hero(now: Date) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             Text(heroTitle(now: now))
                 .font(.system(size: 28, weight: .semibold, design: .rounded))
                 .foregroundStyle(heroColor(now: now))
