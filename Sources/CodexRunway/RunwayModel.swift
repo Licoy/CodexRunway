@@ -2030,7 +2030,12 @@ final class RunwayModel: ObservableObject {
             meters.append(QuotaMeter(title: l10n.text(.weeklyUsage), window: secondary, now: quota.updatedAt, markerPercents: [20, 50, 80]))
         }
         meters.append(contentsOf: visibleAdditionalQuotaWindows(from: quota).map {
-            QuotaMeter(title: $0.name, window: $0.window, now: quota.updatedAt, markerPercents: [20, 50, 80])
+            QuotaMeter(
+                title: $0.name,
+                window: $0.window,
+                now: quota.updatedAt,
+                markerPercents: [20, 50, 80],
+                source: .modelSpecific)
         })
         return meters
     }

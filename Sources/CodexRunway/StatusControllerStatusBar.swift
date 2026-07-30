@@ -18,16 +18,22 @@ extension StatusController {
     }
 
     func updateStatusBarView() {
-        let didChange = statusBarView.update(
-            style: settings.preferences.statusBarDisplayStyle,
-            metersDetailStyle: settings.preferences.statusBarMetersDetailStyle,
-            batteryScope: settings.preferences.statusBarBatteryScope,
-            batteryDetailStyle: settings.preferences.statusBarBatteryDetailStyle,
-            language: settings.l10n.language,
-            text: model.statusText,
-            meters: model.quotaMeters)
+        let state = StatusBarContentState(
+            configuration: StatusBarContentState.Configuration(
+                preferences: settings.preferences,
+                language: settings.l10n.language),
+            content: StatusBarContentState.Content(
+                text: model.statusText,
+                meters: model.quotaMeters,
+                displayMinute: Int(Date().timeIntervalSince1970 / 60)))
+        let didChange = statusBarView.update(state)
         guard didChange else { return }
         statusItem.length = statusBarView.preferredWidth
-        statusItem.button?.toolTip = "Codex Runway · \(model.statusText)"
+        let quotaDetails = model.quotaMeters
+            .map { "\($0.title): \($0.remainingPercent)%" }
+            .joined(separator: " · ")
+        statusItem.button?.toolTip = quotaDetails.isEmpty
+            ? "Codex Runway · \(model.statusText)"
+            : "Codex Runway · \(model.statusText)\n\(quotaDetails)"
     }
 }

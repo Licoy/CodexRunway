@@ -597,6 +597,7 @@ struct RunwayModelRefreshTests {
             defaultSettings.l10n.text(.fiveHourUsage),
             defaultSettings.l10n.text(.weeklyUsage),
         ])
+        #expect(defaultModel.quotaMeters.allSatisfy { $0.source == .standard })
         #expect(!defaultModel.quotaLines.contains { $0.title == modelTitle })
 
         let optedInDefaults = scopedDefaults()
@@ -610,8 +611,20 @@ struct RunwayModelRefreshTests {
         optedInModel.refreshQuota()
         try await waitForQuota(in: optedInModel)
 
-        #expect(optedInModel.quotaMeters.contains { $0.title == modelTitle })
+        #expect(optedInModel.quotaMeters.contains {
+            $0.title == modelTitle && $0.source == .modelSpecific
+        })
         #expect(optedInModel.quotaLines.contains { $0.title == modelTitle })
+
+        optedInSettings.updateShowsModelSpecificQuotaUsage(false)
+        optedInModel.relabel()
+        #expect(!optedInModel.quotaMeters.contains { $0.title == modelTitle })
+
+        optedInSettings.updateShowsModelSpecificQuotaUsage(true)
+        optedInModel.relabel()
+        #expect(optedInModel.quotaMeters.contains {
+            $0.title == modelTitle && $0.source == .modelSpecific
+        })
     }
 
     private func scopedDefaults() -> UserDefaults {

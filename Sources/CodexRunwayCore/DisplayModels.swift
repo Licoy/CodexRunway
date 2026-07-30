@@ -6,9 +6,16 @@ public enum QuotaHealth: Sendable, Equatable {
     case red
 }
 
+public enum QuotaMeterSource: Sendable, Equatable {
+    case standard
+    case modelSpecific
+}
+
 public struct QuotaMeter: Sendable, Equatable, Identifiable {
     public var id: String { title }
     public var title: String
+    public var windowMinutes: Int?
+    public var source: QuotaMeterSource
     public var remainingPercent: Int
     public var usedPercent: Int
     public var resetsAt: Date?
@@ -17,8 +24,16 @@ public struct QuotaMeter: Sendable, Equatable, Identifiable {
     public var markerPercents: [Int]
     public var projection: QuotaBurnProjection?
 
-    public init(title: String, window: RateWindow, now: Date = Date(), markerPercents: [Int] = []) {
+    public init(
+        title: String,
+        window: RateWindow,
+        now: Date = Date(),
+        markerPercents: [Int] = [],
+        source: QuotaMeterSource = .standard)
+    {
         self.title = title
+        self.windowMinutes = window.windowMinutes
+        self.source = source
         self.usedPercent = max(0, min(100, window.usedPercent))
         self.remainingPercent = max(0, 100 - usedPercent)
         self.resetsAt = window.resetsAt

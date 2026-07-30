@@ -2,56 +2,27 @@ import AppKit
 import CodexRunwayCore
 
 final class StatusBarContentView: NSView {
-    private var style = StatusBarDisplayStyle.countdown
-    private var metersDetailStyle = StatusBarMetersDetailStyle.remainingPercent
-    private var batteryScope = StatusBarBatteryScope.fiveHour
-    private var batteryDetailStyle = StatusBarBatteryDetailStyle.countdown
-    private var language = ResolvedLanguage.english
-    private var text = ""
-    private var meters: [QuotaMeter] = []
+    private var state = StatusBarContentState.placeholder
+    private var hasUpdated = false
+
+    private var layout: StatusBarContentLayout {
+        StatusBarContentLayout(state: state)
+    }
+
+    var renderPlan: StatusBarRenderPlan {
+        layout.renderPlan
+    }
 
     var preferredWidth: CGFloat {
-        switch style {
-        case .countdown:
-            return min(180, max(42, textWidth(text, font: countdownFont) + 14))
-        case .battery:
-            return batteryScope == .both
-                ? min(146, max(88, batteryTextWidth + 38))
-                : min(150, max(70, batteryTextWidth + 28))
-        case .meters:
-            return min(156, max(96, meterTextWidth + 52))
-        case .rings:
-            return 52
-        }
+        layout.preferredWidth
     }
 
     /// Returns true when the drawn content actually changed.
     @discardableResult
-    func update(
-        style: StatusBarDisplayStyle,
-        metersDetailStyle: StatusBarMetersDetailStyle,
-        batteryScope: StatusBarBatteryScope,
-        batteryDetailStyle: StatusBarBatteryDetailStyle,
-        language: ResolvedLanguage,
-        text: String,
-        meters: [QuotaMeter]) -> Bool
-    {
-        let unchanged =
-            self.style == style
-            && self.metersDetailStyle == metersDetailStyle
-            && self.batteryScope == batteryScope
-            && self.batteryDetailStyle == batteryDetailStyle
-            && self.language == language
-            && self.text == text
-            && self.meters == meters
-        guard !unchanged else { return false }
-        self.style = style
-        self.metersDetailStyle = metersDetailStyle
-        self.batteryScope = batteryScope
-        self.batteryDetailStyle = batteryDetailStyle
-        self.language = language
-        self.text = text
-        self.meters = meters
+    func update(_ state: StatusBarContentState) -> Bool {
+        guard !hasUpdated || self.state != state else { return false }
+        self.state = state
+        hasUpdated = true
         invalidateIntrinsicContentSize()
         needsDisplay = true
         return true
@@ -67,7 +38,7 @@ final class StatusBarContentView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        switch style {
+        switch state.configuration.style {
         case .countdown:
             drawCountdown()
         case .battery:
@@ -80,71 +51,124 @@ final class StatusBarContentView: NSView {
     }
 
     private func drawCountdown() {
-        drawCentered(text, font: countdownFont, rect: bounds, color: .labelColor)
+        guard renderPlan.meters.count > 1 else {
+            drawCentered(state.content.text, font: layout.countdownFont, rect: bounds, color: .labelColor)
+            return
+        }
+        let frames = layout.columnFrames(widths: layout.countdownColumnWidths, gap: 2, in: bounds)
+        for (meter, frame) in zip(renderPlan.meters, frames) {
+            drawCentered(
+                layout.countdownCaption(for: meter),
+                font: layout.countdownItemFont,
+                rect: frame,
+                color: .labelColor)
+        }
     }
 
     private func drawBattery() {
-        if batteryScope == .both {
-            drawSmallBattery(primaryMeter, rect: NSRect(x: 4, y: bounds.midY + 2, width: bounds.width - 8, height: 8))
-            drawSmallBattery(weeklyMeter, rect: NSRect(x: 4, y: bounds.midY - 10, width: bounds.width - 8, height: 8))
+        guard !renderPlan.meters.isEmpty else {
+            drawLargeBattery(nil)
             return
         }
+
+        if renderPlan.meters.count == 1 {
+            drawLargeBattery(renderPlan.meters.first)
+            return
+        }
+
+        let frames = layout.columnFrames(widths: layout.batteryColumnWidths, gap: 6, in: bounds)
+        for (column, frame) in zip(renderPlan.columns, frames) {
+            let rows = layout.rowFrames(count: column.count, in: frame, height: 8, gap: 1)
+            for (meter, row) in zip(column, rows) {
+                drawSmallBattery(meter, rect: row)
+            }
+        }
+    }
+
+    private func drawLargeBattery(_ meter: QuotaMeter?) {
         let rect = bounds.insetBy(dx: 4, dy: 4)
         let path = NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5)
         path.lineWidth = 1
         NSColor.separatorColor.setStroke()
         path.stroke()
 
-        let meter = selectedBatteryMeter
         let percent = CGFloat(meter?.remainingPercent ?? 0) / 100
         let fillRect = rect.insetBy(dx: 2, dy: 2)
         let filled = NSRect(x: fillRect.minX, y: fillRect.minY, width: fillRect.width * percent, height: fillRect.height)
         NSBezierPath(roundedRect: filled, xRadius: 4, yRadius: 4).fill(with: meterColor(meter), alpha: 0.85)
-        drawCentered(batteryText(for: meter), font: batteryFont, rect: rect, color: .labelColor)
+        drawCentered(
+            meter.map(layout.batteryDetail(for:)) ?? "--",
+            font: layout.batteryFont,
+            rect: rect,
+            color: .labelColor)
     }
 
-    private func drawSmallBattery(_ meter: QuotaMeter?, rect: NSRect) {
+    private func drawSmallBattery(_ meter: QuotaMeter, rect: NSRect) {
         let path = NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3)
         path.lineWidth = 1
         NSColor.separatorColor.setStroke()
         path.stroke()
 
         let fillRect = rect.insetBy(dx: 1.5, dy: 1.5)
-        let width = fillRect.width * CGFloat(meter?.remainingPercent ?? 0) / 100
+        let width = fillRect.width * CGFloat(meter.remainingPercent) / 100
         let filled = NSRect(x: fillRect.minX, y: fillRect.minY, width: width, height: fillRect.height)
         NSBezierPath(roundedRect: filled, xRadius: 2.5, yRadius: 2.5).fill(with: meterColor(meter), alpha: 0.85)
-        drawCentered(batteryText(for: meter), font: smallBatteryFont, rect: rect, color: .labelColor)
+        drawCentered(
+            layout.batteryCaption(for: meter),
+            font: layout.smallBatteryFont,
+            rect: rect,
+            color: .labelColor)
     }
 
     private func drawMeters() {
-        let top = meters.first
-        let bottom = meters.dropFirst().first
-        drawMeter(top, y: bounds.midY + 4)
-        drawMeter(bottom, y: bounds.midY - 7)
-        drawMeterText(top: top, bottom: bottom)
+        guard !renderPlan.meters.isEmpty else {
+            drawCentered("--", font: layout.meterTextFont, rect: bounds, color: .labelColor)
+            return
+        }
+
+        let frames = layout.columnFrames(widths: layout.meterColumnWidths, gap: 6, in: bounds)
+        for (column, frame) in zip(renderPlan.columns, frames) {
+            let rows = layout.rowFrames(count: column.count, in: frame, height: 10)
+            for (meter, row) in zip(column, rows) {
+                drawMeter(meter, row: row)
+            }
+        }
     }
 
-    private func drawMeter(_ meter: QuotaMeter?, y: CGFloat) {
-        let rect = NSRect(x: 4, y: y, width: min(40, bounds.width * 0.36), height: 5)
-        let background = NSBezierPath(roundedRect: rect, xRadius: 2.5, yRadius: 2.5)
+    private func drawMeter(_ meter: QuotaMeter, row: NSRect) {
+        let barWidth = min(40, row.width * 0.36)
+        let barRect = NSRect(x: row.minX, y: row.midY - 2.5, width: barWidth, height: 5)
+        let background = NSBezierPath(roundedRect: barRect, xRadius: 2.5, yRadius: 2.5)
         NSColor.separatorColor.withAlphaComponent(0.45).setFill()
         background.fill()
 
-        let percent = CGFloat(meter?.remainingPercent ?? 0) / 100
-        let fillRect = NSRect(x: rect.minX, y: rect.minY, width: rect.width * percent, height: rect.height)
+        let percent = CGFloat(meter.remainingPercent) / 100
+        let fillRect = NSRect(
+            x: barRect.minX,
+            y: barRect.minY,
+            width: barRect.width * percent,
+            height: barRect.height)
         NSBezierPath(roundedRect: fillRect, xRadius: 2.5, yRadius: 2.5).fill(with: meterColor(meter), alpha: 0.95)
-    }
-
-    private func drawMeterText(top: QuotaMeter?, bottom: QuotaMeter?) {
-        let x = min(48, bounds.width * 0.42)
-        let width = max(20, bounds.width - x - 4)
-        drawLine(meterCaption(for: top), rect: NSRect(x: x, y: bounds.midY - 1, width: width, height: 10))
-        drawLine(meterCaption(for: bottom), rect: NSRect(x: x, y: bounds.midY - 11, width: width, height: 10))
+        let textRect = NSRect(
+            x: barRect.maxX + 4,
+            y: row.minY,
+            width: max(20, row.maxX - barRect.maxX - 4),
+            height: row.height)
+        drawLine(layout.meterCaption(for: meter), rect: textRect)
     }
 
     private func drawRings() {
-        drawRing(primaryMeter, rect: NSRect(x: 4, y: 1, width: 20, height: 20))
-        drawRing(weeklyMeter, rect: NSRect(x: 28, y: 1, width: 20, height: 20))
+        guard !renderPlan.meters.isEmpty else {
+            drawRing(nil, rect: NSRect(x: bounds.midX - 10, y: 1, width: 20, height: 20))
+            return
+        }
+
+        let contentWidth = CGFloat(renderPlan.meters.count * 24 - 4)
+        var x = bounds.midX - contentWidth / 2
+        for meter in renderPlan.meters {
+            drawRing(meter, rect: NSRect(x: x, y: 1, width: 20, height: 20))
+            x += 24
+        }
     }
 
     private func drawRing(_ meter: QuotaMeter?, rect: NSRect) {
@@ -164,78 +188,7 @@ final class StatusBarContentView: NSView {
             meterColor(meter).setStroke()
             arc.stroke()
         }
-        drawCentered(ringText(for: meter), font: ringFont, rect: rect, color: .labelColor)
-    }
-
-    private var primaryMeter: QuotaMeter? {
-        meters.first
-    }
-
-    private var weeklyMeter: QuotaMeter? {
-        meters.dropFirst().first
-    }
-
-    private var selectedBatteryMeter: QuotaMeter? {
-        batteryScope == .weekly ? weeklyMeter : primaryMeter
-    }
-
-    private var countdownFont: NSFont {
-        .systemFont(ofSize: 14, weight: .semibold)
-    }
-
-    private var batteryFont: NSFont {
-        .systemFont(ofSize: 10.5, weight: .semibold)
-    }
-
-    private var smallBatteryFont: NSFont {
-        .systemFont(ofSize: 6.5, weight: .semibold)
-    }
-
-    private var meterTextFont: NSFont {
-        .systemFont(ofSize: 8.5, weight: .semibold)
-    }
-
-    private var ringFont: NSFont {
-        .systemFont(ofSize: 6, weight: .bold)
-    }
-
-    private var batteryTextWidth: CGFloat {
-        batteryScope == .both
-            ? [primaryMeter, weeklyMeter].map { textWidth(batteryText(for: $0), font: smallBatteryFont) }.max() ?? 0
-            : textWidth(batteryText(for: selectedBatteryMeter), font: batteryFont)
-    }
-
-    private var meterTextWidth: CGFloat {
-        [meters.first, meters.dropFirst().first]
-            .map { textWidth(meterCaption(for: $0), font: meterTextFont) }
-            .max() ?? 0
-    }
-
-    private func meterCaption(for meter: QuotaMeter?) -> String {
-        guard let meter else { return "--" }
-        return "\(meter.title) \(meterDetail(for: meter))"
-    }
-
-    private func meterDetail(for meter: QuotaMeter) -> String {
-        switch metersDetailStyle {
-        case .remainingPercent:
-            return "\(meter.remainingPercent)%"
-        case .resetTime:
-            return meter.resetsAt.map { ResetLabelFormatter.shortLabel(for: $0, language: language) } ?? "--"
-        case .both:
-            let reset = meter.resetsAt.map { ResetLabelFormatter.shortLabel(for: $0, language: language) } ?? "--"
-            return "\(meter.remainingPercent)% · \(reset)"
-        }
-    }
-
-    private func batteryText(for meter: QuotaMeter?) -> String {
-        guard let meter else { return "--" }
-        switch batteryDetailStyle {
-        case .countdown:
-            return meter.resetsAt.map { DurationFormatter.localized($0.timeIntervalSince(Date()), language: language, includeSeconds: false) } ?? "--"
-        case .remainingPercent:
-            return "\(meter.remainingPercent)%"
-        }
+        drawCentered(ringText(for: meter), font: layout.ringFont, rect: rect, color: .labelColor)
     }
 
     private func ringText(for meter: QuotaMeter?) -> String {
@@ -258,6 +211,7 @@ final class StatusBarContentView: NSView {
     private func drawCentered(_ text: String, font: NSFont, rect: NSRect, color: NSColor) {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
+        paragraph.lineBreakMode = .byTruncatingTail
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: color,
@@ -272,15 +226,11 @@ final class StatusBarContentView: NSView {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: meterTextFont,
+            .font: layout.meterTextFont,
             .foregroundColor: NSColor.labelColor,
             .paragraphStyle: paragraph,
         ]
         text.draw(in: rect, withAttributes: attributes)
-    }
-
-    private func textWidth(_ text: String, font: NSFont) -> CGFloat {
-        text.size(withAttributes: [.font: font]).width
     }
 }
 
