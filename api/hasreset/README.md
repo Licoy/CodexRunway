@@ -41,6 +41,9 @@ flowchart LR
 - WebSocket 路径会发送 keepalive ping，降低 Cloudflare 等代理掐断长连接的概率。
 - 不发布 X 正文、Grok 原始响应、请求头或密钥。
 - 无语义变化时不提交、不部署；UTC 每天最多发布一次健康心跳。
+- 部署时 `stageSite` 会给页面引用的 CSS / JS / 图片 / 字体等静态资源追加
+  `?ver={timestamp}`（取自 `status.generatedAt` 的毫秒时间戳），避免 CDN/浏览器
+  缓存导致新旧资源混用；仓库里的 `public/` 源文件保持无版本号，便于本地预览。
 
 ## 目录结构
 

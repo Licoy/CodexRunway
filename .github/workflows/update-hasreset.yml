@@ -175,6 +175,15 @@ jobs:
           test -f "$OUTPUT_DIR/l10n.js"
           test -f "$OUTPUT_DIR/status-logic.js"
           test -f "$OUTPUT_DIR/api/status.json"
+          # Deploy-time cache busting: CSS/JS/module imports must carry ?ver=.
+          grep -E 'href="\./styles\.css\?ver=[A-Za-z0-9._-]+"' \
+            "$OUTPUT_DIR/index.html" >/dev/null
+          grep -E 'src="\./app\.js\?ver=[A-Za-z0-9._-]+"' \
+            "$OUTPUT_DIR/index.html" >/dev/null
+          grep -E 'from "\./l10n\.js\?ver=[A-Za-z0-9._-]+"' \
+            "$OUTPUT_DIR/app.js" >/dev/null
+          grep -E 'from "\./status-logic\.js\?ver=[A-Za-z0-9._-]+"' \
+            "$OUTPUT_DIR/app.js" >/dev/null
 
       - name: Upload Pages artifact
         if: steps.decision.outputs.should_deploy == 'yes'
