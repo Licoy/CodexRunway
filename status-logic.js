@@ -1,5 +1,10 @@
 const STALE_AFTER_MS = 30 * 60 * 60 * 1_000;
 
+/**
+ * Today's answer means: is there a reset on the viewer's local calendar day?
+ * That includes already-effective resets and still-pending same-day schedules.
+ * When both exist, the next upcoming same-day schedule wins for the detail line.
+ */
 export function classifyStatus(feed, now = new Date()) {
   const lastCheck = new Date(feed?.lastSuccessfulCheckAt ?? "");
   const stale = Number.isNaN(lastCheck.getTime())
@@ -9,8 +14,21 @@ export function classifyStatus(feed, now = new Date()) {
   }
 
   const events = Array.isArray(feed.events) ? feed.events : [];
-  // Confirmed same-day resets win over uncertain commentary/replies.
-  const reset = events.find((event) => isEffectiveResetToday(event, now));
+
+  // Next future schedule (any day) — used for same-day priority and "no" detail.
+  const upcoming = nextScheduledReset(events, now);
+  if (upcoming && isSameLocalDay(upcoming.effectiveAt, now)) {
+    return status(
+      "yes",
+      "scheduled_today",
+      "reset_scheduled",
+      upcoming.effectiveAt,
+      confidenceOf(upcoming.event),
+    );
+  }
+
+  // Confirmed same-day already-effective resets win over uncertain commentary.
+  const reset = events.find((event) => isAlreadyEffectiveResetToday(event, now));
   if (reset) {
     return status("yes", "reset", reset.kind, null, confidenceOf(reset));
   }
@@ -22,7 +40,6 @@ export function classifyStatus(feed, now = new Date()) {
     return status("unknown", "uncertain", "uncertain", null, confidenceOf(uncertain));
   }
 
-  const upcoming = nextScheduledReset(events, now);
   if (upcoming) {
     return status(
       "no",
@@ -51,7 +68,8 @@ export function nextScheduledReset(events, now = new Date()) {
     : null;
 }
 
-function isEffectiveResetToday(event, now) {
+/** Reset that already took effect on the local calendar day. */
+function isAlreadyEffectiveResetToday(event, now) {
   if (!["reset_completed", "reset_scheduled"].includes(event?.kind)) return false;
   const occurrence = new Date(event.effectiveAt ?? event.announcedAt ?? "");
   return !Number.isNaN(occurrence.getTime())

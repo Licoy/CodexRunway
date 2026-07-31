@@ -1,7 +1,7 @@
 @font-face {
   font-family: 'StrawberryIcon-Free';
-  src: url('fonts/StrawberryIcon-Free.woff') format('woff'),
-       url('fonts/StrawberryIcon-Free.ttf') format('truetype');
+  src: url('fonts/StrawberryIcon-Free.woff?ver=1785458448180') format('woff'),
+       url('fonts/StrawberryIcon-Free.ttf?ver=1785458448180') format('truetype');
   font-weight: normal;
   font-style: normal;
   font-display: block;
