@@ -58,12 +58,13 @@ public enum RunwayAlertDecider {
     {
         var alerts: [RunwayAlert] = []
 
-        let currentYes = current.resolvedState(now: now, calendar: calendar) == .yes
+        // "Detected" means a reset has already become effective today — not merely scheduled.
         // Skip the very first successful load so app launch does not spam when a reset already exists.
         // Compare both snapshots against the same `now` so a new local-day reset is still detected.
         if let previous {
-            let previousYes = previous.resolvedState(now: now, calendar: calendar) == .yes
-            if currentYes, !previousYes {
+            let previousEffective = previous.hasAlreadyEffectiveResetToday(now: now, calendar: calendar)
+            let currentEffective = current.hasAlreadyEffectiveResetToday(now: now, calendar: calendar)
+            if currentEffective, !previousEffective {
                 let postID = current.primaryEvidenceEvent(now: now, calendar: calendar)?.source.postID
                     ?? current.latestEvent?.source.postID
                     ?? "unknown"

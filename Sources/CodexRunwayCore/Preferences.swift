@@ -223,6 +223,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case rateLimitResetTodayYes
     case rateLimitResetTodayYesHint
     case rateLimitResetTodayYesHintWithTime
+    case rateLimitResetTodayYesHintScheduled
+    case rateLimitResetTodayYesHintScheduledWithTime
     case recent
     case recentSessionsDescription
     case refresh

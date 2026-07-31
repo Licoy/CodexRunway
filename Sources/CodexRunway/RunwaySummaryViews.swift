@@ -356,8 +356,9 @@ struct RateLimitResetTodayView: View {
     private func heroSubtitleView(now: Date) -> some View {
         // First row: keep absolute time only (no relative countdown) so it stays single-line aligned.
         if let detail = heroYesTimeDetail(now: now) {
+            let prefix = heroYesPrefix(now: now)
             (
-                Text("\(l10n.text(.rateLimitResetTodayYesHint)) · ")
+                Text("\(prefix) · ")
                     .foregroundColor(Color(nsColor: .secondaryLabelColor))
                 + Text(detail.text)
                     .foregroundColor(detail.color)
@@ -376,12 +377,36 @@ struct RateLimitResetTodayView: View {
         }
     }
 
+    /// "Already reset" vs "scheduled later today" prefix for the yes hero line.
+    private func heroYesPrefix(now: Date) -> String {
+        guard let snapshot else { return l10n.text(.rateLimitResetTodayYesHint) }
+        if let next = snapshot.nextScheduledReset(now: now),
+           Calendar.current.isDate(next.effectiveAt, inSameDayAs: now),
+           snapshot.latestResetAt(now: now) == nil
+        {
+            return l10n.text(.rateLimitResetTodayYesHintScheduled)
+        }
+        // Upcoming same-day schedule outranks past reset copy when both exist.
+        if let next = snapshot.nextScheduledReset(now: now),
+           Calendar.current.isDate(next.effectiveAt, inSameDayAs: now)
+        {
+            return l10n.text(.rateLimitResetTodayYesHintScheduled)
+        }
+        return l10n.text(.rateLimitResetTodayYesHint)
+    }
+
     private func heroYesTimeDetail(now: Date) -> (text: String, color: Color)? {
-        guard let snapshot, snapshot.resolvedState(now: now) == .yes,
-              let resetAt = snapshot.latestResetAt(now: now)
-        else { return nil }
+        guard let snapshot, snapshot.resolvedState(now: now) == .yes else { return nil }
+        // Prefer the next same-day schedule when today may have multiple resets.
+        if let next = snapshot.nextScheduledReset(now: now),
+           Calendar.current.isDate(next.effectiveAt, inSameDayAs: now)
+        {
+            let when = ResetCreditDateFormatter.updatedAt(next.effectiveAt, language: l10n.language)
+            return (when, Color(nsColor: .systemGreen))
+        }
+        guard let resetAt = snapshot.latestResetAt(now: now) else { return nil }
         let when = ResetCreditDateFormatter.updatedAt(resetAt, language: l10n.language)
-        // Past reset → muted gray; upcoming same-day effective time → green.
+        // Past reset → muted gray; (defensive) future same-day effective → green.
         let color: Color = resetAt <= now
             ? Color(nsColor: .secondaryLabelColor)
             : Color(nsColor: .systemGreen)
@@ -553,6 +578,12 @@ struct RateLimitResetTodayView: View {
         switch snapshot.resolvedState(now: now) {
         case .yes:
             // Time detail is rendered separately in small type via heroYesTimeDetail.
+            // When only a same-day schedule remains (no past reset yet), use scheduled copy.
+            if snapshot.nextScheduledReset(now: now).map({
+                Calendar.current.isDate($0.effectiveAt, inSameDayAs: now)
+            }) == true, snapshot.latestResetAt(now: now) == nil {
+                return l10n.text(.rateLimitResetTodayYesHintScheduled)
+            }
             return l10n.text(.rateLimitResetTodayYesHint)
         case .no:
             if let next = snapshot.nextScheduledReset(now: now) {

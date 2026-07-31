@@ -12,10 +12,10 @@ export const THEME_OPTIONS = Object.freeze([
 const TRANSLATIONS = Object.freeze({
   en: Object.freeze({
     metaDescription:
-      "Unofficial live status for whether Codex quota has reset today. Monitors public signals and shows recent evidence — advisory only.",
+      "Unofficial live status for whether Codex quota resets today — completed or still scheduled. Monitors public signals and shows recent evidence — advisory only.",
     metaKeywords:
       "Codex, Codex reset, quota reset, rate limit, ChatGPT Codex, Codex Runway, OpenAI Codex, reset status, weekly limit",
-    pageTitle: "Did Codex Reset Today? · Codex Runway",
+    pageTitle: "Does Codex Reset Today? · Codex Runway",
     ogLocale: "en_US",
     ogImageAlt: "Codex Runway app icon",
     brandName: "Codex Runway",
@@ -40,8 +40,9 @@ const TRANSLATIONS = Object.freeze({
     detailReset: "An effective {event} is on the board for your local day",
     detailUnavailable: "Feed is stale or unreachable (>30h)",
     detailUncertain: "A same-day signal exists, but cannot be classified safely",
-    detailNone: "No already-effective reset found for your local day",
-    detailScheduled: "Nothing effective yet today, next scheduled reset: {date}",
+    detailNone: "No reset completed or scheduled for your local day",
+    detailScheduled: "No reset for your local day; next scheduled: {date}",
+    detailScheduledToday: "Reset scheduled for later today: {date}",
     eventResetCompleted: "Completed",
     eventResetScheduled: "Scheduled",
     eventBankedReset: "Banked",
@@ -88,10 +89,10 @@ const TRANSLATIONS = Object.freeze({
   }),
   "zh-CN": Object.freeze({
     metaDescription:
-      "非官方 Codex 配额重置状态：今日是否已重置、下次计划与公开信号证据流，由 Codex Runway 根据公开信息生成，仅供参考。",
+      "非官方 Codex 配额重置状态：今日是否有重置（已生效或已排期）、下次计划与公开信号证据流，由 Codex Runway 根据公开信息生成，仅供参考。",
     metaKeywords:
       "Codex, Codex 重置, 配额重置, 额度重置, 速率限制, Codex Runway, OpenAI Codex, 今日是否重置, 周额度",
-    pageTitle: "Codex 今日是否重置？· Codex Runway",
+    pageTitle: "Codex 今日是否有重置？· Codex Runway",
     ogLocale: "zh_CN",
     ogImageAlt: "Codex Runway 应用图标",
     brandName: "Codex Runway",
@@ -116,8 +117,9 @@ const TRANSLATIONS = Object.freeze({
     detailReset: "本地今天已有生效的{event}记录",
     detailUnavailable: "数据不可用或已超过 30 小时",
     detailUncertain: "今天有相关信号，但无法安全分类",
-    detailNone: "今天还没有已经生效的重置记录",
-    detailScheduled: "今天尚未生效，下次计划重置：{date}",
+    detailNone: "本地今天没有已完成或已排期的重置",
+    detailScheduled: "本地今天没有重置；下次计划：{date}",
+    detailScheduledToday: "今日计划重置：{date}",
     eventResetCompleted: "已完成",
     eventResetScheduled: "已排期",
     eventBankedReset: "Banked",

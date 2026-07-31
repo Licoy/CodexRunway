@@ -1198,6 +1198,13 @@ final class RunwayModel: ObservableObject {
     {
         switch snapshot.resolvedState(now: now) {
         case .yes:
+            // Prefer the next same-day schedule when today has multiple resets.
+            if let next = snapshot.nextScheduledReset(now: now),
+               Calendar.current.isDate(next.effectiveAt, inSameDayAs: now)
+            {
+                let when = ResetCreditDateFormatter.updatedAt(next.effectiveAt, language: l10n.language)
+                return String(format: l10n.text(.rateLimitResetTodayYesHintScheduledWithTime), when)
+            }
             if let resetAt = snapshot.latestResetAt(now: now) {
                 let when = ResetCreditDateFormatter.updatedAt(resetAt, language: l10n.language)
                 return String(format: l10n.text(.rateLimitResetTodayYesHintWithTime), when)

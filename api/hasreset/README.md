@@ -1,9 +1,13 @@
 # HasReset 状态服务
 
-`api/hasreset` 是 Codex Runway 的“今日是否重置”静态状态源。它由 GitHub
+`api/hasreset` 是 Codex Runway 的“今日是否有重置”静态状态源。它由 GitHub
 Actions 定时调用 xAI Responses API，通过 X Search 检索 `@thsottiaux`
 最近发布的 Codex 配额信息，将可信结果转换为结构化事件，再发布到 GitHub
 Pages。
+
+页面上的「今日结论」按浏览者本地自然日判断：当天已有生效重置，或仍有
+未到期的同日计划重置，均记为「是」。同一天可出现多次重置；有下一次计划时，
+优先展示即将到来的那次。
 
 > 此服务并非官方状态源。结果由 AI 分析，仅供参考；定时任务、上游 API 和
 > GitHub Pages 都可能延迟或暂时不可用。

@@ -203,8 +203,8 @@ struct RateLimitResetTodayTests {
         #expect(currentLosAngelesDay.state == .yes)
     }
 
-    @Test("scheduled reset counts only after its effective time")
-    func scheduledResetUsesEffectiveTime() throws {
+    @Test("same-day scheduled reset counts as yes before and after effective time")
+    func scheduledResetUsesLocalDay() throws {
         let now = try resetStatusDate("2026-07-28T12:00:00Z")
         let pending = try ResetStatusFeedFixture(
             event: .init(
@@ -221,8 +221,69 @@ struct RateLimitResetTodayTests {
             now: now)
             .decode()
 
-        #expect(pending.state == .no)
+        // Pending same-day schedule still means "yes, there is a reset today".
+        #expect(pending.state == .yes)
+        #expect(pending.hasAlreadyEffectiveResetToday(now: now) == false)
+        #expect(pending.nextScheduledReset(now: now)?.event.source.postID != nil)
         #expect(effective.state == .yes)
+        #expect(effective.hasAlreadyEffectiveResetToday(now: now) == true)
+    }
+
+    @Test("next same-day schedule outranks already-effective reset for primary evidence")
+    func nextSameDayScheduleOutranksPastReset() throws {
+        let now = try resetStatusDate("2026-07-28T12:00:00Z")
+        let calendar = resetStatusUTCCalendar
+        let snapshot = try ResetStatusFeedFixture(
+            eventsJSON: """
+            {
+              "kind": "reset_completed",
+              "announcedAt": "2026-07-28T08:00:00.000Z",
+              "effectiveAt": null,
+              "scope": {"plans": ["all"], "windows": ["weekly"]},
+              "source": {
+                "handle": "thsottiaux",
+                "postId": "100",
+                "url": "https://x.com/thsottiaux/status/100"
+              },
+              "confidence": 0.95,
+              "rationale": "Explicit Codex quota reset announcement."
+            },
+            {
+              "kind": "reset_scheduled",
+              "announcedAt": "2026-07-28T09:00:00.000Z",
+              "effectiveAt": "2026-07-28T20:00:00.000Z",
+              "scope": {"plans": ["all"], "windows": ["weekly"]},
+              "source": {
+                "handle": "thsottiaux",
+                "postId": "200",
+                "url": "https://x.com/thsottiaux/status/200"
+              },
+              "confidence": 0.88,
+              "rationale": "Explicit Codex quota reset schedule."
+            }
+            """,
+            now: now)
+            .using(calendar)
+            .decode()
+
+        #expect(snapshot.resolvedState(now: now, calendar: calendar) == .yes)
+        #expect(snapshot.hasAlreadyEffectiveResetToday(now: now, calendar: calendar) == true)
+        #expect(snapshot.primaryEvidenceEvent(now: now, calendar: calendar)?.source.postID == "200")
+        #expect(snapshot.nextScheduledReset(now: now)?.event.source.postID == "200")
+    }
+
+    @Test("future-day schedule alone is still no for today")
+    func futureDayScheduleAloneIsNo() throws {
+        let now = try resetStatusDate("2026-07-28T12:00:00Z")
+        let snapshot = try ResetStatusFeedFixture(
+            event: .init(
+                kind: "reset_scheduled",
+                announcedAt: "2026-07-28T09:00:00Z",
+                effectiveAt: "2026-07-31T12:00:00Z"),
+            now: now)
+            .decode()
+        #expect(snapshot.state == .no)
+        #expect(snapshot.nextScheduledReset(now: now)?.event.source.postID != nil)
     }
 
     @Test(

@@ -159,7 +159,8 @@ function renderFeed(feed, now) {
     ? l10n.text("monitorOk")
     : l10n.text("monitorDegraded");
 
-  const upcoming = result.reason === "scheduled" && result.scheduledAt
+  const upcoming = (result.reason === "scheduled" || result.reason === "scheduled_today")
+    && result.scheduledAt
     ? { effectiveAt: result.scheduledAt }
     : nextScheduledReset(Array.isArray(feed.events) ? feed.events : [], now);
 
@@ -551,6 +552,11 @@ function statusDetail(result, l10n) {
   if (result.reason === "reset") {
     return l10n.text("detailReset", {
       event: l10n.text(eventLabelKey(result.eventKind)),
+    });
+  }
+  if (result.reason === "scheduled_today" && result.scheduledAt) {
+    return l10n.text("detailScheduledToday", {
+      date: formatDate(result.scheduledAt, l10n),
     });
   }
   if (result.reason === "scheduled" && result.scheduledAt) {

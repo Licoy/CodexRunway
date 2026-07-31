@@ -112,6 +112,9 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
     }
 
     /// Re-evaluates the result at a supplied time and calendar, for local-day boundaries.
+    ///
+    /// "Yes" means the local calendar day has a reset — either already effective
+    /// or still scheduled later today. Multiple same-day resets are allowed.
     public func resolvedState(
         now: Date = Date(),
         calendar: Calendar = .current) -> RateLimitResetTodayState
@@ -122,14 +125,8 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         else {
             return .unknown
         }
-        // Confirmed same-day resets win over uncertain commentary/replies.
-        let hasEffectiveResetToday = events.contains { event in
-            guard let occurredAt = event.resetOccurrenceAt, occurredAt <= now else {
-                return false
-            }
-            return calendar.isDate(occurredAt, inSameDayAs: now)
-        }
-        if hasEffectiveResetToday {
+        // Same-day schedule or completed reset wins over uncertain commentary.
+        if hasResetOnLocalDay(now: now, calendar: calendar) {
             return .yes
         }
         if events.contains(where: {
@@ -140,17 +137,52 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         return .no
     }
 
+    /// True when a reset has already taken effect on the local calendar day.
+    public func hasAlreadyEffectiveResetToday(
+        now: Date = Date(),
+        calendar: Calendar = .current) -> Bool
+    {
+        events.contains { event in
+            guard let occurredAt = event.resetOccurrenceAt, occurredAt <= now else {
+                return false
+            }
+            return calendar.isDate(occurredAt, inSameDayAs: now)
+        }
+    }
+
+    /// True when any reset (completed or scheduled) lands on the local calendar day.
+    public func hasResetOnLocalDay(
+        now: Date = Date(),
+        calendar: Calendar = .current) -> Bool
+    {
+        if hasAlreadyEffectiveResetToday(now: now, calendar: calendar) {
+            return true
+        }
+        if let next = nextScheduledReset(now: now),
+           calendar.isDate(next.effectiveAt, inSameDayAs: now)
+        {
+            return true
+        }
+        return false
+    }
+
     public var latestEvent: RateLimitResetTodayEvent? {
         events.max { $0.announcedAt < $1.announcedAt }
     }
 
     /// Prefer the event that best explains the current answer, not merely the newest tweet.
+    /// When multiple same-day resets exist, the next upcoming schedule outranks past ones.
     public func primaryEvidenceEvent(
         now: Date = Date(),
         calendar: Calendar = .current) -> RateLimitResetTodayEvent?
     {
         switch resolvedState(now: now, calendar: calendar) {
         case .yes:
+            if let next = nextScheduledReset(now: now),
+               calendar.isDate(next.effectiveAt, inSameDayAs: now)
+            {
+                return next.event
+            }
             return events
                 .filter { event in
                     guard let occurredAt = event.resetOccurrenceAt, occurredAt <= now else {
