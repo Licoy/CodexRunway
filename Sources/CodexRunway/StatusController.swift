@@ -8,7 +8,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     let statusBarView = StatusBarContentView(frame: .zero)
     private let popover = NSPopover()
     let settings = RunwaySettings()
-    lazy var model = RunwayModel(settings: settings)
+    lazy var model = RunwayModel(settings: settings, grokModule: GrokAccountModule())
     private lazy var updaterService = UpdaterService(settings: settings)
     /// Drives pause of panel-only animations while the main panel is hidden.
     let mainPanelVisibility = MainPanelVisibility()
@@ -504,6 +504,12 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     }
 
     private func refreshVisiblePopoverSections() {
+        guard model.selectedProvider == .codex else {
+            if model.grokPanelState.quota == nil {
+                model.refreshGrok(.current)
+            }
+            return
+        }
         if settings.preferences.showsCostSummary {
             model.refreshCost(policy: .ifChanged)
         }

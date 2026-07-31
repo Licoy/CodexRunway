@@ -71,7 +71,11 @@ struct DetailPageView: View {
     var body: some View {
         switch page {
         case .accounts:
-            AccountsDetailView(model: model, l10n: l10n, onAddAccount: onAddAccount)
+            if model.selectedProvider == .grok {
+                GrokAccountsDetailView(model: model, l10n: l10n)
+            } else {
+                AccountsDetailView(model: model, l10n: l10n, onAddAccount: onAddAccount)
+            }
         case .resetCredits:
             PolishedScrollView(verticalPadding: 4) {
                 ResetCreditsDetailView(

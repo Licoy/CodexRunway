@@ -2,7 +2,7 @@ import AppKit
 import CodexRunwayCore
 
 if CommandLine.arguments.contains("--self-check") {
-    SelfCheck.run()
+    await SelfCheck.run()
     exit(0)
 }
 

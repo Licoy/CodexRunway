@@ -392,6 +392,12 @@ public struct RateWindow: Sendable, Equatable {
     public var usedPercent: Int
     public var windowMinutes: Int?
     public var resetsAt: Date?
+
+    public init(usedPercent: Int, windowMinutes: Int? = nil, resetsAt: Date? = nil) {
+        self.usedPercent = usedPercent
+        self.windowMinutes = windowMinutes
+        self.resetsAt = resetsAt
+    }
 }
 
 public struct NamedRateWindow: Sendable, Equatable {

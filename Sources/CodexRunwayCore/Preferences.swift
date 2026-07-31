@@ -100,6 +100,55 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case checkForUpdates
     case fiveHourUsage
     case general
+    case grokAccountsAddOAuth
+    case grokAccountsCurrent
+    case grokAccountsDeleteConfirmMessage
+    case grokAccountsDeleteConfirmTitle
+    case grokAccountsEmpty
+    case grokAccountsImportOfficial
+    case grokAccountsMakeCurrent
+    case grokAccountsRefreshAll
+    case grokAccountsRemove
+    case grokAccountsTitle
+    case grokBillingParseFailed
+    case grokBillingPeriod
+    case grokBillingPeriodMonthly
+    case grokBillingPeriodWeekly
+    case grokCLIInstallHint
+    case grokCLIOpenInstallGuide
+    case grokCLITooOld
+    case grokCLIUnavailable
+    case grokCurrentAccountCannotDelete
+    case grokDataSource
+    case grokExternalLoginChanged
+    case grokImportFailed
+    case grokImportSucceeded
+    case grokIncludedQuota
+    case grokLoginCancelled
+    case grokLoginFailed
+    case grokLoginWaiting
+    case grokNoManagedOAuth
+    case grokNoQuotaData
+    case grokNotLoggedIn
+    case grokOnDemandLimit
+    case grokOnDemandUsage
+    case grokPlan
+    case grokPrepaidBalance
+    case grokReauthenticationRequired
+    case grokRefreshFailed
+    case grokRefreshCancelled
+    case grokRefreshTimedOut
+    case grokRefreshing
+    case grokResetAt
+    case grokSourceCLI
+    case grokSwitchConfirmMessage
+    case grokSwitchConfirmTitle
+    case grokSwitchFailed
+    case grokSwitchOnlyNewSessions
+    case grokSwitchRunningMessage
+    case grokSwitchRunningTitle
+    case grokSwitching
+    case grokUpdatedAt
     case hours
     case modelBreakdown
     case modelSpecificQuotaUsageDescription
@@ -162,6 +211,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case projectedAtReset
     case projectedWeeklyTotal
     case previousCycle
+    case providerCodex
+    case providerGrok
     case quota
     case quotaAlertBody
     case quotaAlertTitle

@@ -142,6 +142,7 @@ final class RunwayModel: ObservableObject {
         var accountGeneration: Int
     }
 
+    @Published private(set) var selectedProvider: RunwayProvider
     @Published var statusText: String
     @Published var quotaText: String
     @Published var resetCreditsText: String
@@ -177,6 +178,15 @@ final class RunwayModel: ObservableObject {
     @Published var accountDisplay: CodexAccountDisplay
     @Published var managedAccounts: [ManagedAccount] = []
     @Published var activeAccountId: String?
+    @Published var grokAccountState: GrokAccountState
+    @Published var grokPanelState: GrokPanelViewState
+    @Published var isRefreshingGrok = false
+    @Published var grokRefreshingAccountIDs: Set<String> = []
+    @Published var isGrokAccountOperationInProgress = false
+    @Published var isGrokOAuthLoginInProgress = false
+    @Published var grokAccountOperationMessage: String?
+    @Published var grokLastError: String?
+    @Published var grokRunningProcessWarningAccountID: String?
     @Published private(set) var isSwitchingAccount = false
     @Published private(set) var isRefreshingAccountQuotas = false
     @Published private(set) var refreshingAccountIds: Set<String> = []
@@ -191,7 +201,9 @@ final class RunwayModel: ObservableObject {
     private let alertStore = RunwayAlertStore()
     private let statusExporter = RunwayStatusExporter()
     private let notificationService = RunwayNotificationService()
-    private let settings: RunwaySettings
+    let settings: RunwaySettings
+    let grokModule: GrokAccountModule?
+    let grokCLIAvailable: Bool
     private let costProgressReporter = CostScanProgressReporter()
     let accountStore: AccountStore
     private let accountSwitcher: AccountSwitcher
@@ -225,24 +237,33 @@ final class RunwayModel: ObservableObject {
     private var fullRefreshWork: Task<Void, Never>?
     private var activeTokenHeatmapRefreshID: UUID?
     private var tokenHeatmapRefreshWork: Task<Void, Never>?
+    var grokRefreshGeneration = 0
+    var grokRefreshWork: Task<Void, Never>?
+    var grokRefreshCompletesFullRefresh = false
+    var grokAccountOperationWork: Task<Void, Never>?
     var onFullRefreshCompleted: (() -> Void)?
 
     init(
         settings: RunwaySettings,
         services: RunwayModelServices = .live(),
         accountStore: AccountStore = AccountStore(),
-        costCacheStore: UsageCostCacheStore = UsageCostCacheStore())
+        costCacheStore: UsageCostCacheStore = UsageCostCacheStore(),
+        grokModule: GrokAccountModule? = nil,
+        grokCLIAvailable: Bool = GrokExecutableLocator.locate() != nil)
     {
         self.settings = settings
         self.services = services
         self.accountStore = accountStore
         self.costCacheStore = costCacheStore
+        self.grokModule = grokModule
+        self.grokCLIAvailable = grokCLIAvailable
         self.accountSwitcher = AccountSwitcher(store: accountStore)
         self.accountImporter = AccountImporter(store: accountStore)
         self.accountQuotaRefresher = AccountQuotaRefresher(
             store: accountStore,
             switcher: AccountSwitcher(store: accountStore))
         let l10n = settings.l10n
+        self.selectedProvider = settings.preferences.selectedProvider
         self.statusText = l10n.text(.statusLogin)
         self.quotaText = l10n.text(.notLoaded)
         self.resetCreditsText = l10n.text(.notLoaded)
@@ -251,6 +272,12 @@ final class RunwayModel: ObservableObject {
         self.costSubtitle = ""
         self.sessionText = l10n.text(.notScanned)
         self.accountDisplay = CodexAccountDisplay.make(auth: nil, quotaPlan: nil)
+        self.grokAccountState = GrokAccountState(
+            officialCredentialStatus: .missing,
+            currentAccountID: nil,
+            accounts: [])
+        self.grokPanelState = GrokPanelViewState(
+            availability: grokModule == nil || !grokCLIAvailable ? .cliUnavailable : .loading)
         if let cached = costCacheStore.load() {
             applyCurrentCost(cached)
             if settings.preferences.apiCostSummaryRange == .current {
@@ -263,6 +290,7 @@ final class RunwayModel: ObservableObject {
             }
         }
         bootstrapAccounts()
+        bootstrapGrokAccounts()
     }
 
     /// Sidebar order: active first, then user sort.
@@ -559,10 +587,19 @@ final class RunwayModel: ObservableObject {
         reloadAccountIndex()
     }
 
-    private var l10n: L10n { settings.l10n }
+    var l10n: L10n { settings.l10n }
+
+    func selectProvider(_ provider: RunwayProvider) {
+        guard selectedProvider != provider else { return }
+        let previous = selectedProvider
+        selectedProvider = provider
+        settings.updateSelectedProvider(provider)
+        providerDidChange(from: previous)
+    }
 
     var isRefreshing: Bool {
-        isRefreshingAll || !refreshingSections.isEmpty
+        if selectedProvider == .grok { return isRefreshingGrok }
+        return isRefreshingAll || !refreshingSections.isEmpty
     }
 
     func isRefreshing(_ section: RunwayRefreshSection) -> Bool {
@@ -575,6 +612,10 @@ final class RunwayModel: ObservableObject {
     private static let fullRefreshWatchdogSeconds: UInt64 = 120
 
     func refresh(policy: UsageCostRefreshPolicy = .force) {
+        if selectedProvider == .grok {
+            refreshGrok(.current, completesFullRefresh: true)
+            return
+        }
         guard !isRefreshingAll, refreshingSections.isEmpty else { return }
         let refreshID = UUID()
         activeFullRefreshID = refreshID
@@ -593,6 +634,10 @@ final class RunwayModel: ObservableObject {
     }
 
     func refreshQuota() {
+        if selectedProvider == .grok {
+            refreshGrok(.current)
+            return
+        }
         guard !isRefreshingAll else { return }
         Task { await refreshQuotaNow() }
     }
@@ -660,12 +705,21 @@ final class RunwayModel: ObservableObject {
                 costSubtitle = nextSubtitle
             }
         }
-        refreshRateLimitResetTodayDisplayIfNeeded(now: now)
-        refreshRateLimitResetTodayIfDue(now: now)
+        if selectedProvider == .codex {
+            refreshRateLimitResetTodayDisplayIfNeeded(now: now)
+            refreshRateLimitResetTodayIfDue(now: now)
+        }
     }
 
     func nextDueQuotaReset(after triggeredReset: Date?, now: Date = Date()) -> Date? {
-        latestQuota?.nextDueReset(after: triggeredReset, now: now)
+        if selectedProvider == .grok {
+            guard let reset = grokPanelState.quota?.meters.first?.resetsAt,
+                  reset > (triggeredReset ?? .distantPast),
+                  now.timeIntervalSince(reset) >= 1
+            else { return nil }
+            return reset
+        }
+        return latestQuota?.nextDueReset(after: triggeredReset, now: now)
     }
 
     /// Panel-open refreshes pass force=false: rescanning ~/.codex/sessions is
@@ -724,6 +778,7 @@ final class RunwayModel: ObservableObject {
     }
 
     func relabel() {
+        rebuildGrokPanelState()
         // Prefer live quota plan only when we still have a matching snapshot; else JWT/auth only.
         accountDisplay = CodexAccountDisplay.make(auth: latestAuth, quotaPlan: latestQuota?.plan)
         if let latestQuota {
@@ -753,7 +808,10 @@ final class RunwayModel: ObservableObject {
         if let latestSessionReport { applySessionReport(latestSessionReport) } else { sessionText = l10n.text(.notScanned) }
         applyRecentSessions(recentSessions)
         // Turning the section on should fetch promptly without waiting for the next due tick.
-        if settings.preferences.showsRateLimitResetToday, rateLimitResetToday == nil {
+        if selectedProvider == .codex,
+           settings.preferences.showsRateLimitResetToday,
+           rateLimitResetToday == nil
+        {
             refreshRateLimitResetToday(force: true)
         }
     }
@@ -1833,6 +1891,11 @@ final class RunwayModel: ObservableObject {
             await work.value
             finishTokenHeatmapRefresh(id: id)
         }
+    }
+
+    func cancelCodexRefreshesForProviderSwitch() {
+        fullRefreshWork?.cancel()
+        tokenHeatmapRefreshWork?.cancel()
     }
 
     private func localCostSummaries(

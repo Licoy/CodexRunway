@@ -23,17 +23,17 @@ extension StatusController {
                 preferences: settings.preferences,
                 language: settings.l10n.language),
             content: StatusBarContentState.Content(
-                text: model.statusText,
-                meters: model.quotaMeters,
+                text: model.selectedStatusText,
+                meters: model.selectedQuotaMeters,
                 displayMinute: Int(Date().timeIntervalSince1970 / 60)))
         let didChange = statusBarView.update(state)
         guard didChange else { return }
         statusItem.length = statusBarView.preferredWidth
-        let quotaDetails = model.quotaMeters
+        let quotaDetails = model.selectedQuotaMeters
             .map { "\($0.title): \($0.remainingPercent)%" }
             .joined(separator: " · ")
         statusItem.button?.toolTip = quotaDetails.isEmpty
-            ? "Codex Runway · \(model.statusText)"
-            : "Codex Runway · \(model.statusText)\n\(quotaDetails)"
+            ? "Codex Runway · \(model.selectedStatusText)"
+            : "Codex Runway · \(model.selectedStatusText)\n\(quotaDetails)"
     }
 }

@@ -29,6 +29,10 @@ final class RunwaySettings: ObservableObject {
         }
     }
 
+    func updateSelectedProvider(_ provider: RunwayProvider) {
+        update { $0.selectedProvider = provider }
+    }
+
     func updateLanguage(_ language: LanguagePreference) {
         update { $0.language = language }
     }

@@ -55,6 +55,7 @@ public enum TokenUsageChartStyle: String, CaseIterable, Codable, Sendable, Hasha
 }
 
 public struct RunwayPreferences: Codable, Sendable, Equatable {
+    public var selectedProvider: RunwayProvider
     public var language: LanguagePreference
     public var appearance: AppearancePreference
     public var statusBarDisplayStyle: StatusBarDisplayStyle
@@ -81,6 +82,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     public static let defaultRateLimitResetTodayRefreshIntervalSeconds = 3_600
 
     public init(
+        selectedProvider: RunwayProvider = .codex,
         language: LanguagePreference = .system,
         appearance: AppearancePreference = .system,
         statusBarDisplayStyle: StatusBarDisplayStyle = .meters,
@@ -103,6 +105,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         rateLimitResetTodayAlertsEnabled: Bool = true,
         exportsStatusJSON: Bool = false)
     {
+        self.selectedProvider = selectedProvider
         self.language = language
         self.appearance = appearance
         self.statusBarDisplayStyle = statusBarDisplayStyle
@@ -132,6 +135,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     }
 
     enum CodingKeys: String, CodingKey {
+        case selectedProvider
         case language
         case appearance
         case statusBarDisplayStyle
@@ -157,6 +161,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        selectedProvider = try container.decodeIfPresent(RunwayProvider.self, forKey: .selectedProvider) ?? .codex
         language = try container.decodeIfPresent(LanguagePreference.self, forKey: .language) ?? .system
         appearance = try container.decodeIfPresent(AppearancePreference.self, forKey: .appearance) ?? .system
         statusBarDisplayStyle = try container.decodeIfPresent(StatusBarDisplayStyle.self, forKey: .statusBarDisplayStyle) ?? .meters

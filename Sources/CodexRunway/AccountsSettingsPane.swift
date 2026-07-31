@@ -22,50 +22,65 @@ struct AccountsSettingsPane: View {
     var body: some View {
         PreferencesPane {
             SettingsSection {
-                SectionLabel(l10n.text(.accounts))
-                Text(l10n.text(.accountsSwitchRealHint))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: 8) {
-                    Menu {
-                        Button(l10n.text(.accountsAddLocal)) { model.importOfficialAccount() }
-                        Button(l10n.text(.accountsAddPaste)) { showPasteSheet = true }
-                        Button(l10n.text(.accountsAddFile)) { pickFiles() }
-                        Button(l10n.text(.accountsAddOAuth)) { model.startOAuthLogin() }
-                        Button(l10n.text(.accountsAddAPIKey)) { showAPIKeySheet = true }
-                    } label: {
-                        Label(l10n.text(.accountsAdd), systemImage: "plus")
-                    }
-                    Button {
-                        model.refreshAllAccountQuotas()
-                    } label: {
-                        Label(l10n.text(.accountsRefreshAll), systemImage: "arrow.clockwise")
-                    }
-                    .disabled(model.isRefreshingAccountQuotas)
-                    Spacer()
+                Picker("", selection: Binding(
+                    get: { model.selectedProvider },
+                    set: { model.selectProvider($0) }))
+                {
+                    Text(l10n.text(.providerCodex)).tag(RunwayProvider.codex)
+                    Text(l10n.text(.providerGrok)).tag(RunwayProvider.grok)
                 }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 180)
 
-                if model.managedAccounts.isEmpty {
-                    Text(l10n.text(.accountsEmpty))
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 12)
+                if model.selectedProvider == .grok {
+                    GrokAccountsSettingsContent(model: model, l10n: l10n)
                 } else {
-                    VStack(spacing: 8) {
-                        ForEach(orderedAccounts) { account in
-                            accountRow(account)
-                                .id("\(account.id)-\(account.resolvedDisplayName)-\(account.requiresReauth)")
+                    SectionLabel(l10n.text(.accounts))
+                    Text(l10n.text(.accountsSwitchRealHint))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 8) {
+                        Menu {
+                            Button(l10n.text(.accountsAddLocal)) { model.importOfficialAccount() }
+                            Button(l10n.text(.accountsAddPaste)) { showPasteSheet = true }
+                            Button(l10n.text(.accountsAddFile)) { pickFiles() }
+                            Button(l10n.text(.accountsAddOAuth)) { model.startOAuthLogin() }
+                            Button(l10n.text(.accountsAddAPIKey)) { showAPIKeySheet = true }
+                        } label: {
+                            Label(l10n.text(.accountsAdd), systemImage: "plus")
+                        }
+                        Button {
+                            model.refreshAllAccountQuotas()
+                        } label: {
+                            Label(l10n.text(.accountsRefreshAll), systemImage: "arrow.clockwise")
+                        }
+                        .disabled(model.isRefreshingAccountQuotas)
+                        Spacer()
+                    }
+
+                    if model.managedAccounts.isEmpty {
+                        Text(l10n.text(.accountsEmpty))
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 12)
+                    } else {
+                        VStack(spacing: 8) {
+                            ForEach(orderedAccounts) { account in
+                                accountRow(account)
+                                    .id("\(account.id)-\(account.resolvedDisplayName)-\(account.requiresReauth)")
+                            }
                         }
                     }
-                }
 
-                if let message = model.accountOperationMessage {
-                    Text(message).font(.caption).foregroundStyle(.secondary)
-                }
-                if let error = model.lastError {
-                    Text(error).font(.caption).foregroundStyle(.red)
-                        .textSelection(.enabled)
+                    if let message = model.accountOperationMessage {
+                        Text(message).font(.caption).foregroundStyle(.secondary)
+                    }
+                    if let error = model.lastError {
+                        Text(error).font(.caption).foregroundStyle(.red)
+                            .textSelection(.enabled)
+                    }
                 }
             }
         }

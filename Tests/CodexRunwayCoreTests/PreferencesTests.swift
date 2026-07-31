@@ -50,6 +50,7 @@ struct PreferencesTests {
         let store = PreferencesStore(defaults: defaults)
 
         store.save(RunwayPreferences(
+            selectedProvider: .grok,
             language: .english,
             appearance: .dark,
             statusBarDisplayStyle: .rings,
@@ -67,6 +68,7 @@ struct PreferencesTests {
             rateLimitResetTodayAlertsEnabled: false,
             exportsStatusJSON: true))
 
+        #expect(store.load().selectedProvider == .grok)
         #expect(store.load().language == .english)
         #expect(store.load().appearance == .dark)
         #expect(store.load().statusBarDisplayStyle == .rings)
@@ -87,6 +89,22 @@ struct PreferencesTests {
         #expect(store.load().resetCreditAlertsEnabled)
         #expect(store.load().rateLimitResetTodayAlertsEnabled == false)
         #expect(store.load().exportsStatusJSON)
+    }
+
+    @Test("old preferences default to the Codex provider")
+    func oldPreferencesDefaultProvider() throws {
+        let data = """
+        {
+          "language": "english",
+          "appearance": "dark",
+          "refreshIntervalSeconds": 300
+        }
+        """.data(using: .utf8)!
+
+        let preferences = try JSONDecoder().decode(RunwayPreferences.self, from: data)
+
+        #expect(preferences.selectedProvider == .codex)
+        #expect(RunwayProvider.allCases == [.codex, .grok])
     }
 
     @Test("old preferences default rate-limit-reset-today section on with 1h refresh")

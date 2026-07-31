@@ -39,6 +39,11 @@ struct RunwayPopoverView: View {
     @State private var detailPage: RunwaySidePanel?
     @State private var apiCostDetailRange = ApiCostSummaryRange.today
     private var l10n: L10n { settings.l10n }
+    private var visibleSections: Set<RunwayMainPanelSection> {
+        RunwayMainPanelSections.visible(
+            provider: model.selectedProvider,
+            preferences: settings.preferences)
+    }
 
     init(
         model: RunwayModel,
@@ -89,12 +94,12 @@ struct RunwayPopoverView: View {
             } else {
                 mainContent
                     .padding(.horizontal, 16)
-                if model.accountOperationMessage != nil || model.lastError != nil {
+                if model.selectedAccountOperationMessage != nil || model.selectedLastError != nil {
                     VStack(alignment: .leading, spacing: 3) {
-                        if let message = model.accountOperationMessage {
+                        if let message = model.selectedAccountOperationMessage {
                             Text(message).font(.caption).foregroundStyle(.secondary)
                         }
-                        if let error = model.lastError {
+                        if let error = model.selectedLastError {
                             Text(error).font(.caption).foregroundStyle(Color(nsColor: .systemRed))
                         }
                     }
@@ -113,10 +118,28 @@ struct RunwayPopoverView: View {
         } message: {
             Text(model.repairWarning)
         }
+        .onChange(of: model.selectedProvider) { provider in
+            if provider == .grok, detailPage != .accounts {
+                detailPage = nil
+            }
+        }
     }
 
     private var mainContent: some View {
         PolishedScrollView(verticalPadding: 4) {
+            if visibleSections.contains(.grokQuota) {
+                GrokDashboardView(
+                    state: model.grokPanelState,
+                    l10n: l10n,
+                    isRefreshing: model.isRefreshingGrok,
+                    onRefresh: { model.refreshGrok(.current) })
+            } else {
+                codexMainContent
+            }
+        }
+    }
+
+    private var codexMainContent: some View {
             VStack(alignment: .leading, spacing: 0) {
                 if RunwayDevFlags.showsTierBadgeGallery {
                     sectionBlock(isFirst: true) {
@@ -131,7 +154,7 @@ struct RunwayPopoverView: View {
                         isRefreshing: model.isRefreshing(.quota),
                         onRefresh: { model.refreshQuota() })
                 }
-                if settings.preferences.showsTokenUsageHeatmap {
+                if visibleSections.contains(.codexTokenHeatmap) {
                     sectionBlock {
                         TokenUsageHeatmapView(
                             allDevicesTokens: model.tokenHeatmapAllDevicesTokens,
@@ -147,7 +170,7 @@ struct RunwayPopoverView: View {
                             onRefresh: { model.refreshTokenHeatmap(policy: .force) })
                     }
                 }
-                if settings.preferences.showsRateLimitResetToday {
+                if visibleSections.contains(.codexRateLimitResetToday) {
                     sectionBlock {
                         RateLimitResetTodayView(
                             snapshot: model.rateLimitResetToday,
@@ -170,7 +193,7 @@ struct RunwayPopoverView: View {
                         onRefresh: { model.refreshResetCredits() },
                         onDetailsSelect: { detailPage = .resetCredits })
                 }
-                if settings.preferences.showsCostSummary {
+                if visibleSections.contains(.codexAPICost) {
                     sectionBlock {
                         CostSummaryView(
                             text: model.costText,
@@ -184,12 +207,12 @@ struct RunwayPopoverView: View {
                             })
                     }
                 }
-                if settings.preferences.showsSessionRepairSummary {
+                if visibleSections.contains(.codexSessionRepair) {
                     sectionBlock {
                         sessionSummary
                     }
                 }
-                if settings.preferences.showsRecentSessions {
+                if visibleSections.contains(.codexRecentSessions) {
                     sectionBlock {
                         RecentSessionsView(
                             sessions: model.recentSessions,
@@ -199,7 +222,6 @@ struct RunwayPopoverView: View {
                     }
                 }
             }
-        }
     }
 
     /// Ruled section rhythm: an inset hairline above every section except the first.
@@ -236,16 +258,42 @@ struct RunwayPopoverView: View {
                     }
                 }
             }
-            AccountIdentityRow(
-                tier: model.accountDisplay.subscriptionTier,
-                displayName: accountDisplayName,
-                l10n: l10n)
+            Picker("", selection: Binding(
+                get: { model.selectedProvider },
+                set: { model.selectProvider($0) }))
             {
-                detailPage = .accounts
-                model.reloadAccountIndex()
+                Text(l10n.text(.providerCodex)).tag(RunwayProvider.codex)
+                Text(l10n.text(.providerGrok)).tag(RunwayProvider.grok)
             }
-            .padding(.top, 10)
-            if let expiresAt = model.accountDisplay.subscriptionExpiresAt {
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: 150)
+            .padding(.top, 8)
+
+            if model.selectedProvider == .grok {
+                GrokAccountIdentityRow(
+                    plan: model.grokPanelState.planName,
+                    displayName: accountDisplayName,
+                    l10n: l10n)
+                {
+                    detailPage = .accounts
+                    model.bootstrapGrokAccounts()
+                }
+                .padding(.top, 8)
+            } else {
+                AccountIdentityRow(
+                    tier: model.accountDisplay.subscriptionTier,
+                    displayName: accountDisplayName,
+                    l10n: l10n)
+                {
+                    detailPage = .accounts
+                    model.reloadAccountIndex()
+                }
+                .padding(.top, 8)
+            }
+            if model.selectedProvider == .codex,
+               let expiresAt = model.accountDisplay.subscriptionExpiresAt
+            {
                 SubscriptionExpiryBadge(expiresAt: expiresAt, l10n: l10n)
                     .padding(.top, 6)
             }
@@ -253,10 +301,7 @@ struct RunwayPopoverView: View {
     }
 
     private var accountDisplayName: String {
-        if !model.accountDisplay.displayName.isEmpty {
-            return model.accountDisplay.displayName
-        }
-        return model.accountDisplay.isAuthenticated ? l10n.text(.unknownAccount) : l10n.text(.notLoggedIn)
+        model.selectedAccountDisplayName
     }
 
     private var detailHeader: some View {
