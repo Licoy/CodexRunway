@@ -2,9 +2,23 @@
 
 :root {
   color-scheme: light dark;
-  --font-display: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "Courier New", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /*
+   * Fuller system faces: PingFang first (苹方), then rounded/CJK-friendly
+   * sans and mono stacks. Avoid thin/condensed defaults like Courier New.
+   */
+  --font-display:
+    "PingFang SC", "苹方-简", "PingFang TC", "Hiragino Sans GB", "Hiragino Sans",
+    "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", "Source Han Sans SC",
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
+    "Arial", sans-serif;
+  --font-sans:
+    "PingFang SC", "苹方-简", "PingFang TC", "Hiragino Sans GB", "Hiragino Sans",
+    "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", "Source Han Sans SC",
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
+    "Arial", sans-serif;
+  --font-mono:
+    "SF Mono", "Menlo", "Monaco", "Cascadia Mono", "Cascadia Code",
+    "Segoe UI Mono", "Consolas", "Liberation Mono", ui-monospace, monospace;
 
   --bg: #ffffff;
   --bg-elevated: #ffffff;
@@ -19,9 +33,16 @@
   --invert-text: #ffffff;
   --hairline: 1.5px;
 
-  --yes: #111111;
-  --yes-soft: #111111;
-  --yes-border: #111111;
+  --yes: #059669;
+  --yes-shine: #a7f3d0;
+  --yes-soft: #059669;
+  --yes-border: #059669;
+  --tibo-work: #2563eb;
+  --tibo-work-shine: #93c5fd;
+  --tibo-work-soft: rgba(37, 99, 235, 0.1);
+  --tibo-sleep: #ca8a04;
+  --tibo-sleep-shine: #fde047;
+  --tibo-sleep-soft: rgba(202, 138, 4, 0.12);
   --no: #111111;
   --no-soft: transparent;
   --no-border: #111111;
@@ -58,9 +79,16 @@
     --text-4: rgba(255, 255, 255, 0.42);
     --invert-bg: #ffffff;
     --invert-text: #111111;
-    --yes: #ffffff;
-    --yes-soft: #ffffff;
-    --yes-border: #ffffff;
+    --yes: #34d399;
+    --yes-shine: #d1fae5;
+    --yes-soft: #34d399;
+    --yes-border: #34d399;
+    --tibo-work: #60a5fa;
+    --tibo-work-shine: #dbeafe;
+    --tibo-work-soft: rgba(96, 165, 250, 0.14);
+    --tibo-sleep: #facc15;
+    --tibo-sleep-shine: #fef9c3;
+    --tibo-sleep-soft: rgba(250, 204, 21, 0.14);
     --no: #ffffff;
     --no-border: #ffffff;
     --unknown: rgba(255, 255, 255, 0.55);
@@ -88,9 +116,16 @@ html[data-theme="dark"] {
   --text-4: rgba(255, 255, 255, 0.42);
   --invert-bg: #ffffff;
   --invert-text: #111111;
-  --yes: #ffffff;
-  --yes-soft: #ffffff;
-  --yes-border: #ffffff;
+  --yes: #34d399;
+  --yes-shine: #d1fae5;
+  --yes-soft: #34d399;
+  --yes-border: #34d399;
+  --tibo-work: #60a5fa;
+  --tibo-work-shine: #dbeafe;
+  --tibo-work-soft: rgba(96, 165, 250, 0.14);
+  --tibo-sleep: #facc15;
+  --tibo-sleep-shine: #fef9c3;
+  --tibo-sleep-soft: rgba(250, 204, 21, 0.14);
   --no: #ffffff;
   --no-border: #ffffff;
   --unknown: rgba(255, 255, 255, 0.55);
@@ -216,11 +251,16 @@ body {
   color: var(--text);
   font: inherit;
   cursor: pointer;
+  text-decoration: none;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .control-btn:first-child {
   margin-left: 0;
+}
+
+a.control-btn {
+  cursor: pointer;
 }
 
 .control-btn:hover {
@@ -259,6 +299,7 @@ body {
 .kind-badge,
 time,
 .chip,
+.tibo-chip,
 .source-link,
 .signal-link,
 .github-link,
@@ -275,6 +316,7 @@ time,
 .kind-badge i,
 time i,
 .chip i,
+.tibo-chip i,
 .source-link i,
 .signal-link i,
 .github-link i,
@@ -344,17 +386,62 @@ time i,
   color: var(--text);
 }
 
+/*
+ * Yes: green base + seamless flowing shine.
+ * Gradient is two identical periods; background-size is 200% and the
+ * animation travels exactly one period (0% → 100%), so the loop restarts
+ * without a visible jump / mid-cycle reset.
+ */
 .dashboard[data-state="yes"] .verdict-word {
   color: var(--yes);
+  background-image: linear-gradient(
+    100deg,
+    var(--yes) 0%,
+    var(--yes) 16%,
+    var(--yes-shine) 22%,
+    color-mix(in srgb, var(--yes-shine) 45%, #ffffff) 25%,
+    var(--yes-shine) 28%,
+    var(--yes) 34%,
+    var(--yes) 50%,
+    var(--yes) 66%,
+    var(--yes-shine) 72%,
+    color-mix(in srgb, var(--yes-shine) 45%, #ffffff) 75%,
+    var(--yes-shine) 78%,
+    var(--yes) 84%,
+    var(--yes) 100%
+  );
+  background-size: 200% 100%;
+  background-position: 100% center;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: verdict-shimmer 2.8s linear infinite;
+}
+
+@keyframes verdict-shimmer {
+  from {
+    /* With size 200%, traveling 100% → 0% moves the shine left→right. */
+    background-position: 100% center;
+  }
+  to {
+    background-position: 0% center;
+  }
 }
 
 .dashboard[data-state="no"] .verdict-word {
   color: var(--no);
   opacity: 0.88;
+  -webkit-text-fill-color: unset;
+  background-image: none;
+  animation: none;
 }
 
 .dashboard[data-state="unknown"] .verdict-word {
   color: var(--unknown);
+  -webkit-text-fill-color: unset;
+  background-image: none;
+  animation: none;
 }
 
 .state-badge {
@@ -396,6 +483,20 @@ time i,
   color: var(--text-2);
   font-size: clamp(0.92rem, 1.2vw, 1.05rem);
   line-height: 1.5;
+}
+
+.verdict-countdown {
+  margin: 0.4rem 0 0;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+
+.dashboard[data-state="yes"] .verdict-countdown {
+  color: color-mix(in srgb, var(--yes) 78%, var(--text-3));
 }
 
 .signal-rail {
@@ -477,6 +578,199 @@ time i,
 .signal-link:hover {
   background: var(--invert-bg);
   color: var(--invert-text);
+}
+
+/* ——— Tibo radar ——— */
+
+.tibo-radar {
+  margin-top: -1.5px;
+  border: var(--hairline) solid var(--border);
+  background: var(--bg);
+}
+
+.tibo-head {
+  padding: clamp(1.1rem, 2vw, 1.45rem) clamp(1.15rem, 2.2vw, 1.6rem) 0.85rem;
+  border-bottom: var(--hairline) solid var(--border);
+}
+
+.tibo-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 0.85rem 1.25rem;
+  padding: clamp(1rem, 2vw, 1.35rem) clamp(1.15rem, 2.2vw, 1.6rem);
+  align-items: start;
+}
+
+.tibo-clock-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.tibo-time {
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 2.4vw, 1.75rem);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.tibo-zone {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+}
+
+.tibo-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-content: start;
+  justify-content: flex-end;
+}
+
+.tibo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.55rem;
+  border: var(--hairline) solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+/*
+ * Working / sleeping activity tags: soft pad + seamless text shimmer
+ * (same dual-period technique as the yes verdict word).
+ */
+.tibo-chip[data-activity="working"],
+.tibo-chip[data-activity="sleeping"] {
+  position: relative;
+  isolation: isolate;
+  background-size: 200% 100%;
+  background-position: 100% center;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: tibo-chip-shimmer 2.8s linear infinite;
+}
+
+.tibo-chip[data-activity="working"]::before,
+.tibo-chip[data-activity="sleeping"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.tibo-chip[data-activity="working"] {
+  border-color: var(--tibo-work);
+  color: var(--tibo-work);
+  background-image: linear-gradient(
+    100deg,
+    var(--tibo-work) 0%,
+    var(--tibo-work) 16%,
+    var(--tibo-work-shine) 22%,
+    color-mix(in srgb, var(--tibo-work-shine) 45%, #ffffff) 25%,
+    var(--tibo-work-shine) 28%,
+    var(--tibo-work) 34%,
+    var(--tibo-work) 50%,
+    var(--tibo-work) 66%,
+    var(--tibo-work-shine) 72%,
+    color-mix(in srgb, var(--tibo-work-shine) 45%, #ffffff) 75%,
+    var(--tibo-work-shine) 78%,
+    var(--tibo-work) 84%,
+    var(--tibo-work) 100%
+  );
+}
+
+.tibo-chip[data-activity="working"]::before {
+  background: var(--tibo-work-soft);
+}
+
+.tibo-chip[data-activity="sleeping"] {
+  border-color: var(--tibo-sleep);
+  color: var(--tibo-sleep);
+  background-image: linear-gradient(
+    100deg,
+    var(--tibo-sleep) 0%,
+    var(--tibo-sleep) 16%,
+    var(--tibo-sleep-shine) 22%,
+    color-mix(in srgb, var(--tibo-sleep-shine) 45%, #ffffff) 25%,
+    var(--tibo-sleep-shine) 28%,
+    var(--tibo-sleep) 34%,
+    var(--tibo-sleep) 50%,
+    var(--tibo-sleep) 66%,
+    var(--tibo-sleep-shine) 72%,
+    color-mix(in srgb, var(--tibo-sleep-shine) 45%, #ffffff) 75%,
+    var(--tibo-sleep-shine) 78%,
+    var(--tibo-sleep) 84%,
+    var(--tibo-sleep) 100%
+  );
+}
+
+.tibo-chip[data-activity="sleeping"]::before {
+  background: var(--tibo-sleep-soft);
+}
+
+/* Icon glyphs share the same shimmer fill. */
+.tibo-chip[data-activity="working"] i,
+.tibo-chip[data-activity="sleeping"] i {
+  -webkit-text-fill-color: transparent;
+  background-image: inherit;
+  background-size: inherit;
+  background-position: inherit;
+  background-repeat: inherit;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: inherit;
+}
+
+.tibo-chip[data-activity="off"] {
+  color: var(--text-2);
+  border-color: var(--border);
+}
+
+.tibo-chip[data-daytype="weekend"] {
+  border-style: dashed;
+  color: var(--text-2);
+}
+
+.tibo-chip[data-daytype="holiday"] {
+  color: var(--text);
+  background: var(--bg-soft);
+  border-color: var(--border-strong);
+}
+
+.tibo-region {
+  margin: 0;
+  grid-column: 1 / -1;
+  color: var(--text-2);
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+@keyframes tibo-chip-shimmer {
+  from {
+    background-position: 100% center;
+  }
+  to {
+    background-position: 0% center;
+  }
 }
 
 /* ——— Timeline ——— */
@@ -784,6 +1078,14 @@ time i {
     font-size: 1.05rem;
   }
 
+  .tibo-body {
+    grid-template-columns: 1fr;
+  }
+
+  .tibo-meta {
+    justify-content: flex-start;
+  }
+
   .dashboard {
     grid-template-columns: 1fr;
   }
@@ -870,5 +1172,31 @@ time i {
   .github-link,
   .link-arrow {
     transition: none;
+  }
+
+  .tibo-chip[data-activity="working"],
+  .tibo-chip[data-activity="sleeping"],
+  .tibo-chip[data-activity="working"] i,
+  .tibo-chip[data-activity="sleeping"] i {
+    animation: none;
+    background-image: none;
+    -webkit-text-fill-color: unset;
+    background-clip: unset;
+    -webkit-background-clip: unset;
+  }
+
+  .tibo-chip[data-activity="working"] {
+    color: var(--tibo-work);
+  }
+
+  .tibo-chip[data-activity="sleeping"] {
+    color: var(--tibo-sleep);
+  }
+
+  .dashboard[data-state="yes"] .verdict-word {
+    animation: none;
+    background-image: none;
+    -webkit-text-fill-color: var(--yes);
+    color: var(--yes);
   }
 }

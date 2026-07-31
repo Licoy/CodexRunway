@@ -74,14 +74,14 @@
       data-i18n-content="ogImageAlt"
     >
 
-    <link rel="icon" href="./favicon-32.png?ver=1785458448180" type="image/png" sizes="32x32">
-    <link rel="icon" href="./favicon-16.png?ver=1785458448180" type="image/png" sizes="16x16">
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?ver=1785458448180" sizes="180x180">
-    <link rel="manifest" href="./site.webmanifest?ver=1785458448180">
+    <link rel="icon" href="./favicon-32.png?ver=1785460612250" type="image/png" sizes="32x32">
+    <link rel="icon" href="./favicon-16.png?ver=1785460612250" type="image/png" sizes="16x16">
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?ver=1785460612250" sizes="180x180">
+    <link rel="manifest" href="./site.webmanifest?ver=1785460612250">
 
-    <link rel="stylesheet" href="./vendor/caomei/style.css?ver=1785458448180">
-    <link rel="stylesheet" href="./styles.css?ver=1785458448180">
-    <script type="module" src="./app.js?ver=1785458448180"></script>
+    <link rel="stylesheet" href="./vendor/caomei/style.css?ver=1785460612250">
+    <link rel="stylesheet" href="./styles.css?ver=1785460612250">
+    <script type="module" src="./app.js?ver=1785460612250"></script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -144,8 +144,8 @@
         <a class="brand" href="./" aria-label="Codex Runway">
           <img
             class="brand-mark"
-            src="./logo.png?ver=1785458448180"
-            srcset="./logo.png?ver=1785458448180 1x, ./logo@2x.png?ver=1785458448180 2x"
+            src="./logo.png?ver=1785460612250"
+            srcset="./logo.png?ver=1785460612250 1x, ./logo@2x.png?ver=1785460612250 2x"
             width="32"
             height="32"
             alt=""
@@ -166,6 +166,17 @@
             <i class="control-icon czs-computer-l" id="theme-icon" aria-hidden="true"></i>
             <span class="control-value" id="theme-value">Auto</span>
           </button>
+          <a
+            class="control-btn control-link"
+            id="github-btn"
+            href="https://github.com/Licoy/codex-runway"
+            rel="noopener noreferrer"
+            target="_blank"
+            aria-label=""
+          >
+            <i class="control-icon czs-github" aria-hidden="true"></i>
+            <span class="control-value" data-i18n="githubControl">GitHub</span>
+          </a>
         </div>
       </div>
     </header>
@@ -190,6 +201,11 @@
           <p class="verdict-detail" id="status-detail" data-i18n="loadingDetail">
             Pulling the latest monitor feed…
           </p>
+          <p
+            class="verdict-countdown schedule-relative"
+            id="status-countdown"
+            hidden
+          ></p>
         </div>
 
         <aside class="signal-rail" aria-label="status metadata">
@@ -219,6 +235,23 @@
             <span data-i18n="viewJSON">JSON</span>
           </a>
         </aside>
+      </section>
+
+      <section class="tibo-radar" aria-labelledby="tibo-title">
+        <div class="tibo-head">
+          <h2 id="tibo-title" class="section-kicker">
+            <i class="czs-location-l" aria-hidden="true"></i>
+            <span data-i18n="tiboRadarKicker">Tibo radar</span>
+          </h2>
+        </div>
+        <div class="tibo-body">
+          <div class="tibo-clock-block">
+            <strong class="tibo-time" id="tibo-time">—</strong>
+            <span class="tibo-zone" id="tibo-zone">—</span>
+          </div>
+          <div class="tibo-meta" id="tibo-meta"></div>
+          <p class="tibo-region" id="tibo-region">—</p>
+        </div>
       </section>
 
       <section class="timeline" aria-labelledby="events-title">
