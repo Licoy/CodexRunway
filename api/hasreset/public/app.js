@@ -6,9 +6,16 @@ import {
   normalizeLanguage,
 } from "./l10n.js";
 import { classifyStatus, nextScheduledReset } from "./status-logic.js";
+import {
+  formatTiboClock,
+  inspectTiboLocalTime,
+} from "./tibo-radar.js";
 
 const STORAGE_LANG = "hasreset-lang";
 const STORAGE_THEME = "hasreset-theme";
+
+/** DEV: preview every activity tag style at once. Turn off before ship. */
+const DEV_SHOW_ALL_ACTIVITY_TAGS = false;
 
 const state = {
   language: loadLanguage(),
@@ -17,6 +24,8 @@ const state = {
   loadError: false,
   l10n: null,
   countdownTimer: null,
+  clockTimer: null,
+  tiboChipSignature: null,
 };
 
 const elements = {
@@ -25,6 +34,7 @@ const elements = {
   value: document.querySelector("#status-value"),
   badge: document.querySelector("#state-badge"),
   detail: document.querySelector("#status-detail"),
+  countdown: document.querySelector("#status-countdown"),
   updated: document.querySelector("#updated"),
   monitorChip: document.querySelector("#monitor-chip"),
   monitorValue: document.querySelector("#monitor-value"),
@@ -32,12 +42,17 @@ const elements = {
   nextValue: document.querySelector("#next-value"),
   events: document.querySelector("#events"),
   empty: document.querySelector("#empty"),
+  tiboTime: document.querySelector("#tibo-time"),
+  tiboZone: document.querySelector("#tibo-zone"),
+  tiboMeta: document.querySelector("#tibo-meta"),
+  tiboRegion: document.querySelector("#tibo-region"),
   langBtn: document.querySelector("#lang-btn"),
   langIcon: document.querySelector("#lang-icon"),
   langValue: document.querySelector("#lang-value"),
   themeBtn: document.querySelector("#theme-btn"),
   themeIcon: document.querySelector("#theme-icon"),
   themeValue: document.querySelector("#theme-value"),
+  githubBtn: document.querySelector("#github-btn"),
 };
 
 bootstrap();
@@ -48,8 +63,12 @@ function bootstrap() {
   elements.langBtn?.addEventListener("click", cycleLanguage);
   elements.themeBtn?.addEventListener("click", cycleTheme);
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") updateCountdowns();
+    if (document.visibilityState === "visible") {
+      updateCountdowns();
+      renderTiboRadar();
+    }
   });
+  startClockTicker();
   loadStatus();
 }
 
@@ -73,6 +92,7 @@ function applyLanguage(language) {
   document.title = state.l10n.text("pageTitle");
   localizeStaticContent();
   updateControlLabels();
+  renderTiboRadar();
 }
 
 function applyTheme(theme) {
@@ -131,6 +151,10 @@ function updateControlLabels() {
       `${l10n.text("themeButtonAria")}: ${l10n.text(theme.labelKey)}`,
     );
   }
+
+  if (elements.githubBtn) {
+    elements.githubBtn.setAttribute("aria-label", l10n.text("githubButtonAria"));
+  }
 }
 
 function render() {
@@ -171,6 +195,13 @@ function renderFeed(feed, now) {
     elements.nextChip.dataset.hasNext = "false";
     elements.nextValue.textContent = l10n.text("nextNone");
   }
+
+  // When the verdict names a future reset time, show a live relative countdown
+  // on its own line (same wording as the signal log, without surrounding parens).
+  const verdictScheduleAt = (result.reason === "scheduled" || result.reason === "scheduled_today")
+    ? result.scheduledAt
+    : null;
+  setVerdictCountdown(verdictScheduleAt, now, l10n);
 
   renderEvents(Array.isArray(feed.events) ? feed.events : [], l10n, now);
 }
@@ -260,6 +291,7 @@ function renderEvents(events, l10n, now = new Date()) {
           const rel = document.createElement("span");
           rel.className = "schedule-relative";
           rel.dataset.effectiveAt = event.effectiveAt;
+          rel.dataset.countdownFormat = "paren";
           rel.textContent = ` (${countdown})`;
           schedule.append(rel);
         }
@@ -328,6 +360,131 @@ function stopCountdownTicker() {
   }
 }
 
+/** Always-on 1s ticker for Tibo local clock (independent of reset countdowns). */
+function startClockTicker() {
+  if (state.clockTimer != null) return;
+  renderTiboRadar();
+  state.clockTimer = setInterval(renderTiboRadar, 1000);
+}
+
+function renderTiboRadar(now = new Date()) {
+  const l10n = state.l10n;
+  if (!l10n || !elements.tiboTime) return;
+
+  const snap = inspectTiboLocalTime(now);
+  const clock = formatTiboClock(snap, state.language);
+
+  elements.tiboTime.textContent = clock.dateTime;
+  if (elements.tiboZone) {
+    elements.tiboZone.textContent = `${snap.timeZone} · ${clock.zone}`;
+  }
+  if (elements.tiboRegion) {
+    elements.tiboRegion.textContent = l10n.text(snap.regionKey);
+  }
+
+  renderTiboChips(snap, l10n);
+}
+
+function renderTiboChips(snap, l10n) {
+  if (!elements.tiboMeta) return;
+
+  // Avoid rebuilding every second (restarts shimmer). Only refresh when the
+  // visible set of tags / labels would change.
+  const signature = DEV_SHOW_ALL_ACTIVITY_TAGS
+    ? `dev|${state.language}|${snap.dayType}|${snap.holidayId ?? ""}`
+    : `${state.language}|${snap.activity}|${snap.dayType}|${snap.holidayId ?? ""}`;
+  if (state.tiboChipSignature === signature) return;
+  state.tiboChipSignature = signature;
+
+  if (DEV_SHOW_ALL_ACTIVITY_TAGS) {
+    elements.tiboMeta.replaceChildren(
+      tiboActivityChip("working", l10n),
+      tiboActivityChip("sleeping", l10n),
+      tiboActivityChip("off", l10n),
+      tiboDaytypeChip(snap, l10n),
+    );
+    return;
+  }
+
+  elements.tiboMeta.replaceChildren(
+    tiboActivityChip(snap.activity, l10n),
+    tiboDaytypeChip(snap, l10n),
+  );
+}
+
+function tiboActivityChip(activity, l10n) {
+  const el = document.createElement("span");
+  el.className = "tibo-chip";
+  el.dataset.activity = activity;
+  el.append(
+    icon(tiboActivityIcon(activity)),
+    document.createTextNode(tiboActivityLabel(activity, l10n)),
+  );
+  return el;
+}
+
+function tiboDaytypeChip(snap, l10n) {
+  const el = document.createElement("span");
+  el.className = "tibo-chip";
+  el.dataset.daytype = snap.dayType;
+  el.append(
+    icon(tiboDaytypeIcon(snap.dayType)),
+    document.createTextNode(tiboDaytypeLabel(snap, l10n)),
+  );
+  return el;
+}
+
+function tiboActivityIcon(activity) {
+  return {
+    working: "czs-sun-l",
+    sleeping: "czs-moon-l",
+    off: "czs-clock-l",
+  }[activity] ?? "czs-clock-l";
+}
+
+function tiboActivityLabel(activity, l10n) {
+  return {
+    working: l10n.text("tiboActivityWorking"),
+    sleeping: l10n.text("tiboActivitySleeping"),
+    off: l10n.text("tiboActivityOff"),
+  }[activity] ?? l10n.text("tiboActivityOff");
+}
+
+function tiboDaytypeIcon(dayType) {
+  return {
+    weekday: "czs-calendar-l",
+    weekend: "czs-calendar-l",
+    holiday: "czs-star-l",
+  }[dayType] ?? "czs-calendar-l";
+}
+
+function tiboDaytypeLabel(snap, l10n) {
+  if (snap.dayType === "holiday") {
+    return l10n.text("tiboDayHoliday", {
+      name: tiboHolidayName(snap.holidayId, l10n),
+    });
+  }
+  if (snap.dayType === "weekend") return l10n.text("tiboDayWeekend");
+  return l10n.text("tiboDayWeekday");
+}
+
+function tiboHolidayName(holidayId, l10n) {
+  const key = {
+    newYear: "tiboHolidayNewYear",
+    mlk: "tiboHolidayMlk",
+    presidents: "tiboHolidayPresidents",
+    memorial: "tiboHolidayMemorial",
+    juneteenth: "tiboHolidayJuneteenth",
+    independence: "tiboHolidayIndependence",
+    laborDay: "tiboHolidayLaborDay",
+    indigenousPeoples: "tiboHolidayIndigenousPeoples",
+    veterans: "tiboHolidayVeterans",
+    thanksgiving: "tiboHolidayThanksgiving",
+    christmas: "tiboHolidayChristmas",
+  }[holidayId];
+  return l10n.text(key ?? "tiboHolidayFallback");
+}
+
 function updateCountdowns() {
   const l10n = state.l10n;
   if (!l10n) return;
@@ -343,12 +500,13 @@ function updateCountdowns() {
   for (const el of nodes) {
     const text = formatCountdown(el.dataset.effectiveAt, now, l10n);
     if (text) {
-      el.textContent = ` (${text})`;
+      el.textContent = el.dataset.countdownFormat === "paren" ? ` (${text})` : text;
       el.hidden = false;
       stillPending = true;
     } else {
       el.textContent = "";
       el.hidden = true;
+      delete el.dataset.effectiveAt;
     }
   }
 
@@ -357,6 +515,23 @@ function updateCountdowns() {
     stopCountdownTicker();
     render();
   }
+}
+
+function setVerdictCountdown(effectiveAt, now, l10n) {
+  const el = elements.countdown;
+  if (!el) return;
+
+  const text = formatCountdown(effectiveAt, now, l10n);
+  if (!text || !effectiveAt) {
+    el.hidden = true;
+    el.textContent = "";
+    delete el.dataset.effectiveAt;
+    return;
+  }
+
+  el.dataset.effectiveAt = effectiveAt;
+  el.textContent = text;
+  el.hidden = false;
 }
 
 function sortEventsByNewest(events) {
@@ -459,6 +634,7 @@ function renderUnavailable() {
   elements.value.textContent = l10n.text("statusUnknown");
   setConfidenceBadge(null, l10n);
   elements.detail.textContent = l10n.text("statusReadFailed");
+  setVerdictCountdown(null, new Date(), l10n);
   elements.updated.textContent = "—";
   elements.monitorChip.dataset.monitor = "degraded";
   elements.monitorValue.textContent = l10n.text("monitorDegraded");
