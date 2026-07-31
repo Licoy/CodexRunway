@@ -1,12 +1,32 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-31T21:28:37.658Z",
-  "lastSuccessfulCheckAt": "2026-07-31T21:28:37.658Z",
+  "generatedAt": "2026-07-31T23:16:07.963Z",
+  "lastSuccessfulCheckAt": "2026-07-31T23:16:07.963Z",
   "monitor": {
     "status": "ok",
     "errorCode": null
   },
   "events": [
+    {
+      "kind": "reset_scheduled",
+      "announcedAt": "2026-07-31T20:22:11.000Z",
+      "effectiveAt": "2026-08-01T12:00:00.000Z",
+      "scope": {
+        "plans": [
+          "all"
+        ],
+        "windows": [
+          "unknown"
+        ]
+      },
+      "source": {
+        "handle": "thsottiaux",
+        "postId": "2083287127865885060",
+        "url": "https://x.com/thsottiaux/status/2083287127865885060"
+      },
+      "confidence": 0.7,
+      "rationale": "Explicit Codex quota reset schedule."
+    },
     {
       "kind": "reset_scheduled",
       "announcedAt": "2026-07-30T18:30:35.000Z",
@@ -24,7 +44,7 @@
         "postId": "2082896652680167851",
         "url": "https://x.com/thsottiaux/status/2082896652680167851"
       },
-      "confidence": 0.86,
+      "confidence": 0.7,
       "rationale": "Explicit Codex quota reset schedule."
     },
     {
@@ -64,7 +84,7 @@
         "postId": "2082883636177916306",
         "url": "https://x.com/thsottiaux/status/2082883636177916306"
       },
-      "confidence": 0.9,
+      "confidence": 0.85,
       "rationale": "Quota limit increase announcement; not a reset."
     },
     {
@@ -84,7 +104,7 @@
         "postId": "2082606956368609353",
         "url": "https://x.com/thsottiaux/status/2082606956368609353"
       },
-      "confidence": 0.88,
+      "confidence": 0.7,
       "rationale": "Explicit Codex quota reset schedule."
     },
     {
@@ -104,7 +124,7 @@
         "postId": "2082341416681001277",
         "url": "https://x.com/thsottiaux/status/2082341416681001277"
       },
-      "confidence": 0.86,
+      "confidence": 0.9,
       "rationale": "Explicit Codex quota reset schedule."
     },
     {
@@ -136,7 +156,7 @@
           "all"
         ],
         "windows": [
-          "unknown"
+          "weekly"
         ]
       },
       "source": {
