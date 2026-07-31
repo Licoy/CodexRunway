@@ -4,12 +4,12 @@ import {
   createTranslator,
   detectBrowserLanguage,
   normalizeLanguage,
-} from "./l10n.js?ver=1785472912693";
-import { classifyStatus, nextScheduledReset } from "./status-logic.js?ver=1785472912693";
+} from "./l10n.js?ver=1785495056003";
+import { classifyStatus, nextScheduledReset } from "./status-logic.js?ver=1785495056003";
 import {
   formatTiboClock,
   inspectTiboLocalTime,
-} from "./tibo-radar.js?ver=1785472912693";
+} from "./tibo-radar.js?ver=1785495056003";
 
 const STORAGE_LANG = "hasreset-lang";
 const STORAGE_THEME = "hasreset-theme";
