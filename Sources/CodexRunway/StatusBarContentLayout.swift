@@ -72,9 +72,10 @@ struct StatusBarContentLayout {
             return totalWidth(countdownColumnWidths, gap: 2)
         case .battery:
             guard let onlyMeter = renderPlan.meters.count == 1 ? renderPlan.meters.first : nil else {
-                return renderPlan.meters.isEmpty ? 70 : totalWidth(batteryColumnWidths, gap: 6)
+                return renderPlan.meters.isEmpty ? 72 : totalWidth(batteryColumnWidths, gap: 5)
             }
-            return min(150, max(70, textWidth(batteryDetail(for: onlyMeter), font: batteryFont) + 28))
+            // Elongated iOS-style body + terminal + padding around the center label.
+            return min(150, max(72, textWidth(batteryDetail(for: onlyMeter), font: batteryFont) + 32))
         case .meters:
             return renderPlan.meters.isEmpty ? 70 : totalWidth(meterColumnWidths, gap: 6)
         case .rings:
@@ -91,11 +92,11 @@ struct StatusBarContentLayout {
     }
 
     var batteryFont: NSFont {
-        .systemFont(ofSize: 10.5, weight: .semibold)
+        .monospacedDigitSystemFont(ofSize: 10.5, weight: .semibold)
     }
 
     var smallBatteryFont: NSFont {
-        .systemFont(ofSize: 6.5, weight: .semibold)
+        .monospacedDigitSystemFont(ofSize: 7, weight: .semibold)
     }
 
     var meterTextFont: NSFont {
@@ -117,7 +118,8 @@ struct StatusBarContentLayout {
             let maximumTextWidth = column.map {
                 textWidth(batteryCaption(for: $0), font: smallBatteryFont)
             }.max() ?? 0
-            return min(150, max(88, maximumTextWidth + 12))
+            // Extra room for terminal nub and shell insets.
+            return min(156, max(92, maximumTextWidth + 18))
         }
     }
 
