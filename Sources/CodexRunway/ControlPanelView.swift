@@ -120,6 +120,14 @@ struct ControlPanelView: View {
                     }
                     .pickerStyle(.menu)
                 }
+                PickerRow(title: l10n.text(.statusBarProviderScope), subtitle: l10n.text(.display)) {
+                    Picker(l10n.text(.statusBarProviderScope), selection: statusBarProviderScopeBinding) {
+                        ForEach(StatusBarProviderScope.allCases, id: \.self) { scope in
+                            Text(scope.title(l10n)).tag(scope)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
                 if settings.preferences.statusBarDisplayStyle == .meters {
                     PickerRow(title: l10n.text(.statusBarMetersDetailStyle), subtitle: l10n.text(.statusBarMeters)) {
                         Picker(l10n.text(.statusBarMetersDetailStyle), selection: statusBarMetersDetailStyleBinding) {
@@ -304,6 +312,12 @@ struct ControlPanelView: View {
         Binding(get: { settings.preferences.statusBarDisplayStyle }, set: { settings.updateStatusBarDisplayStyle($0) })
     }
 
+    private var statusBarProviderScopeBinding: Binding<StatusBarProviderScope> {
+        Binding(
+            get: { settings.preferences.statusBarProviderScope },
+            set: { settings.updateStatusBarProviderScope($0) })
+    }
+
     private var statusBarMetersDetailStyleBinding: Binding<StatusBarMetersDetailStyle> {
         Binding(get: { settings.preferences.statusBarMetersDetailStyle }, set: { settings.updateStatusBarMetersDetailStyle($0) })
     }
@@ -451,6 +465,15 @@ private extension StatusBarDisplayStyle {
         case .battery: l10n.text(.statusBarBattery)
         case .meters: l10n.text(.statusBarMeters)
         case .rings: l10n.text(.statusBarRings)
+        }
+    }
+}
+
+private extension StatusBarProviderScope {
+    func title(_ l10n: L10n) -> String {
+        switch self {
+        case .selected: l10n.text(.statusBarProviderScopeSelected)
+        case .both: l10n.text(.statusBarProviderScopeBoth)
         }
     }
 }

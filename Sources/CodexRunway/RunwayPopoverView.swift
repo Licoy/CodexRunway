@@ -127,14 +127,60 @@ struct RunwayPopoverView: View {
 
     private var mainContent: some View {
         PolishedScrollView(verticalPadding: 4) {
-            if visibleSections.contains(.grokQuota) {
-                GrokDashboardView(
-                    state: model.grokPanelState,
-                    l10n: l10n,
-                    isRefreshing: model.isRefreshingGrok,
-                    onRefresh: { model.refreshGrok(.current) })
+            if model.selectedProvider == .grok {
+                grokMainContent
             } else {
                 codexMainContent
+            }
+        }
+    }
+
+    private var grokMainContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            GrokDashboardView(
+                state: model.grokPanelState,
+                l10n: l10n,
+                isRefreshing: model.isRefreshingGrok,
+                onRefresh: { model.refreshGrok(.current) })
+            if visibleSections.contains(.grokTokenHeatmap) {
+                sectionBlock {
+                    TokenUsageHeatmapView(
+                        allDevicesTokens: [:],
+                        localTokens: model.grokTokenHeatmapLocalTokens,
+                        calculatedAt: model.grokTokenHeatmapCalculatedAt,
+                        officialStatsAsOf: nil,
+                        officialGeneratedAt: nil,
+                        showsOfficialStats: false,
+                        chartStyle: Binding(
+                            get: { settings.preferences.tokenUsageChartStyle },
+                            set: { settings.updateTokenUsageChartStyle($0) }),
+                        l10n: l10n,
+                        isRefreshing: model.grokPanelState.isRefreshingLocalUsage,
+                        onRefresh: { model.refreshGrokLocalUsage() })
+                }
+            }
+            if visibleSections.contains(.grokAPICost) {
+                sectionBlock {
+                    CostSummaryView(
+                        text: model.grokCostText,
+                        subtitle: model.grokCostSubtitle,
+                        l10n: l10n,
+                        isRefreshing: model.grokPanelState.isRefreshingLocalUsage,
+                        onRefresh: { model.refreshGrokLocalUsage() },
+                        onDetailsSelect: {
+                            apiCostDetailRange = settings.preferences.apiCostSummaryRange
+                            detailPage = .apiCost
+                        })
+                }
+            }
+            if visibleSections.contains(.grokRecentSessions) {
+                sectionBlock {
+                    GrokRecentSessionsView(
+                        items: model.grokPanelState.localUsage?.recentItems ?? [],
+                        l10n: l10n,
+                        isRefreshing: model.grokPanelState.isRefreshingLocalUsage,
+                        onRefresh: { model.refreshGrokLocalUsage() })
+                }
             }
         }
     }
@@ -243,6 +289,7 @@ struct RunwayPopoverView: View {
             HStack(alignment: .center, spacing: 8) {
                 Text("Codex Runway")
                     .font(.title3.weight(.semibold))
+                providerMenu
                 Spacer(minLength: 8)
                 HStack(spacing: 2) {
                     HeaderActionButton(title: l10n.text(.checkForUpdates), action: checkForUpdates) {
@@ -258,17 +305,6 @@ struct RunwayPopoverView: View {
                     }
                 }
             }
-            Picker("", selection: Binding(
-                get: { model.selectedProvider },
-                set: { model.selectProvider($0) }))
-            {
-                Text(l10n.text(.providerCodex)).tag(RunwayProvider.codex)
-                Text(l10n.text(.providerGrok)).tag(RunwayProvider.grok)
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: 150)
-            .padding(.top, 8)
 
             if model.selectedProvider == .grok {
                 GrokAccountIdentityRow(
@@ -302,6 +338,21 @@ struct RunwayPopoverView: View {
 
     private var accountDisplayName: String {
         model.selectedAccountDisplayName
+    }
+
+    /// Compact provider dropdown placed next to the app title.
+    private var providerMenu: some View {
+        Picker("", selection: Binding(
+            get: { model.selectedProvider },
+            set: { model.selectProvider($0) }))
+        {
+            Text(l10n.text(.providerCodex)).tag(RunwayProvider.codex)
+            Text(l10n.text(.providerGrok)).tag(RunwayProvider.grok)
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .fixedSize()
+        .accessibilityLabel(l10n.text(.providerCodex) + " / " + l10n.text(.providerGrok))
     }
 
     private var detailHeader: some View {

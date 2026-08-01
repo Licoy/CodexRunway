@@ -118,6 +118,21 @@ public struct GrokAuthDocument: Sendable, Equatable {
         return GrokAuthDocument(rawData: data, identity: identity, managedScopeKeys: managedScopes)
     }
 
+    /// OAuth access token (`key`) for the managed scope used by official CLI APIs.
+    public static func accessToken(from data: Data) throws -> String {
+        try parse(data).accessToken()
+    }
+
+    public func accessToken() throws -> String {
+        let root = try Self.rootObject(from: rawData)
+        guard let object = root[identity.scope] as? [String: Any],
+              let key = Self.nonEmptyString(object["key"])
+        else {
+            throw GrokAuthDocumentError.invalidManagedCredential
+        }
+        return key
+    }
+
     public static func replacingManagedScopes(in officialData: Data?, with targetData: Data) throws -> Data {
         let targetDocument = try parse(targetData)
         var official = try officialData.map(rootObject(from:)) ?? [:]

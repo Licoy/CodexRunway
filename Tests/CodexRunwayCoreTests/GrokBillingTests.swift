@@ -19,7 +19,13 @@ struct GrokBillingTests {
             "used": {"val": 9999},
             "onDemandCap": {"val": 5000},
             "onDemandUsed": {"val": 300},
-            "prepaidBalance": {"val": 1250}
+            "prepaidBalance": {"val": 1250},
+            "productUsage": [
+              {"product": "GrokBuild", "usagePercent": 30.0},
+              {"product": "GrokImagine", "usagePercent": 8.5},
+              {"product": "GrokChat", "usagePercent": 4.0}
+            ],
+            "isUnifiedBillingUser": true
           },
           "on_demand_enabled": true,
           "subscription_tier": "SuperGrok Heavy"
@@ -38,6 +44,9 @@ struct GrokBillingTests {
         #expect(snapshot.onDemandEnabled == true)
         #expect(snapshot.onDemandUsedCents == 300)
         #expect(snapshot.onDemandLimitCents == 5000)
+        #expect(snapshot.productUsage.map(\.product) == ["GrokBuild", "GrokImagine", "GrokChat"])
+        #expect(snapshot.productUsage.map(\.usagePercent) == [30.0, 8.5, 4.0])
+        #expect(snapshot.isUnifiedBillingUser == true)
         #expect(snapshot.source == .current)
         #expect(snapshot.updatedAt == now)
     }

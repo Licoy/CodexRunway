@@ -31,7 +31,39 @@ struct GrokQuotaPresentationTests {
         #expect(presentation.plan == "SuperGrok")
         #expect(presentation.prepaidBalance == "$12.34")
         #expect(presentation.onDemandUsage == "$1.25 / $25.00")
-        #expect(presentation.source == "Grok CLI")
+        #expect(presentation.source == "Grok CLI billing API")
+        #expect(presentation.meters.count == 1)
+    }
+
+    @Test("product usage becomes secondary meters")
+    func productUsageMeters() throws {
+        let updatedAt = Date(timeIntervalSince1970: 1_785_139_420)
+        let snapshot = GrokQuotaSnapshot(
+            plan: "SuperGrok",
+            includedUsagePercent: 50,
+            period: GrokQuotaPeriod(kind: .weekly, startsAt: updatedAt, resetsAt: updatedAt.addingTimeInterval(86_400)),
+            prepaidBalanceCents: 0,
+            onDemandEnabled: false,
+            onDemandUsedCents: nil,
+            onDemandLimitCents: nil,
+            productUsage: [
+                GrokProductUsage(product: "GrokBuild", usagePercent: 42),
+                GrokProductUsage(product: "GrokImagine", usagePercent: 5),
+                GrokProductUsage(product: "GrokChat", usagePercent: 3),
+            ],
+            isUnifiedBillingUser: true,
+            source: .current,
+            updatedAt: updatedAt)
+
+        let presentation = GrokQuotaPresentation.make(
+            snapshot: snapshot,
+            l10n: L10n(language: .english))
+
+        #expect(presentation.meters.count == 4)
+        #expect(presentation.meters[1].title == "Grok Build")
+        #expect(presentation.meters[1].usedPercent == 42)
+        #expect(presentation.productLines.count == 3)
+        #expect(presentation.lines.contains { $0.title == "Unified billing" })
     }
 
     @Test("monthly quota receives a monthly meter title")

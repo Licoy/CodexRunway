@@ -41,6 +41,14 @@ public enum StatusBarBatteryDetailStyle: String, CaseIterable, Codable, Sendable
     case remainingPercent
 }
 
+/// Which platforms contribute meters to the menu-bar status item.
+public enum StatusBarProviderScope: String, CaseIterable, Codable, Sendable {
+    /// Follow the main panel's `selectedProvider` (legacy single-platform bar).
+    case selected
+    /// Show Codex on top and Grok below (one priority window each).
+    case both
+}
+
 public enum ApiCostSummaryRange: String, CaseIterable, Codable, Sendable {
     case today
     case current
@@ -62,6 +70,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     public var statusBarMetersDetailStyle: StatusBarMetersDetailStyle
     public var statusBarBatteryScope: StatusBarBatteryScope
     public var statusBarBatteryDetailStyle: StatusBarBatteryDetailStyle
+    public var statusBarProviderScope: StatusBarProviderScope
     public var refreshIntervalSeconds: Int
     public var apiCostSummaryRange: ApiCostSummaryRange
     public var showsCostSummary: Bool
@@ -89,6 +98,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         statusBarMetersDetailStyle: StatusBarMetersDetailStyle = .remainingPercent,
         statusBarBatteryScope: StatusBarBatteryScope = .fiveHour,
         statusBarBatteryDetailStyle: StatusBarBatteryDetailStyle = .countdown,
+        statusBarProviderScope: StatusBarProviderScope = .selected,
         refreshIntervalSeconds: Int = 300,
         apiCostSummaryRange: ApiCostSummaryRange = .today,
         showsCostSummary: Bool = true,
@@ -112,6 +122,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         self.statusBarMetersDetailStyle = statusBarMetersDetailStyle
         self.statusBarBatteryScope = statusBarBatteryScope
         self.statusBarBatteryDetailStyle = statusBarBatteryDetailStyle
+        self.statusBarProviderScope = statusBarProviderScope
         self.refreshIntervalSeconds = refreshIntervalSeconds
         self.apiCostSummaryRange = apiCostSummaryRange
         self.showsCostSummary = showsCostSummary
@@ -142,6 +153,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         case statusBarMetersDetailStyle
         case statusBarBatteryScope
         case statusBarBatteryDetailStyle
+        case statusBarProviderScope
         case refreshIntervalSeconds
         case apiCostSummaryRange
         case showsCostSummary
@@ -168,6 +180,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         statusBarMetersDetailStyle = try container.decodeIfPresent(StatusBarMetersDetailStyle.self, forKey: .statusBarMetersDetailStyle) ?? .remainingPercent
         statusBarBatteryScope = try container.decodeIfPresent(StatusBarBatteryScope.self, forKey: .statusBarBatteryScope) ?? .fiveHour
         statusBarBatteryDetailStyle = try container.decodeIfPresent(StatusBarBatteryDetailStyle.self, forKey: .statusBarBatteryDetailStyle) ?? .countdown
+        statusBarProviderScope = try container.decodeIfPresent(StatusBarProviderScope.self, forKey: .statusBarProviderScope) ?? .selected
         refreshIntervalSeconds = try container.decodeIfPresent(Int.self, forKey: .refreshIntervalSeconds) ?? 300
         apiCostSummaryRange = try container.decodeIfPresent(ApiCostSummaryRange.self, forKey: .apiCostSummaryRange) ?? .today
         showsCostSummary = try container.decodeIfPresent(Bool.self, forKey: .showsCostSummary) ?? true

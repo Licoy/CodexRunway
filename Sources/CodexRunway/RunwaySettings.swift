@@ -57,6 +57,10 @@ final class RunwaySettings: ObservableObject {
         update { $0.statusBarBatteryDetailStyle = style }
     }
 
+    func updateStatusBarProviderScope(_ scope: StatusBarProviderScope) {
+        update { $0.statusBarProviderScope = scope }
+    }
+
     func updateRefreshInterval(_ seconds: Int) {
         update { $0.refreshIntervalSeconds = max(60, min(1_800, seconds)) }
     }

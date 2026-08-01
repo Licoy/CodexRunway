@@ -5,21 +5,30 @@ import SwiftUI
 struct TokenUsageTooltipContent: Equatable {
     var date: String
     var primary: String
-    var secondary: String
+    var secondary: String?
     var note: String?
 
+    /// - Parameter showsOfficialStats: When false (Grok), only local session tokens are shown.
     static func make(
         date: String,
         officialTokens: Int,
         localTokens: Int,
-        l10n: L10n
+        l10n: L10n,
+        showsOfficialStats: Bool = true
     ) -> Self {
         let tokensLabel = l10n.text(.tokens)
-        let official = TokenUsageHeatmapBuilder.compactTokenCount(
-            officialTokens,
-            language: l10n.language)
         let local = TokenUsageHeatmapBuilder.compactTokenCount(
             localTokens,
+            language: l10n.language)
+        if !showsOfficialStats {
+            return Self(
+                date: date,
+                primary: "\(l10n.text(.heatmapLocalShort)) \(local) \(tokensLabel)",
+                secondary: nil,
+                note: nil)
+        }
+        let official = TokenUsageHeatmapBuilder.compactTokenCount(
+            officialTokens,
             language: l10n.language)
         return Self(
             date: date,
@@ -41,8 +50,10 @@ enum TokenUsageSourcePresentation {
         return date.map { String(format: l10n.text(.heatmapOfficialAsOf), $0) }
     }
 
-    static func disclosure(l10n: L10n) -> String {
-        l10n.text(.heatmapSourceDisclosure)
+    static func disclosure(l10n: L10n, showsOfficialStats: Bool = true) -> String {
+        showsOfficialStats
+            ? l10n.text(.heatmapSourceDisclosure)
+            : l10n.text(.grokLocalUsageHint)
     }
 
     private static func normalized(_ value: String?) -> String? {
@@ -74,9 +85,17 @@ enum TokenUsageTooltipLayout {
         let rightRoom = max(0, containerSize.width - cellRect.maxX - gap)
         let sideRoom = max(leftRoom, rightRoom)
         let width = sideRoom >= 160 ? min(preferredWidth, sideRoom) : preferredWidth
+        let height: CGFloat
+        if content.note != nil {
+            height = 80
+        } else if content.secondary != nil {
+            height = 60
+        } else {
+            height = 44
+        }
         return CGSize(
             width: min(containerSize.width, width),
-            height: content.note == nil ? 60 : 80)
+            height: height)
     }
 }
 
@@ -94,10 +113,12 @@ private struct TokenUsageTooltipCard: View {
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            Text(content.secondary)
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            if let secondary = content.secondary {
+                Text(secondary)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
             if let note = content.note {
                 Text(note)
                     .font(.system(size: 9))
@@ -127,6 +148,8 @@ struct TokenUsageHeatmapView: View {
     var calculatedAt: Date?
     var officialStatsAsOf: String?
     var officialGeneratedAt: Date?
+    /// When false (Grok), hide official multi-device stats from tooltips and captions.
+    var showsOfficialStats: Bool = true
     @Binding var chartStyle: TokenUsageChartStyle
     var l10n: L10n
     var isRefreshing: Bool
@@ -209,6 +232,7 @@ struct TokenUsageHeatmapView: View {
                 TokenUsageTrendChartView(
                     series: series,
                     style: chartStyle == .bar ? .bar : .line,
+                    showsOfficialStats: showsOfficialStats,
                     l10n: l10n)
                 if !series.hasUsage, !isRefreshing {
                     Text(l10n.text(.heatmapEmpty))
@@ -233,10 +257,14 @@ struct TokenUsageHeatmapView: View {
                     Image(systemName: "info.circle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .help(TokenUsageSourcePresentation.disclosure(l10n: l10n))
-                        .accessibilityLabel(TokenUsageSourcePresentation.disclosure(l10n: l10n))
+                        .help(TokenUsageSourcePresentation.disclosure(
+                            l10n: l10n,
+                            showsOfficialStats: showsOfficialStats))
+                        .accessibilityLabel(TokenUsageSourcePresentation.disclosure(
+                            l10n: l10n,
+                            showsOfficialStats: showsOfficialStats))
                 }
-                if let officialAsOfText {
+                if showsOfficialStats, let officialAsOfText {
                     Text(officialAsOfText)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -427,7 +455,8 @@ struct TokenUsageHeatmapView: View {
             date: date,
             officialTokens: cell.allDevicesTokens,
             localTokens: cell.localTokens,
-            l10n: l10n)
+            l10n: l10n,
+            showsOfficialStats: showsOfficialStats)
     }
 
     private func monthTitle(_ month: Int) -> String {
@@ -835,6 +864,7 @@ private enum TokenUsageTrendStyle {
 private struct TokenUsageTrendChartView: View {
     var series: TokenUsageChartSeries
     var style: TokenUsageTrendStyle
+    var showsOfficialStats: Bool = true
     var l10n: L10n
 
     @StateObject private var hover = TrendHoverStore()
@@ -1010,7 +1040,8 @@ private struct TokenUsageTrendChartView: View {
             date: date,
             officialTokens: point.allDevicesTokens,
             localTokens: point.localTokens,
-            l10n: l10n)
+            l10n: l10n,
+            showsOfficialStats: showsOfficialStats)
     }
 
     private var tooltipDateFormatter: DateFormatter {

@@ -18,34 +18,72 @@ extension RunwayModel {
     }
 
     var selectedStatusText: String {
+        if settings.preferences.statusBarProviderScope == .both {
+            // Prefer Codex countdown when dual; fall back to Grok.
+            if !quotaMeters.isEmpty, !statusText.isEmpty {
+                return statusText
+            }
+            return grokStatusText
+        }
         switch selectedProvider {
         case .codex:
             return statusText
         case .grok:
-            guard let meter = grokPanelState.quota?.meters.first else {
-                switch grokPanelState.availability {
-                case .notLoggedIn, .reauthenticationRequired:
-                    return l10n.text(.statusLogin)
-                case .loading:
-                    return l10n.text(.statusWait)
-                case .ready:
-                    return l10n.text(.statusUnknown)
-                case .cliUnavailable, .cliTooOld, .billingParseFailed, .failed:
-                    return l10n.text(.statusError)
-                }
-            }
-            if let resetsAt = meter.resetsAt {
-                return DurationFormatter.localized(
-                    resetsAt.timeIntervalSince(Date()),
-                    language: l10n.language,
-                    includeSeconds: false)
-            }
-            return "\(meter.remainingPercent)%"
+            return grokStatusText
         }
     }
 
+    private var grokStatusText: String {
+        guard let meter = grokPanelState.quota?.meters.first else {
+            switch grokPanelState.availability {
+            case .notLoggedIn, .reauthenticationRequired:
+                return l10n.text(.statusLogin)
+            case .loading:
+                return l10n.text(.statusWait)
+            case .ready:
+                return l10n.text(.statusUnknown)
+            case .cliUnavailable, .cliTooOld, .billingParseFailed, .failed:
+                return l10n.text(.statusError)
+            }
+        }
+        if let resetsAt = meter.resetsAt {
+            return DurationFormatter.localized(
+                resetsAt.timeIntervalSince(Date()),
+                language: l10n.language,
+                includeSeconds: false)
+        }
+        return "\(meter.remainingPercent)%"
+    }
+
     var selectedQuotaMeters: [QuotaMeter] {
-        selectedProvider == .codex ? quotaMeters : (grokPanelState.quota?.meters ?? [])
+        switch settings.preferences.statusBarProviderScope {
+        case .both:
+            return StatusBarMeterSelection.dualProviderMeters(
+                codexMeters: quotaMeters,
+                grokMeters: grokPanelState.quota?.meters ?? [],
+                codexLabel: l10n.text(.providerCodex),
+                grokLabel: l10n.text(.providerGrok),
+                l10n: l10n)
+        case .selected:
+            // Status bar keeps the overall included-quota meter; product breakdown is panel-only.
+            // Grok panel titles are long ("周度包含额度"); menu bar uses Codex-style short windows.
+            if selectedProvider == .codex {
+                return quotaMeters
+            }
+            return Array((grokPanelState.quota?.meters ?? []).prefix(1)).map {
+                StatusBarMeterSelection.withShortStatusBarTitle($0, l10n: l10n)
+            }
+        }
+    }
+
+    /// True when the status bar (or panel) needs a fresh Grok quota snapshot.
+    var needsGrokStatusBarData: Bool {
+        settings.preferences.statusBarProviderScope == .both || selectedProvider == .grok
+    }
+
+    /// True when the status bar (or panel) needs a fresh Codex quota snapshot.
+    var needsCodexStatusBarData: Bool {
+        settings.preferences.statusBarProviderScope == .both || selectedProvider == .codex
     }
 
     var selectedQuotaText: String {
@@ -92,12 +130,15 @@ extension RunwayModel {
             do {
                 let state = try await grokModule.load()
                 applyGrokAccountState(state)
-                if selectedProvider == .grok,
+                if needsGrokStatusBarData,
                    grokCLIAvailable,
                    state.currentAccountID != nil,
                    grokPanelState.quota == nil
                 {
                     refreshGrok(.current)
+                }
+                if selectedProvider == .grok {
+                    refreshGrokLocalUsage()
                 }
             } catch {
                 grokLastError = grokErrorText(error)
@@ -109,6 +150,7 @@ extension RunwayModel {
     func providerDidChange(from previous: RunwayProvider) {
         if previous == .grok {
             cancelGrokRefresh()
+            cancelGrokLocalUsageRefresh()
         }
         switch selectedProvider {
         case .codex:
@@ -119,7 +161,124 @@ extension RunwayModel {
             if grokPanelState.quota == nil, grokModule != nil, grokCLIAvailable {
                 refreshGrok(.current)
             }
+            refreshGrokLocalUsage()
         }
+    }
+
+    func refreshGrokLocalUsage() {
+        guard selectedProvider == .grok else { return }
+        grokLocalUsageGeneration += 1
+        let generation = grokLocalUsageGeneration
+        grokPanelState.isRefreshingLocalUsage = true
+        grokLocalUsageWork?.cancel()
+        let costWindow = grokDefaultCostWindow()
+        let work = Task { [weak self] in
+            guard let self else { return }
+            let summary: GrokLocalUsageSummary?
+            do {
+                summary = try await Task.detached(priority: .utility) {
+                    try GrokSessionScanner().scan(
+                        recentLimit: 5,
+                        sessionLimit: 300,
+                        costWindow: costWindow)
+                }.value
+            } catch is CancellationError {
+                return
+            } catch {
+                summary = nil
+            }
+            guard generation == grokLocalUsageGeneration else { return }
+            applyGrokLocalUsage(summary)
+            grokPanelState.isRefreshingLocalUsage = false
+            grokLocalUsageWork = nil
+        }
+        grokLocalUsageWork = work
+    }
+
+    private func cancelGrokLocalUsageRefresh() {
+        grokLocalUsageGeneration += 1
+        grokLocalUsageWork?.cancel()
+        grokLocalUsageWork = nil
+        grokPanelState.isRefreshingLocalUsage = false
+    }
+
+    private func grokDefaultCostWindow(now: Date = Date()) -> DateInterval {
+        if let period = grokAccountState.accounts
+            .first(where: { $0.id == grokAccountState.currentAccountID })?
+            .cachedQuota?.period,
+           let start = period.startsAt,
+           let end = period.resetsAt,
+           end > start
+        {
+            return DateInterval(start: start, end: min(now, end))
+        }
+        switch settings.preferences.apiCostSummaryRange {
+        case .today:
+            return ApiCostRange.today(now: now).window
+        case .thisMonth:
+            return ApiCostRange.thisMonth(now: now).window
+        case .previous:
+            let week: TimeInterval = 7 * 24 * 3_600
+            let currentStart = now.addingTimeInterval(-week)
+            return DateInterval(start: currentStart.addingTimeInterval(-week), end: currentStart)
+        case .current:
+            let week: TimeInterval = 7 * 24 * 3_600
+            return DateInterval(start: now.addingTimeInterval(-week), end: now)
+        }
+    }
+
+    private func applyGrokLocalUsage(_ summary: GrokLocalUsageSummary?) {
+        grokPanelState.localUsage = summary
+        if let summary {
+            if grokTokenHeatmapLocalTokens != summary.dailyTokens {
+                grokTokenHeatmapLocalTokens = summary.dailyTokens
+            }
+            grokTokenHeatmapCalculatedAt = summary.calculatedAt
+            grokCostDetail = summary.costSummary
+            applyGrokDisplayedCost(summary.costSummary)
+        } else {
+            grokTokenHeatmapLocalTokens = [:]
+            grokTokenHeatmapCalculatedAt = nil
+            grokCostDetail = nil
+            grokCostText = l10n.text(.notScanned)
+            grokCostSubtitle = ""
+        }
+    }
+
+    private func applyGrokDisplayedCost(_ summary: ApiEquivalentSummary, now: Date = Date()) {
+        let range = settings.preferences.apiCostSummaryRange
+        if !summary.isDisplayableCost {
+            grokCostText = l10n.text(.usageAnalyticsEmpty)
+            grokCostSubtitle = grokCostSubtitle(for: summary, range: range, now: now)
+            return
+        }
+        let amount = summary.estimatedUSD.map(DurationFormatter.money) ?? "--"
+        grokCostText =
+            "\(amount) \(l10n.text(.apiEquivalent)) · \(Self.compactNumber(summary.totals.totalTokens)) \(l10n.text(.tokens)) · \(l10n.text(.grokSourceLocalSessions))"
+        grokCostSubtitle = grokCostSubtitle(for: summary, range: range, now: now)
+    }
+
+    private func grokCostSubtitle(
+        for summary: ApiEquivalentSummary,
+        range: ApiCostSummaryRange,
+        now: Date
+    ) -> String {
+        let pricing = summary.confidence == .tokensOnly
+            ? l10n.text(.tokensOnly)
+            : l10n.text(.apiTokenPricing)
+        let calculated = DurationFormatter.relativePast(
+            since: summary.calculatedAt,
+            now: now,
+            language: l10n.language,
+            includeSeconds: false)
+        let rangeText: String
+        switch range {
+        case .today: rangeText = l10n.text(.today)
+        case .current: rangeText = l10n.text(.currentCycle)
+        case .previous: rangeText = l10n.text(.previousCycle)
+        case .thisMonth: rangeText = l10n.text(.thisMonth)
+        }
+        return "\(rangeText) · \(pricing) · \(summary.totals.turns) \(l10n.text(.turns)) · \(l10n.text(.calculatedAt)) \(calculated)"
     }
 
     func refreshGrok(
@@ -167,6 +326,9 @@ extension RunwayModel {
                 grokPanelState.availability = grokAvailability(for: error)
             }
             finishGrokRefresh(generation: generation)
+            if selectedProvider == .grok {
+                refreshGrokLocalUsage()
+            }
         }
         grokRefreshWork = work
     }
@@ -295,11 +457,16 @@ extension RunwayModel {
         } else {
             grokLastError = nil
         }
+        // Preserve local usage while billing identity refreshes.
+        let localUsage = grokPanelState.localUsage
+        let isRefreshingLocalUsage = grokPanelState.isRefreshingLocalUsage
         grokPanelState = GrokPanelViewState(
             availability: availability,
             identityName: current?.resolvedDisplayName ?? state.officialCredentialStatus.identity?.resolvedDisplayName,
             planName: quota?.plan,
             quota: quota,
+            localUsage: localUsage,
+            isRefreshingLocalUsage: isRefreshingLocalUsage,
             externalLoginChanged: externalLoginChanged)
         if externalLoginChanged {
             grokAccountOperationMessage = l10n.text(.grokExternalLoginChanged)

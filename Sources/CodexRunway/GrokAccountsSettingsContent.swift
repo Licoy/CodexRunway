@@ -12,12 +12,10 @@ struct GrokAccountsSettingsContent: View {
 
     var body: some View {
         Group {
-            SectionLabel(l10n.text(.grokAccountsTitle))
             Text(l10n.text(.grokSwitchOnlyNewSessions))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            toolbar
             if model.grokAccountState.accounts.isEmpty {
                 Text(l10n.text(.grokAccountsEmpty))
                     .foregroundStyle(.secondary)
@@ -80,30 +78,6 @@ struct GrokAccountsSettingsContent: View {
             }
         } message: {
             Text(l10n.text(.grokSwitchRunningMessage))
-        }
-    }
-
-    private var toolbar: some View {
-        HStack(spacing: 8) {
-            Menu {
-                Button(l10n.text(.grokAccountsAddOAuth)) { model.startGrokOAuthLogin() }
-                Button(l10n.text(.grokAccountsImportOfficial)) { model.importOfficialGrokAccount() }
-            } label: {
-                Label(l10n.text(.accountsAdd), systemImage: "plus")
-            }
-            .disabled(model.isGrokAccountOperationInProgress)
-
-            Button {
-                model.refreshAllGrokAccountQuotas()
-            } label: {
-                Label(l10n.text(.grokAccountsRefreshAll), systemImage: "arrow.clockwise")
-            }
-            .disabled(model.isRefreshingGrok)
-
-            if model.isGrokOAuthLoginInProgress {
-                Button(l10n.text(.cancel)) { model.cancelGrokOAuthLogin() }
-            }
-            Spacer()
         }
     }
 

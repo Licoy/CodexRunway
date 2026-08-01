@@ -17,7 +17,12 @@ struct RunwayMainPanelSectionsTests {
             provider: .grok,
             preferences: preferences)
 
-        #expect(sections == [.grokQuota, .grokBilling])
+        #expect(sections == [
+            .grokQuota,
+            .grokTokenHeatmap,
+            .grokAPICost,
+            .grokRecentSessions,
+        ])
         #expect(sections.isDisjoint(with: [
             .codexQuota,
             .codexTokenHeatmap,

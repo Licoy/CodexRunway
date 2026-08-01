@@ -130,17 +130,25 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case grokNoManagedOAuth
     case grokNoQuotaData
     case grokNotLoggedIn
+    case grokLocalUsage
+    case grokLocalUsageHint
     case grokOnDemandLimit
     case grokOnDemandUsage
     case grokPlan
     case grokPrepaidBalance
+    case grokProductBuild
+    case grokProductChat
+    case grokProductImagine
+    case grokProductUsage
     case grokReauthenticationRequired
     case grokRefreshFailed
     case grokRefreshCancelled
     case grokRefreshTimedOut
     case grokRefreshing
     case grokResetAt
+    case grokSessionsScanned
     case grokSourceCLI
+    case grokSourceLocalSessions
     case grokSwitchConfirmMessage
     case grokSwitchConfirmTitle
     case grokSwitchFailed
@@ -148,6 +156,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case grokSwitchRunningMessage
     case grokSwitchRunningTitle
     case grokSwitching
+    case grokUnifiedBilling
     case grokUpdatedAt
     case hours
     case modelBreakdown
@@ -321,6 +330,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case heatmapEmpty
     case heatmapAllDevices
     case heatmapLocalDevice
+    case heatmapLocalShort
     case heatmapOfficialAsOf
     case heatmapSourceDisclosure
     case heatmapSourceMismatch
@@ -348,6 +358,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case statusBarMetersDetailBoth
     case statusBarMetersDetailStyle
     case statusBarMeters
+    case statusBarProviderScope
+    case statusBarProviderScopeBoth
+    case statusBarProviderScopeSelected
     case statusBarRings
     case statusBarStyle
     case statusUsed

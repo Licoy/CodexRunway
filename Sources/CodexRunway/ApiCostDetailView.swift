@@ -84,7 +84,7 @@ struct ApiCostDetailView: View {
     private var activeDetail: ApiEquivalentSummary? {
         if selectedRange == .current {
             if transientRange == .current, let transientDetail { return transientDetail }
-            return model.costDetail
+            return model.selectedProvider == .grok ? model.grokCostDetail : model.costDetail
         }
         guard transientRange == selectedRange else { return nil }
         return transientDetail
@@ -252,7 +252,8 @@ struct ApiCostDetailView: View {
     }
 
     private func prepareCustomDates() {
-        guard let detail = model.costDetail else { return }
+        let detail = model.selectedProvider == .grok ? model.grokCostDetail : model.costDetail
+        guard let detail else { return }
         let calendar = Calendar.autoupdatingCurrent
         let start = calendar.startOfDay(for: detail.window.start)
         let end = min(maximumCustomDate, detail.window.end)

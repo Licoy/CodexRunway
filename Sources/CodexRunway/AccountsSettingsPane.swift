@@ -22,44 +22,15 @@ struct AccountsSettingsPane: View {
     var body: some View {
         PreferencesPane {
             SettingsSection {
-                Picker("", selection: Binding(
-                    get: { model.selectedProvider },
-                    set: { model.selectProvider($0) }))
-                {
-                    Text(l10n.text(.providerCodex)).tag(RunwayProvider.codex)
-                    Text(l10n.text(.providerGrok)).tag(RunwayProvider.grok)
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 180)
+                platformToolbar
 
                 if model.selectedProvider == .grok {
                     GrokAccountsSettingsContent(model: model, l10n: l10n)
                 } else {
-                    SectionLabel(l10n.text(.accounts))
                     Text(l10n.text(.accountsSwitchRealHint))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-
-                    HStack(spacing: 8) {
-                        Menu {
-                            Button(l10n.text(.accountsAddLocal)) { model.importOfficialAccount() }
-                            Button(l10n.text(.accountsAddPaste)) { showPasteSheet = true }
-                            Button(l10n.text(.accountsAddFile)) { pickFiles() }
-                            Button(l10n.text(.accountsAddOAuth)) { model.startOAuthLogin() }
-                            Button(l10n.text(.accountsAddAPIKey)) { showAPIKeySheet = true }
-                        } label: {
-                            Label(l10n.text(.accountsAdd), systemImage: "plus")
-                        }
-                        Button {
-                            model.refreshAllAccountQuotas()
-                        } label: {
-                            Label(l10n.text(.accountsRefreshAll), systemImage: "arrow.clockwise")
-                        }
-                        .disabled(model.isRefreshingAccountQuotas)
-                        Spacer()
-                    }
 
                     if model.managedAccounts.isEmpty {
                         Text(l10n.text(.accountsEmpty))
@@ -154,6 +125,61 @@ struct AccountsSettingsPane: View {
                 onCancel: {
                     accountPendingSwitch = nil
                 })
+        }
+    }
+
+    private var platformToolbar: some View {
+        HStack(spacing: 8) {
+            Picker("", selection: Binding(
+                get: { model.selectedProvider },
+                set: { model.selectProvider($0) }))
+            {
+                Text(l10n.text(.providerCodex)).tag(RunwayProvider.codex)
+                Text(l10n.text(.providerGrok)).tag(RunwayProvider.grok)
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .fixedSize()
+
+            Spacer(minLength: 8)
+
+            if model.selectedProvider == .grok {
+                Menu {
+                    Button(l10n.text(.grokAccountsAddOAuth)) { model.startGrokOAuthLogin() }
+                    Button(l10n.text(.grokAccountsImportOfficial)) { model.importOfficialGrokAccount() }
+                } label: {
+                    Label(l10n.text(.accountsAdd), systemImage: "plus")
+                }
+                .disabled(model.isGrokAccountOperationInProgress)
+
+                Button {
+                    model.refreshAllGrokAccountQuotas()
+                } label: {
+                    Label(l10n.text(.grokAccountsRefreshAll), systemImage: "arrow.clockwise")
+                }
+                .disabled(model.isRefreshingGrok)
+
+                if model.isGrokOAuthLoginInProgress {
+                    Button(l10n.text(.cancel)) { model.cancelGrokOAuthLogin() }
+                }
+            } else {
+                Menu {
+                    Button(l10n.text(.accountsAddLocal)) { model.importOfficialAccount() }
+                    Button(l10n.text(.accountsAddPaste)) { showPasteSheet = true }
+                    Button(l10n.text(.accountsAddFile)) { pickFiles() }
+                    Button(l10n.text(.accountsAddOAuth)) { model.startOAuthLogin() }
+                    Button(l10n.text(.accountsAddAPIKey)) { showAPIKeySheet = true }
+                } label: {
+                    Label(l10n.text(.accountsAdd), systemImage: "plus")
+                }
+
+                Button {
+                    model.refreshAllAccountQuotas()
+                } label: {
+                    Label(l10n.text(.accountsRefreshAll), systemImage: "arrow.clockwise")
+                }
+                .disabled(model.isRefreshingAccountQuotas)
+            }
         }
     }
 

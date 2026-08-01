@@ -509,6 +509,8 @@ public actor GrokAccountModule {
             return "authentication_required"
         case GrokCLIError.timeout:
             return "timeout"
+        case GrokCLIError.malformedResponse:
+            return "billing_parse_failed"
         case is GrokBillingDecodingError, is DecodingError:
             return "billing_parse_failed"
         case is CancellationError:

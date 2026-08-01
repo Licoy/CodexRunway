@@ -57,6 +57,7 @@ struct PreferencesTests {
             statusBarMetersDetailStyle: .both,
             statusBarBatteryScope: .both,
             statusBarBatteryDetailStyle: .remainingPercent,
+            statusBarProviderScope: .both,
             refreshIntervalSeconds: 120,
             apiCostSummaryRange: .thisMonth,
             showsCostSummary: false,
@@ -75,6 +76,7 @@ struct PreferencesTests {
         #expect(store.load().statusBarMetersDetailStyle == .both)
         #expect(store.load().statusBarBatteryScope == .both)
         #expect(store.load().statusBarBatteryDetailStyle == .remainingPercent)
+        #expect(store.load().statusBarProviderScope == .both)
         #expect(store.load().refreshIntervalSeconds == 120)
         #expect(store.load().apiCostSummaryRange == .thisMonth)
         #expect(store.load().showsCostSummary == false)
@@ -203,6 +205,7 @@ struct PreferencesTests {
         #expect(preferences.statusBarMetersDetailStyle == .remainingPercent)
         #expect(preferences.statusBarBatteryScope == .fiveHour)
         #expect(preferences.statusBarBatteryDetailStyle == .countdown)
+        #expect(preferences.statusBarProviderScope == .selected)
         #expect(preferences.apiCostSummaryRange == .today)
         #expect(preferences.showsCostSummary)
         #expect(preferences.showsRecentSessions == false)

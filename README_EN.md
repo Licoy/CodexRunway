@@ -14,7 +14,8 @@ Codex Runway is a native macOS menu bar app for checking Codex and Grok quota. I
 
 - Check remaining Codex quota from the menu bar.
 - Switch from the always-visible `Codex | Grok` tabs; the menu bar and context menu follow the selected provider.
-- Use the official Grok CLI to view included quota, weekly/monthly periods, prepaid balance, and on-demand usage.
+- View included Grok quota, product breakdown (Build / Imagine / Chat), weekly/monthly periods, prepaid balance, and on-demand usage via the official CLI chat-proxy billing API.
+- On the Grok panel, reuse the same Token Usage multi-chart (heatmap / line / bar) and API Equivalent Cost modules as Codex, plus recent local sessions from Grok CLI logs.
 - Manage multiple Grok OAuth / SuperGrok accounts with isolated sign-in, current-login import, refresh, aliases, ordering, removal, and explicit switching.
 - View 5-hour, weekly, and additional quota windows.
 - See whether Codex rate limits have reset today from the project-hosted public status feed, with a link to the related public post.
@@ -94,7 +95,7 @@ The self-check reads local state only and makes no network request. It prints re
 
 - Tokens are read from local `~/.codex/auth.json`; multi-account credentials are stored only under `~/.codex-runway/accounts/<id>/auth.json` (directory mode `0700`, file mode `0600`). The account index `index.json` never contains tokens.
 - Official Grok credentials are read from `$GROK_HOME/auth.json` (or `~/.grok/auth.json` when unset). Managed copies live at `~/.codex-runway/accounts/grok-<stable-id>/auth.json` with directory mode `0700` and file mode `0600`; the separate `~/.codex-runway/accounts/grok-index.json` contains no tokens.
-- Grok quota comes only from the official local CLI through `grok agent stdio` / `x.ai/billing`. The app does not read browser cookies, call a private web fallback, or infer fake quota from local sessions.
+- Grok quota is fetched with the local OAuth credential against the official CLI chat-proxy `/v1/billing?format=credits` endpoint (the same official API the Grok CLI uses). The app does not read browser cookies or infer fake quota from local sessions.
 - While refreshing the current Grok account, the official CLI may rotate tokens; the app mirrors the resulting official credentials only to that managed account. Non-current accounts use an isolated `GROK_HOME` and never write the official credentials.
 - A Grok account switch replaces only OAuth / compatible legacy login scopes in the official credentials while preserving API-key and unknown scopes. A switch is guaranteed only for new sessions. Running Grok processes are not terminated and may write the previous account back, so the app shows a strong warning before continuing.
 - Official `~/.codex/auth.json` is overwritten only when you confirm an account switch (atomic write), so Codex CLI / IDE stay in sync.
@@ -111,7 +112,7 @@ The self-check reads local state only and makes no network request. It prints re
 
 - **Reset today?**: The status comes from this repository’s published static feed (the app defaults to [codexreset.gitcdn.top/api/status.json](https://codexreset.gitcdn.top/api/status.json)). The backend uses Grok to inspect public posts from `@thsottiaux` and produce structured events; the app then evaluates them against the user’s local calendar day. This is unofficial AI analysis and is advisory only. Scheduled runs and publication are both best effort and may be delayed or temporarily unavailable.
 - **Quota / reset credits / official token usage / some online usage**: When signed in, requests use your local credentials against official ChatGPT / Codex backend APIs. Official token usage belongs to the current account and shows the backend statistics date.
-- **Grok quota**: Returned only by the official local Grok CLI through `x.ai/billing` and requires a usable OAuth / SuperGrok login. There is no secondary data source, and API billing or local-session statistics are not mixed into this quota.
+- **Grok quota**: Returned only by the official CLI chat-proxy `/v1/billing?format=credits` endpoint using a local OAuth / SuperGrok login. There is no secondary data source, and API billing or local-session statistics are not mixed into this quota.
 - **Local-log token usage / API-equivalent cost / recent sessions**: Computed by default from local `~/.codex` session logs and the local index. Historical local logs have no reliable account attribution, so they may include multiple accounts.
 
 ## Development and Contribution

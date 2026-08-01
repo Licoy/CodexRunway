@@ -72,20 +72,16 @@ public struct GrokCLIClient: Sendable {
     public init(
         executableURL: URL? = GrokExecutableLocator.locate(),
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        initializeTimeout: TimeInterval = 5,
-        requestTimeout: TimeInterval = 20,
+        session: URLSession = RunwayNetwork.session,
+        billingBaseURL: URL = URL(string: "https://cli-chat-proxy.grok.com/v1")!,
         commandTimeout: TimeInterval = 300)
     {
+        let billingClient = GrokBillingClient(session: session, baseURL: billingBaseURL)
         self.init(
             billing: { homeURL in
-                guard let executableURL else { throw GrokCLIError.binaryNotFound }
-                let session = GrokRPCProcess(
-                    executableURL: executableURL,
-                    environment: environment,
-                    homeURL: homeURL)
-                return try await session.fetchBilling(
-                    initializeTimeout: initializeTimeout,
-                    requestTimeout: requestTimeout)
+                // Official Grok CLI fetches credits via cli-chat-proxy HTTP, not agent stdio RPC.
+                // `x.ai/billing` over stdio is no longer registered on current CLI builds.
+                try await billingClient.fetch(homeURL: homeURL)
             },
             loginOAuth: { homeURL in
                 guard let executableURL else { throw GrokCLIError.binaryNotFound }

@@ -18,6 +18,8 @@ struct GrokPanelViewState: Equatable {
     var identityName: String?
     var planName: String?
     var quota: GrokQuotaPresentation?
+    var localUsage: GrokLocalUsageSummary?
+    var isRefreshingLocalUsage = false
     var externalLoginChanged = false
 
     static let loading = GrokPanelViewState()
@@ -62,7 +64,6 @@ struct GrokAccountIdentityRow: View {
 struct GrokDashboardView: View {
     enum ContentSection: Equatable {
         case quota
-        case billing
         case externalLoginWarning
     }
 
@@ -70,9 +71,6 @@ struct GrokDashboardView: View {
 
     static func contentSections(for state: GrokPanelViewState) -> [ContentSection] {
         var sections: [ContentSection] = [.quota]
-        if state.quota != nil {
-            sections.append(.billing)
-        }
         if state.externalLoginChanged {
             sections.append(.externalLoginWarning)
         }
@@ -84,20 +82,25 @@ struct GrokDashboardView: View {
     var isRefreshing: Bool
     var onRefresh: () -> Void
 
+    @State private var showsBillingDetails = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             sectionBlock(isFirst: true) {
                 quotaSection
             }
-            if Self.contentSections(for: state).contains(.billing), let quota = state.quota {
-                sectionBlock {
-                    billingDetails(quota)
-                }
-            }
             if Self.contentSections(for: state).contains(.externalLoginWarning) {
                 sectionBlock {
                     externalLoginWarning
                 }
+            }
+        }
+        .sheet(isPresented: $showsBillingDetails) {
+            if let quota = state.quota {
+                GrokBillingDetailsSheet(
+                    quota: quota,
+                    l10n: l10n,
+                    onDismiss: { showsBillingDetails = false })
             }
         }
     }
@@ -108,11 +111,16 @@ struct GrokDashboardView: View {
                 title: l10n.text(.grokIncludedQuota),
                 l10n: l10n,
                 isRefreshing: isRefreshing,
-                onRefresh: onRefresh)
+                onRefresh: onRefresh,
+                onInfo: state.quota == nil ? nil : { showsBillingDetails = true },
+                infoHelp: l10n.text(.grokBillingPeriod))
             if let quota = state.quota {
                 VStack(alignment: .leading, spacing: 12) {
-                    ForEach(quota.meters) { meter in
-                        GrokQuotaMeterRow(meter: meter, l10n: l10n)
+                    ForEach(Array(quota.meters.enumerated()), id: \.element.id) { index, meter in
+                        GrokQuotaMeterRow(
+                            meter: meter,
+                            l10n: l10n,
+                            isPrimary: index == 0)
                     }
                 }
             } else {
@@ -144,42 +152,6 @@ struct GrokDashboardView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .runwayCard(.sunken)
-    }
-
-    private func billingDetails(_ quota: GrokQuotaPresentation) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(l10n.text(.grokBillingPeriod))
-                .font(.headline)
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(quota.lines.enumerated()), id: \.element.id) { index, line in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(line.title)
-                            .foregroundStyle(.secondary)
-                        Spacer(minLength: 8)
-                        Text(line.value)
-                            .font(.callout.monospacedDigit())
-                            .multilineTextAlignment(.trailing)
-                            .textSelection(.enabled)
-                    }
-                    .font(.callout)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .tableRowRule(isFirst: index == 0)
-                }
-                HStack {
-                    Text(l10n.text(.grokUpdatedAt))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(quota.updatedAt.formatted(date: .abbreviated, time: .shortened))
-                        .font(.callout.monospacedDigit())
-                }
-                .font(.callout)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .tableRowRule(isFirst: quota.lines.isEmpty)
-            }
-            .runwayCard(.sunken)
-        }
     }
 
     private var externalLoginWarning: some View {
@@ -260,23 +232,167 @@ struct GrokDashboardView: View {
     }
 }
 
+/// Billing-period / plan details formerly shown as a full section under included quota.
+private struct GrokBillingDetailsSheet: View {
+    var quota: GrokQuotaPresentation
+    var l10n: L10n
+    var onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(l10n.text(.grokBillingPeriod))
+                .font(.title3.weight(.semibold))
+
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(quota.lines.enumerated()), id: \.element.id) { index, line in
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(line.title)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 8)
+                        Text(line.value)
+                            .font(.callout.monospacedDigit())
+                            .multilineTextAlignment(.trailing)
+                            .textSelection(.enabled)
+                    }
+                    .font(.callout)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .tableRowRule(isFirst: index == 0)
+                }
+                HStack {
+                    Text(l10n.text(.grokUpdatedAt))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(quota.updatedAt.formatted(date: .abbreviated, time: .shortened))
+                        .font(.callout.monospacedDigit())
+                }
+                .font(.callout)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .tableRowRule(isFirst: quota.lines.isEmpty)
+            }
+            .runwayCard(.sunken)
+
+            HStack {
+                Spacer()
+                Button(l10n.text(.ok), action: onDismiss)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 360)
+    }
+}
+
+/// Recent Grok sessions (local `~/.grok/sessions`), same list card style as Codex.
+struct GrokRecentSessionsView: View {
+    var items: [GrokSessionActivityItem]
+    var l10n: L10n
+    var isRefreshing: Bool
+    var onRefresh: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            RefreshableSectionHeader(
+                title: l10n.text(.recentSessions),
+                l10n: l10n,
+                isRefreshing: isRefreshing,
+                onRefresh: onRefresh)
+            if items.isEmpty {
+                Text(l10n.text(isRefreshing ? .calculating : .notLoaded))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(items.prefix(5).enumerated()), id: \.element.id) { index, session in
+                        row(session, isFirst: index == 0)
+                    }
+                }
+                .runwayCard(.sunken)
+            }
+        }
+    }
+
+    private func row(_ session: GrokSessionActivityItem, isFirst: Bool) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(Color(nsColor: .systemGreen))
+                .frame(width: 6, height: 6)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(session.title)
+                    .font(.callout.weight(.medium))
+                    .lineLimit(1)
+                Text(subtitle(session))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 6)
+            Text(session.totals.estimatedUSD.map(DurationFormatter.money) ?? "--")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .overlay(alignment: .top) {
+            if !isFirst {
+                Rectangle()
+                    .fill(RunwaySurface.hairlineFaint)
+                    .frame(height: 1)
+                    .padding(.horizontal, 10)
+            }
+        }
+    }
+
+    private func subtitle(_ session: GrokSessionActivityItem) -> String {
+        let tokens = "\(tokenText(session.totals.totalTokens)) \(l10n.text(.tokens))"
+        let model = session.model ?? l10n.text(.unknown)
+        return "\(session.projectName) · \(model) · \(tokens)"
+    }
+
+    private func tokenText(_ value: Int) -> String {
+        if value >= 1_000_000 { return String(format: "%.2fM", Double(value) / 1_000_000) }
+        if value >= 1_000 { return String(format: "%.2fK", Double(value) / 1_000) }
+        return "\(value)"
+    }
+}
+
 private struct GrokQuotaMeterRow: View {
     var meter: QuotaMeter
     var l10n: L10n
+    var isPrimary: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(meter.title)
-                    .font(.callout.weight(.semibold))
+                    .font(isPrimary ? .callout.weight(.semibold) : .caption.weight(.semibold))
+                    .foregroundStyle(isPrimary ? Color.primary : Color.secondary)
                 Spacer(minLength: 8)
-                Text("\(meter.remainingPercent)% \(l10n.text(.left))")
-                    .font(.callout.weight(.semibold).monospacedDigit())
+                Text(
+                    isPrimary
+                        ? "\(meter.remainingPercent)% \(l10n.text(.left))"
+                        : "\(meter.usedPercent)% \(l10n.text(.used))")
+                    .font((isPrimary ? Font.callout.weight(.semibold) : Font.caption.weight(.semibold)).monospacedDigit())
                     .foregroundStyle(RunwayProgressBar.textColor(for: meter.health))
             }
-            RunwayProgressBar(meter: meter)
-                .frame(height: RunwayProgressBar.barHeight)
-            if let resetsAt = meter.resetsAt {
+            if isPrimary {
+                RunwayProgressBar(meter: meter)
+                    .frame(height: RunwayProgressBar.barHeight)
+            } else {
+                GeometryReader { proxy in
+                    let fillWidth = max(4, proxy.size.width * CGFloat(meter.usedPercent) / 100)
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(RunwaySurface.sunken)
+                        Capsule()
+                            .fill(RunwayProgressBar.color(for: meter.health))
+                            .frame(width: fillWidth)
+                    }
+                }
+                .frame(height: max(3, RunwayProgressBar.barHeight - 1))
+                .accessibilityLabel("\(meter.title) \(meter.usedPercent)%")
+            }
+            if isPrimary, let resetsAt = meter.resetsAt {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     Text("\(l10n.text(.nextResetIn))\(DurationFormatter.localized(resetsAt.timeIntervalSince(context.date), language: l10n.language))")
                         .font(.caption.monospacedDigit())
@@ -285,5 +401,6 @@ private struct GrokQuotaMeterRow: View {
                 }
             }
         }
+        .padding(.leading, isPrimary ? 0 : 8)
     }
 }

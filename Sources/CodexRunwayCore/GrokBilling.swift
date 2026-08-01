@@ -23,6 +23,19 @@ public enum GrokBillingSource: String, Codable, Sendable, Equatable {
     case legacyFlat
 }
 
+/// Product-level share of included credits (e.g. GrokBuild / GrokImagine / GrokChat).
+/// `usagePercent` is the product's contribution to overall included usage.
+public struct GrokProductUsage: Codable, Sendable, Equatable, Identifiable {
+    public var id: String { product }
+    public var product: String
+    public var usagePercent: Double
+
+    public init(product: String, usagePercent: Double) {
+        self.product = product
+        self.usagePercent = usagePercent
+    }
+}
+
 public enum GrokBillingDecodingError: Error, Sendable, Equatable {
     case unknownStructure
     case invalidPercentage
@@ -39,6 +52,9 @@ public struct GrokQuotaSnapshot: Codable, Sendable, Equatable {
     public var onDemandEnabled: Bool?
     public var onDemandUsedCents: Int64?
     public var onDemandLimitCents: Int64?
+    /// Product breakdown from `config.productUsage` (CLI chat-proxy).
+    public var productUsage: [GrokProductUsage]
+    public var isUnifiedBillingUser: Bool?
     public var source: GrokBillingSource
     public var updatedAt: Date
 
@@ -50,6 +66,8 @@ public struct GrokQuotaSnapshot: Codable, Sendable, Equatable {
         onDemandEnabled: Bool?,
         onDemandUsedCents: Int64?,
         onDemandLimitCents: Int64?,
+        productUsage: [GrokProductUsage] = [],
+        isUnifiedBillingUser: Bool? = nil,
         source: GrokBillingSource,
         updatedAt: Date)
     {
@@ -60,8 +78,39 @@ public struct GrokQuotaSnapshot: Codable, Sendable, Equatable {
         self.onDemandEnabled = onDemandEnabled
         self.onDemandUsedCents = onDemandUsedCents
         self.onDemandLimitCents = onDemandLimitCents
+        self.productUsage = productUsage
+        self.isUnifiedBillingUser = isUnifiedBillingUser
         self.source = source
         self.updatedAt = updatedAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case plan
+        case includedUsagePercent
+        case period
+        case prepaidBalanceCents
+        case onDemandEnabled
+        case onDemandUsedCents
+        case onDemandLimitCents
+        case productUsage
+        case isUnifiedBillingUser
+        case source
+        case updatedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        plan = try container.decodeIfPresent(String.self, forKey: .plan)
+        includedUsagePercent = try container.decode(Double.self, forKey: .includedUsagePercent)
+        period = try container.decodeIfPresent(GrokQuotaPeriod.self, forKey: .period)
+        prepaidBalanceCents = try container.decodeIfPresent(Int64.self, forKey: .prepaidBalanceCents)
+        onDemandEnabled = try container.decodeIfPresent(Bool.self, forKey: .onDemandEnabled)
+        onDemandUsedCents = try container.decodeIfPresent(Int64.self, forKey: .onDemandUsedCents)
+        onDemandLimitCents = try container.decodeIfPresent(Int64.self, forKey: .onDemandLimitCents)
+        productUsage = try container.decodeIfPresent([GrokProductUsage].self, forKey: .productUsage) ?? []
+        isUnifiedBillingUser = try container.decodeIfPresent(Bool.self, forKey: .isUnifiedBillingUser)
+        source = try container.decode(GrokBillingSource.self, forKey: .source)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
 
     public static func decodeBillingResponse(from data: Data, now: Date = Date()) throws -> Self {
@@ -117,6 +166,8 @@ public struct GrokQuotaSnapshot: Codable, Sendable, Equatable {
             onDemandEnabled: response.onDemandEnabled,
             onDemandUsedCents: config.onDemandUsed?.val,
             onDemandLimitCents: config.onDemandCap?.val,
+            productUsage: try config.decodedProductUsage(),
+            isUnifiedBillingUser: config.isUnifiedBillingUser,
             source: source,
             updatedAt: now)
     }
@@ -143,6 +194,8 @@ public struct GrokQuotaSnapshot: Codable, Sendable, Equatable {
             onDemandEnabled: response.onDemandEnabled,
             onDemandUsedCents: response.usage?.onDemandUsed?.val,
             onDemandLimitCents: response.onDemandCap?.val,
+            productUsage: [],
+            isUnifiedBillingUser: nil,
             source: .legacyFlat,
             updatedAt: now)
     }
@@ -193,6 +246,34 @@ private struct BillingConfig: Decodable {
     var used: Cent?
     var billingPeriodStart: String?
     var billingPeriodEnd: String?
+    var productUsage: [ProductUsageEntry]?
+    var isUnifiedBillingUser: Bool?
+
+    func decodedProductUsage() throws -> [GrokProductUsage] {
+        guard let productUsage else { return [] }
+        var result: [GrokProductUsage] = []
+        result.reserveCapacity(productUsage.count)
+        for entry in productUsage {
+            let name = entry.product?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !name.isEmpty else { continue }
+            let percent = entry.usagePercent ?? 0
+            guard percent.isFinite else {
+                throw GrokBillingDecodingError.invalidPercentage
+            }
+            result.append(GrokProductUsage(product: name, usagePercent: percent))
+        }
+        return result.sorted {
+            if $0.usagePercent != $1.usagePercent {
+                return $0.usagePercent > $1.usagePercent
+            }
+            return $0.product.localizedCaseInsensitiveCompare($1.product) == .orderedAscending
+        }
+    }
+}
+
+private struct ProductUsageEntry: Decodable {
+    var product: String?
+    var usagePercent: Double?
 }
 
 private struct Cent: Decodable {

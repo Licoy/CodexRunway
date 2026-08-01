@@ -168,6 +168,12 @@ final class RunwayModel: ObservableObject {
     @Published var tokenHeatmapCalculatedAt: Date?
     @Published var tokenHeatmapOfficialStatsAsOf: String?
     @Published var tokenHeatmapOfficialGeneratedAt: Date?
+    /// Grok local session day → tokens (same chart surface as Codex Token 用量).
+    @Published var grokTokenHeatmapLocalTokens: [String: Int] = [:]
+    @Published var grokTokenHeatmapCalculatedAt: Date?
+    @Published var grokCostText: String = ""
+    @Published var grokCostSubtitle: String = ""
+    @Published var grokCostDetail: ApiEquivalentSummary?
     @Published var recentSessions: [SessionActivityItem] = []
     @Published var costScanNote: String?
     /// Scan progress lives on its own observable: it publishes ~10x/sec during a
@@ -241,6 +247,8 @@ final class RunwayModel: ObservableObject {
     var grokRefreshWork: Task<Void, Never>?
     var grokRefreshCompletesFullRefresh = false
     var grokAccountOperationWork: Task<Void, Never>?
+    var grokLocalUsageGeneration = 0
+    var grokLocalUsageWork: Task<Void, Never>?
     var onFullRefreshCompleted: (() -> Void)?
 
     init(
@@ -270,6 +278,8 @@ final class RunwayModel: ObservableObject {
         self.rateLimitResetTodayText = l10n.text(.notLoaded)
         self.costText = l10n.text(.notScanned)
         self.costSubtitle = ""
+        self.grokCostText = l10n.text(.notScanned)
+        self.grokCostSubtitle = ""
         self.sessionText = l10n.text(.notScanned)
         self.accountDisplay = CodexAccountDisplay.make(auth: nil, quotaPlan: nil)
         self.grokAccountState = GrokAccountState(
@@ -614,12 +624,20 @@ final class RunwayModel: ObservableObject {
     func refresh(policy: UsageCostRefreshPolicy = .force) {
         if selectedProvider == .grok {
             refreshGrok(.current, completesFullRefresh: true)
+            // Dual status bar still needs Codex quota even when the panel is Grok.
+            if needsCodexStatusBarData, !isRefreshingAll {
+                Task { await refreshQuotaNow() }
+            }
             return
         }
         guard !isRefreshingAll, refreshingSections.isEmpty else { return }
         let refreshID = UUID()
         activeFullRefreshID = refreshID
         isRefreshingAll = true
+        // Dual status bar still needs Grok quota even when the panel is Codex.
+        if needsGrokStatusBarData {
+            refreshGrok(.current)
+        }
         let work = Task { await refreshNow(policy: policy) }
         fullRefreshWork = work
         Task {
@@ -636,7 +654,13 @@ final class RunwayModel: ObservableObject {
     func refreshQuota() {
         if selectedProvider == .grok {
             refreshGrok(.current)
+            if needsCodexStatusBarData, !isRefreshingAll {
+                Task { await refreshQuotaNow() }
+            }
             return
+        }
+        if needsGrokStatusBarData {
+            refreshGrok(.current)
         }
         guard !isRefreshingAll else { return }
         Task { await refreshQuotaNow() }
@@ -1413,6 +1437,9 @@ final class RunwayModel: ObservableObject {
     }
 
     func queryCost(range: ApiCostRange) async throws -> ApiEquivalentSummary {
+        if selectedProvider == .grok {
+            return try await queryGrokCost(range: range)
+        }
         let key = Self.detailCacheKey(for: range)
         if let cached = detailCostCache[key] {
             return cached
@@ -1438,6 +1465,17 @@ final class RunwayModel: ObservableObject {
     /// Loads current-cycle cost for the detail page without treating a missing
     /// snapshot as an immediate hard failure.
     func queryCurrentCycleCost() async throws -> ApiEquivalentSummary {
+        if selectedProvider == .grok {
+            let range = try await resolveGrokCurrentCycleCostRange()
+            if let grokCostDetail,
+               grokCostDetail.isDisplayableCost,
+               abs(grokCostDetail.window.start.timeIntervalSince(range.window.start)) < 60,
+               grokCostDetail.window.end <= range.window.end.addingTimeInterval(120)
+            {
+                return grokCostDetail
+            }
+            return try await queryGrokCost(range: range)
+        }
         let now = Date()
         let range = try await resolveCurrentCycleCostRange(now: now)
         // Reuse an in-memory current-cycle snapshot only when its window still matches.
@@ -1452,11 +1490,21 @@ final class RunwayModel: ObservableObject {
     }
 
     func previousCycleCostRange() -> ApiCostRange? {
-        latestCurrentCycleFullWindow.map { ApiCostRange.previousCycle(from: $0) }
+        if selectedProvider == .grok {
+            return grokCurrentCycleFullWindow.map { ApiCostRange.previousCycle(from: $0) }
+        }
+        return latestCurrentCycleFullWindow.map { ApiCostRange.previousCycle(from: $0) }
     }
 
     /// Resolves the previous quota cycle window, fetching quota first when needed.
     func resolvePreviousCycleCostRange() async throws -> ApiCostRange {
+        if selectedProvider == .grok {
+            if let range = previousCycleCostRange() { return range }
+            let full = try await resolveGrokCurrentCycleCostRange().window
+            // previousCycle needs the full cycle window, not elapsed.
+            let fullWindow = grokCurrentCycleFullWindow ?? full
+            return ApiCostRange.previousCycle(from: fullWindow)
+        }
         if let range = previousCycleCostRange() { return range }
         let full = try await ensureCurrentCycleFullWindow()
         return ApiCostRange.previousCycle(from: full)
@@ -1465,6 +1513,44 @@ final class RunwayModel: ObservableObject {
     private func resolveCurrentCycleCostRange(now: Date = Date()) async throws -> ApiCostRange {
         let windows = try await ensureCurrentCycleWindows(now: now)
         return .range(window: windows.elapsed)
+    }
+
+    private var grokCurrentCycleFullWindow: DateInterval? {
+        guard let period = grokPanelState.quota?.meters.first?.resetsAt,
+              let startsHint = grokAccountState.accounts
+                .first(where: { $0.id == grokAccountState.currentAccountID })?
+                .cachedQuota?.period
+        else { return nil }
+        if let start = startsHint.startsAt, let end = startsHint.resetsAt, end > start {
+            return DateInterval(start: start, end: end)
+        }
+        _ = period
+        return nil
+    }
+
+    private func resolveGrokCurrentCycleCostRange(now: Date = Date()) async throws -> ApiCostRange {
+        if let full = grokCurrentCycleFullWindow {
+            let elapsed = DateInterval(start: full.start, end: min(now, full.end))
+            return .range(window: elapsed)
+        }
+        // Fallback: rolling 7 days when billing period is unknown.
+        let week: TimeInterval = 7 * 24 * 3_600
+        return .range(window: DateInterval(start: now.addingTimeInterval(-week), end: now))
+    }
+
+    private func queryGrokCost(range: ApiCostRange) async throws -> ApiEquivalentSummary {
+        guard range.window.end > range.window.start else {
+            throw CostRangeQueryError.usageUnavailable
+        }
+        let key = "grok|" + Self.detailCacheKey(for: range)
+        if let cached = detailCostCache[key] {
+            return cached
+        }
+        let summary = try await Task.detached(priority: .utility) {
+            try GrokSessionScanner().scanCost(window: range.window)
+        }.value
+        storeDetailCostCache(summary, key: key)
+        return summary
     }
 
     private func ensureCurrentCycleFullWindow(now: Date = Date()) async throws -> DateInterval {
@@ -2197,7 +2283,7 @@ final class RunwayModel: ObservableObject {
         }
     }
 
-    private static func compactNumber(_ value: Int) -> String {
+    static func compactNumber(_ value: Int) -> String {
         if value >= 1_000_000 { return String(format: "%.2fM", Double(value) / 1_000_000) }
         if value >= 1_000 { return String(format: "%.2fK", Double(value) / 1_000) }
         return "\(value)"

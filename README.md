@@ -14,7 +14,8 @@ Codex Runway 是一个原生 macOS 状态栏应用，帮你在菜单栏查看 Co
 
 - 菜单栏查看 Codex 剩余额度。
 - 在常驻的 `Codex | Grok` 页签间切换，菜单栏和右键菜单同步展示所选供应商。
-- 通过官方 Grok CLI 查看包含额度、周/月周期、预付余额和按需使用情况。
+- 通过官方 CLI chat-proxy 额度接口查看包含额度、产品拆分（Build / Imagine / Chat）、周/月周期、预付余额和按需使用情况。
+- Grok 主面板与 Codex 一致：展示 Token 用量多图表（热力图 / 折线 / 柱状）与 API 等价成本（本机会话日志），以及最近对话。
 - 管理多个 Grok OAuth / SuperGrok 账号：隔离登录、导入当前登录、刷新、别名、排序、删除和显式切号。
 - 查看 5 小时、每周和附加额度窗口。
 - 查看今日速率限制是否已重置（项目自托管公开状态源），并可跳转到相关公开动态。
@@ -94,8 +95,8 @@ swift run CodexRunway --self-check
 
 - token 从本机 `~/.codex/auth.json` 读取；多账号凭据仅保存在 `~/.codex-runway/accounts/<id>/auth.json`（目录 `0700`、文件 `0600`）。账号索引 `index.json` 不含 token。
 - Grok 官方凭据从 `$GROK_HOME/auth.json` 读取（未设置时为 `~/.grok/auth.json`）；托管副本保存在 `~/.codex-runway/accounts/grok-<stable-id>/auth.json`（目录 `0700`、文件 `0600`），独立索引 `~/.codex-runway/accounts/grok-index.json` 不含 token。
-- Grok 额度只通过本机官方 CLI 的 `grok agent stdio` / `x.ai/billing` 获取。应用不读取浏览器 Cookie、不调用私有 Web fallback，也不会用本机会话推算伪额度。
-- 刷新当前 Grok 账号时，官方 CLI 可能自动轮换 token；应用只把更新后的官方凭据同步到对应托管副本。刷新非当前账号时使用隔离的 `GROK_HOME`，不会写官方凭据。
+- Grok 额度使用本机 OAuth 凭据，向官方 CLI chat-proxy 的 `/v1/billing?format=credits` 请求（与本机 Grok CLI 相同的官方接口）。应用不读取浏览器 Cookie，也不会用本机会话推算伪额度。
+- 刷新 Grok 额度时读取对应账号 home 下的 `auth.json`；当前账号使用官方 `$GROK_HOME`，非当前托管账号使用隔离账号目录，不会写官方凭据。
 - 切换 Grok 账号只替换官方凭据中的 OAuth / 兼容 legacy 登录 scope，保留 API Key 和未知 scope。切换只保证新会话使用新账号；已运行的 Grok 进程不会被强制终止，并可能把旧账号重新写回，因此继续切换前会显示强警告。
 - 用户主动切号时，才会将选中凭据原子写回 `~/.codex/auth.json`，以便 Codex CLI / IDE 同步使用。
 - 刷新非当前托管账号 token 时只更新账号库副本，不写官方 `auth.json`；刷新当前账号时同步官方 auth 与副本。
@@ -111,7 +112,7 @@ swift run CodexRunway --self-check
 
 - **今日是否重置**：状态来自本仓库监控任务发布的静态 feed（应用默认读取 [codexreset.gitcdn.top/api/status.json](https://codexreset.gitcdn.top/api/status.json)）。后台使用 Grok 检索 `@thsottiaux` 的公开动态并生成结构化事件，应用再按用户本地自然日计算结果。该结果由 AI 分析，非官方且仅供参考；定时任务和发布都是尽力运行，可能延迟或暂时不可用。
 - **配额 / reset credits / Token 用量官方统计 / 部分在线用量**：在你已登录的前提下，通过本机凭据访问官方 ChatGPT / Codex 后端接口；官方 Token 统计仅对应当前账号，并显示服务端统计截至日期。
-- **Grok 额度**：仅由本机官方 Grok CLI 的 `x.ai/billing` 返回；需要可用的 OAuth / SuperGrok 登录。应用不提供第二数据源，也不会把 API 账单或本机会话统计混入该额度。
+- **Grok 额度**：仅由官方 CLI chat-proxy 的 `/v1/billing?format=credits` 返回（使用本机 OAuth / SuperGrok 登录凭据）。应用不提供第二数据源，也不会把 API 账单或本机会话统计混入该额度。
 - **Token 用量本机日志 / API 等价成本 / 最近会话**：默认基于本机 `~/.codex` 会话日志与本地索引计算。本机历史日志没有可靠的账号归属，因此可能包含多个账号的数据。
 
 ## 开发与贡献

@@ -10,6 +10,9 @@ enum RunwayMainPanelSection: Hashable {
     case codexRecentSessions
     case grokQuota
     case grokBilling
+    case grokTokenHeatmap
+    case grokAPICost
+    case grokRecentSessions
 }
 
 enum RunwayMainPanelSections {
@@ -19,7 +22,18 @@ enum RunwayMainPanelSections {
     {
         switch provider {
         case .grok:
-            return [.grokQuota, .grokBilling]
+            // Billing details live behind the included-quota info button, not a full section.
+            var sections: Set<RunwayMainPanelSection> = [.grokQuota]
+            if preferences.showsTokenUsageHeatmap {
+                sections.insert(.grokTokenHeatmap)
+            }
+            if preferences.showsCostSummary {
+                sections.insert(.grokAPICost)
+            }
+            if preferences.showsRecentSessions {
+                sections.insert(.grokRecentSessions)
+            }
+            return sections
         case .codex:
             var sections: Set<RunwayMainPanelSection> = [
                 .codexQuota,

@@ -9,12 +9,14 @@ struct GrokQuotaPresentation: Sendable, Equatable {
     }
 
     var plan: String
+    /// Overall included quota meter first, then product breakdown meters.
     var meters: [QuotaMeter]
     var prepaidBalance: String?
     var onDemandUsage: String?
     var source: String
     var updatedAt: Date
     var lines: [Line]
+    var productLines: [Line]
 
     static func make(snapshot: GrokQuotaSnapshot, l10n: L10n) -> Self {
         let usedPercent = max(0, min(100, Int(snapshot.includedUsagePercent.rounded())))
@@ -41,16 +43,47 @@ struct GrokQuotaPresentation: Sendable, Equatable {
         if let onDemand {
             lines.append(Line(title: l10n.text(.grokOnDemandUsage), value: onDemand))
         }
+        if snapshot.isUnifiedBillingUser == true {
+            lines.append(Line(title: l10n.text(.grokUnifiedBilling), value: l10n.text(.available)))
+        }
         lines.append(Line(title: l10n.text(.grokDataSource), value: source))
+
+        var meters = [QuotaMeter(title: periodTitle, window: window, now: snapshot.updatedAt)]
+        var productLines: [Line] = []
+        for product in snapshot.productUsage {
+            let productUsed = max(0, min(100, Int(product.usagePercent.rounded())))
+            let title = productTitle(product.product, l10n: l10n)
+            let productWindow = RateWindow(
+                usedPercent: productUsed,
+                windowMinutes: snapshot.period.map(windowMinutes),
+                resetsAt: snapshot.period?.resetsAt)
+            meters.append(QuotaMeter(title: title, window: productWindow, now: snapshot.updatedAt))
+            productLines.append(
+                Line(title: title, value: "\(productUsed)% \(l10n.text(.used))"))
+        }
 
         return Self(
             plan: plan,
-            meters: [QuotaMeter(title: periodTitle, window: window, now: snapshot.updatedAt)],
+            meters: meters,
             prepaidBalance: prepaid,
             onDemandUsage: onDemand,
             source: source,
             updatedAt: snapshot.updatedAt,
-            lines: lines)
+            lines: lines,
+            productLines: productLines)
+    }
+
+    static func productTitle(_ product: String, l10n: L10n) -> String {
+        switch product.lowercased() {
+        case "grokbuild":
+            return l10n.text(.grokProductBuild)
+        case "grokimagine":
+            return l10n.text(.grokProductImagine)
+        case "grokchat":
+            return l10n.text(.grokProductChat)
+        default:
+            return product
+        }
     }
 
     private static func periodTitle(_ kind: GrokQuotaPeriodKind, l10n: L10n) -> String {

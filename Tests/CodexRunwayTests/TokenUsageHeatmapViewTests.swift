@@ -29,6 +29,26 @@ struct TokenUsageHeatmapViewTests {
         #expect(ordinary.note == nil)
     }
 
+    @Test("Grok local-only tooltips omit official multi-device stats")
+    func localOnlyTooltipOmitsOfficialStats() {
+        let content = TokenUsageTooltipContent.make(
+            date: "2026年7月26日",
+            officialTokens: 0,
+            localTokens: 3_455_780_000,
+            l10n: L10n(language: .simplifiedChinese),
+            showsOfficialStats: false)
+
+        #expect(content.primary == "本机 34.56亿 Tokens")
+        #expect(content.secondary == nil)
+        #expect(content.note == nil)
+
+        let size = TokenUsageTooltipLayout.size(
+            for: content,
+            cellRect: CGRect(x: 100, y: 20, width: 8, height: 8),
+            containerSize: CGSize(width: 360, height: 100))
+        #expect(size.height == 44)
+    }
+
     @Test("official source caption exposes the backend statistics date")
     func officialSourceCaptionUsesStatsDate() {
         #expect(TokenUsageSourcePresentation.asOfText(
