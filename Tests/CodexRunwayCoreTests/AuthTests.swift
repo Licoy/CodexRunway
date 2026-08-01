@@ -149,6 +149,9 @@ struct AuthTests {
 
     @Test("builds account display from auth and quota plan")
     func buildsAccountDisplay() {
+        // Freeze "now" so a fixed JWT period end is not projected month-by-month once wall
+        // clock passes that date (projection behavior is covered by dedicated tests).
+        let now = RunwayDates.parse("2026-07-15T12:00:00Z")!
         let idToken = Self.jwt(payload: [
             "email": "person@example.com",
             "https://api.openai.com/auth": [
@@ -163,7 +166,7 @@ struct AuthTests {
             tokens: .init(idToken: idToken, accessToken: accessToken, refreshToken: "refresh", accountId: "acct_fallback"),
             lastRefresh: nil)
 
-        let display = CodexAccountDisplay.make(auth: auth, quotaPlan: "pro")
+        let display = CodexAccountDisplay.make(auth: auth, quotaPlan: "pro", now: now)
 
         #expect(display.displayName == "person@example.com")
         #expect(display.email == "person@example.com")
