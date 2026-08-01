@@ -52,8 +52,10 @@ public enum GrokCLIError: Error, LocalizedError, Sendable, Equatable {
 
 public struct GrokCLIClient: Sendable {
     public typealias BillingOperation = @Sendable (URL) async throws -> GrokQuotaSnapshot
+    /// Writes Grok-compatible `auth.json` into the isolated home after browser/device authorization.
     public typealias LoginOperation = @Sendable (URL) async throws -> Void
     public typealias VersionOperation = @Sendable () async throws -> String
+    public typealias DeviceCodeHandler = @Sendable (GrokOAuthLogin.DeviceCode) -> Void
 
     private let billingOperation: BillingOperation
     private let loginOperation: LoginOperation
@@ -74,7 +76,9 @@ public struct GrokCLIClient: Sendable {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         session: URLSession = RunwayNetwork.session,
         billingBaseURL: URL = URL(string: "https://cli-chat-proxy.grok.com/v1")!,
-        commandTimeout: TimeInterval = 300)
+        commandTimeout: TimeInterval = 300,
+        openURL: @escaping GrokOAuthLogin.OpenURL = GrokOAuthLogin.openInDefaultBrowser,
+        onDeviceCode: DeviceCodeHandler? = nil)
     {
         let billingClient = GrokBillingClient(session: session, baseURL: billingBaseURL)
         self.init(
@@ -84,14 +88,14 @@ public struct GrokCLIClient: Sendable {
                 try await billingClient.fetch(homeURL: homeURL)
             },
             loginOAuth: { homeURL in
-                guard let executableURL else { throw GrokCLIError.binaryNotFound }
-                let command = GrokCommandProcess(
-                    executableURL: executableURL,
-                    arguments: ["login", "--oauth"],
-                    environment: environment,
+                // Native device-code OAuth (CLIProxyAPI / `grok login --device-auth` style).
+                // Spawning `grok login --oauth` from an LSUIElement app discards stdio and often
+                // fails to open a browser; device flow opens the verification URL ourselves.
+                try await GrokOAuthLogin.login(
                     homeURL: homeURL,
-                    capturesOutput: false)
-                _ = try await command.run(timeout: commandTimeout, operation: "login")
+                    session: session,
+                    openURL: openURL,
+                    onDeviceCode: onDeviceCode)
             },
             version: {
                 guard let executableURL else { throw GrokCLIError.binaryNotFound }

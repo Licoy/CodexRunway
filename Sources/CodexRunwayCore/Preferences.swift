@@ -101,12 +101,15 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case fiveHourUsage
     case general
     case grokAccountsAddOAuth
+    case grokAccountsAddPaste
     case grokAccountsCurrent
     case grokAccountsDeleteConfirmMessage
     case grokAccountsDeleteConfirmTitle
     case grokAccountsEmpty
+    case grokAccountsImportNoCredentials
     case grokAccountsImportOfficial
     case grokAccountsMakeCurrent
+    case grokAccountsPasteHint
     case grokAccountsRefreshAll
     case grokAccountsRemove
     case grokAccountsTitle

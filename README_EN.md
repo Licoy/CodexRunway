@@ -16,7 +16,7 @@ Codex Runway is a native macOS menu bar app for checking Codex and Grok quota. I
 - Switch from the always-visible `Codex | Grok` tabs; the menu bar and context menu follow the selected provider.
 - View included Grok quota, product breakdown (Build / Imagine / Chat), weekly/monthly periods, prepaid balance, and on-demand usage via the official CLI chat-proxy billing API.
 - On the Grok panel, reuse the same Token Usage multi-chart (heatmap / line / bar) and API Equivalent Cost modules as Codex, plus recent local sessions from Grok CLI logs.
-- Manage multiple Grok OAuth / SuperGrok accounts with isolated sign-in, current-login import, refresh, aliases, ordering, removal, and explicit switching.
+- Manage multiple Grok OAuth / SuperGrok accounts with isolated sign-in, current-login import, paste token/JSON, refresh, aliases, ordering, removal, and explicit switching.
 - View 5-hour, weekly, and additional quota windows.
 - See whether Codex rate limits have reset today from the project-hosted public status feed, with a link to the related public post.
 - Toggle the “reset today?” section in settings and configure its own refresh interval (on by default, every 1 hour).
@@ -74,7 +74,7 @@ Then open the app again.
   curl -fsSL https://x.ai/cli/install.sh | bash
   ```
 
-- Grok account management and billing support OAuth / SuperGrok and compatible legacy sessions only. Run `grok login --oauth`, sign in from the app, or import the current login. API-key-only credentials are not added as managed accounts.
+- Grok account management and billing support OAuth / SuperGrok and compatible legacy sessions only. Run `grok login --oauth`, sign in from the app, import the current login, or paste `~/.grok/auth.json` / credential JSON. API-key-only credentials are not added as managed accounts.
 - When `GROK_HOME` is set, the app uses that directory; otherwise it uses `~/.grok`. See [xAI Settings](https://docs.x.ai/build/settings).
 
 ## Run Locally

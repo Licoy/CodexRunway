@@ -1,3 +1,4 @@
+import AppKit
 import CodexRunwayCore
 import SwiftUI
 
@@ -9,6 +10,10 @@ struct GrokAccountsDetailView: View {
     @State private var accountPendingDelete: GrokManagedAccount?
     @State private var editingAliasID: String?
     @State private var aliasDraft = ""
+    @State private var showPasteSheet = false
+    @State private var pasteText = ""
+    @State private var pasteSheetError: String?
+    @State private var isImportingPaste = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -70,6 +75,9 @@ struct GrokAccountsDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .sheet(isPresented: $showPasteSheet) {
+            grokPasteImportSheet
+        }
         .sheet(isPresented: Binding(
             get: { accountPendingSwitch != nil },
             set: { if !$0 { accountPendingSwitch = nil } }))
@@ -141,6 +149,11 @@ struct GrokAccountsDetailView: View {
             Spacer()
             Menu {
                 Button(l10n.text(.grokAccountsAddOAuth)) { model.startGrokOAuthLogin() }
+                Button(l10n.text(.grokAccountsAddPaste)) {
+                    pasteText = ""
+                    pasteSheetError = nil
+                    showPasteSheet = true
+                }
                 Button(l10n.text(.grokAccountsImportOfficial)) { model.importOfficialGrokAccount() }
             } label: {
                 Label(l10n.text(.accountsAdd), systemImage: "plus")
@@ -149,6 +162,79 @@ struct GrokAccountsDetailView: View {
             .disabled(model.isGrokAccountOperationInProgress)
         }
         .font(.callout)
+    }
+
+    private var grokPasteImportSheet: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(l10n.text(.grokAccountsAddPaste)).font(.headline)
+            Text(l10n.text(.grokAccountsPasteHint))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            PasteableTextEditor(text: $pasteText, monospaced: false)
+                .frame(minHeight: 160)
+                .disabled(isImportingPaste)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color(nsColor: .separatorColor).opacity(0.6), lineWidth: 1))
+            HStack {
+                Button(l10n.text(.accountsPasteFromClipboard)) {
+                    if let clip = NSPasteboard.general.string(forType: .string) {
+                        pasteText = clip
+                    }
+                }
+                .disabled(isImportingPaste)
+                Spacer()
+            }
+            if let pasteSheetError {
+                Text(pasteSheetError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Spacer()
+                Button(l10n.text(.cancel)) {
+                    showPasteSheet = false
+                    pasteSheetError = nil
+                    isImportingPaste = false
+                }
+                .disabled(isImportingPaste)
+                Button {
+                    isImportingPaste = true
+                    pasteSheetError = nil
+                    Task {
+                        let ok = await model.importPastedGrokCredentials(pasteText)
+                        isImportingPaste = false
+                        if ok {
+                            pasteText = ""
+                            pasteSheetError = nil
+                            showPasteSheet = false
+                        } else {
+                            pasteSheetError = model.grokLastError
+                                ?? l10n.text(.grokAccountsImportNoCredentials)
+                        }
+                    }
+                } label: {
+                    if isImportingPaste {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Text(l10n.text(.accountsAdd))
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isImportingPaste
+                    || pasteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 24)
+        .padding(.bottom, 22)
+        .frame(width: 480)
+        .frame(minHeight: pasteSheetError == nil ? 360 : 400)
     }
 
     private var orderedAccounts: [GrokManagedAccount] {

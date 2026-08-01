@@ -16,7 +16,7 @@ Codex Runway 是一个原生 macOS 状态栏应用，帮你在菜单栏查看 Co
 - 在常驻的 `Codex | Grok` 页签间切换，菜单栏和右键菜单同步展示所选供应商。
 - 通过官方 CLI chat-proxy 额度接口查看包含额度、产品拆分（Build / Imagine / Chat）、周/月周期、预付余额和按需使用情况。
 - Grok 主面板与 Codex 一致：展示 Token 用量多图表（热力图 / 折线 / 柱状）与 API 等价成本（本机会话日志），以及最近对话。
-- 管理多个 Grok OAuth / SuperGrok 账号：隔离登录、导入当前登录、刷新、别名、排序、删除和显式切号。
+- 管理多个 Grok OAuth / SuperGrok 账号：隔离登录、导入当前登录、粘贴 Token / JSON、刷新、别名、排序、删除和显式切号。
 - 查看 5 小时、每周和附加额度窗口。
 - 查看今日速率限制是否已重置（项目自托管公开状态源），并可跳转到相关公开动态。
 - 设置中可开关「今日是否重置」栏目，并单独配置其刷新间隔（默认开启、每 1 小时）。
@@ -74,7 +74,7 @@ xattr -dr com.apple.quarantine /Applications/CodexRunway.app
   curl -fsSL https://x.ai/cli/install.sh | bash
   ```
 
-- Grok 多账号与额度仅支持 OAuth / SuperGrok 及兼容 legacy session。可先运行 `grok login --oauth`，也可在应用内登录或导入当前登录；仅有 API Key 的登录不会加入托管账号。
+- Grok 多账号与额度仅支持 OAuth / SuperGrok 及兼容 legacy session。可先运行 `grok login --oauth`，也可在应用内登录、导入当前登录，或粘贴 `~/.grok/auth.json` / 凭据 JSON；仅有 API Key 的登录不会加入托管账号。
 - 如果设置了 `GROK_HOME`，应用会沿用该目录；否则使用 `~/.grok`。详见 [xAI Settings](https://docs.x.ai/build/settings)。
 
 ## 本地运行

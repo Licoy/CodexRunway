@@ -57,8 +57,12 @@ struct AccountsSettingsPane: View {
         }
         .sheet(isPresented: $showPasteSheet) {
             importSheet(
-                title: l10n.text(.accountsAddPaste),
-                hint: l10n.text(.accountsPasteHint),
+                title: model.selectedProvider == .grok
+                    ? l10n.text(.grokAccountsAddPaste)
+                    : l10n.text(.accountsAddPaste),
+                hint: model.selectedProvider == .grok
+                    ? l10n.text(.grokAccountsPasteHint)
+                    : l10n.text(.accountsPasteHint),
                 text: $pasteText,
                 sheetError: pasteSheetError,
                 isWorking: isImportingPaste)
@@ -66,12 +70,19 @@ struct AccountsSettingsPane: View {
                 isImportingPaste = true
                 pasteSheetError = nil
                 Task {
-                    let ok = await model.importPastedCredentials(pasteText)
+                    let ok: Bool
+                    if model.selectedProvider == .grok {
+                        ok = await model.importPastedGrokCredentials(pasteText)
+                    } else {
+                        ok = await model.importPastedCredentials(pasteText)
+                    }
                     isImportingPaste = false
                     if ok {
                         pasteText = ""
                         pasteSheetError = nil
                         showPasteSheet = false
+                    } else if model.selectedProvider == .grok {
+                        pasteSheetError = model.grokLastError ?? l10n.text(.grokAccountsImportNoCredentials)
                     } else {
                         pasteSheetError = model.lastError ?? l10n.text(.accountsImportNoCredentials)
                     }
@@ -146,6 +157,11 @@ struct AccountsSettingsPane: View {
             if model.selectedProvider == .grok {
                 Menu {
                     Button(l10n.text(.grokAccountsAddOAuth)) { model.startGrokOAuthLogin() }
+                    Button(l10n.text(.grokAccountsAddPaste)) {
+                        pasteText = ""
+                        pasteSheetError = nil
+                        showPasteSheet = true
+                    }
                     Button(l10n.text(.grokAccountsImportOfficial)) { model.importOfficialGrokAccount() }
                 } label: {
                     Label(l10n.text(.accountsAdd), systemImage: "plus")

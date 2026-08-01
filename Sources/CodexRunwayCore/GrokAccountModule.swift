@@ -107,6 +107,91 @@ public actor GrokAccountModule {
         return state
     }
 
+    /// Import pasted Grok auth.json / credential JSON. Partial success is reported in the batch result.
+    public func importPastedText(_ text: String) async throws -> (GrokAccountImportBatchResult, GrokAccountState) {
+        await acquireOperation()
+        defer { releaseOperation() }
+        try Task.checkCancellation()
+
+        let payloads = GrokAccountImporter().parsePayloads(from: text)
+        if payloads.isEmpty {
+            let state = try reconcileOfficialIdentity(consumingExternalChange: false)
+            return (GrokAccountImportBatchResult(succeeded: [], failures: ["no_credentials"]), state)
+        }
+
+        let before = try store.loadIndex()
+        let officialStatus = store.loadOfficialCredentialStatus(now: now())
+        let canBootstrapCurrent = before.accounts.isEmpty && !officialStatus.hasManagedLogin
+        var succeeded: [GrokManagedAccount] = []
+        var failures: [String] = []
+        var isFirst = true
+
+        for (index, data) in payloads.enumerated() {
+            try Task.checkCancellation()
+            let label = payloads.count == 1 ? "json" : "json[\(index)]"
+            do {
+                let document = try parseCredential(data)
+                let makeCurrent = isFirst && canBootstrapCurrent
+                let account = try store.upsertCredentialData(data, makeCurrent: makeCurrent, now: now())
+                // Keep official auth in sync when bootstrapping, re-importing the current
+                // account, or pasting credentials for the identity already on disk officially.
+                if shouldInstallPastedAccount(
+                    accountID: account.id,
+                    document: document,
+                    before: before,
+                    officialStatus: officialStatus,
+                    bootstrapping: makeCurrent)
+                {
+                    try installCurrentAccount(id: account.id)
+                }
+                succeeded.append(account)
+                isFirst = false
+            } catch {
+                failures.append("\(label): \(safeImportFailureMessage(error))")
+            }
+        }
+
+        var state = try reconcileOfficialIdentity(consumingExternalChange: false)
+        if !succeeded.isEmpty {
+            pendingOfficialIdentityChange = false
+            state.officialIdentityChangedExternally = false
+        }
+        return (GrokAccountImportBatchResult(succeeded: succeeded, failures: failures), state)
+    }
+
+    private func safeImportFailureMessage(_ error: Error) -> String {
+        if let error = error as? GrokAccountError {
+            switch error {
+            case .noManagedCredential, .apiKeyOnlyNotManageable:
+                return "no manageable Grok OAuth credential"
+            case .invalidCredential, .officialCredentialMalformed:
+                return "invalid Grok credential"
+            case .credentialIdentityMismatch:
+                return "credential identity mismatch"
+            default:
+                return "import failed"
+            }
+        }
+        return "import failed"
+    }
+
+    private func shouldInstallPastedAccount(
+        accountID: String,
+        document: GrokAuthDocument,
+        before: GrokAccountIndex,
+        officialStatus: GrokOfficialCredentialStatus,
+        bootstrapping: Bool) -> Bool
+    {
+        if bootstrapping { return true }
+        if before.currentAccountID == accountID { return true }
+        if let official = officialStatus.identity,
+           official.stableID == accountID || official.stableID == document.stableID
+        {
+            return true
+        }
+        return false
+    }
+
     private func reconcileOfficialIdentity(consumingExternalChange: Bool) throws -> GrokAccountState {
         let previous = try store.loadIndex()
         let status = store.loadOfficialCredentialStatus(now: now())
@@ -521,6 +606,22 @@ public actor GrokAccountModule {
     }
 
     private func safeLoginMessage(_ error: Error) -> String {
+        if let error = error as? GrokOAuthLogin.Error {
+            switch error {
+            case .expired:
+                return "Grok device code expired. Try signing in again."
+            case .denied:
+                return "Grok device authorization was denied."
+            case .browserOpenFailed:
+                return "Could not open the browser for Grok sign-in."
+            case .missingIdentity:
+                return "Grok sign-in completed but no user identity was returned."
+            case .discoveryFailed, .invalidEndpoint, .deviceCodeFailed, .tokenFailed, .writeFailed:
+                return "Grok OAuth login failed."
+            case .authorizationPending, .slowDown:
+                return "Grok OAuth login failed."
+            }
+        }
         switch error {
         case GrokCLIError.binaryNotFound:
             return "Grok CLI is not installed."

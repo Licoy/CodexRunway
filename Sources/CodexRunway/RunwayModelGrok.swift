@@ -357,6 +357,62 @@ extension RunwayModel {
         runGrokCommand(.importOfficial, message: l10n.text(.grokLoginWaiting))
     }
 
+    /// Returns true when at least one Grok account was imported successfully.
+    @discardableResult
+    func importPastedGrokCredentials(_ text: String) async -> Bool {
+        guard let grokModule, !isGrokAccountOperationInProgress else { return false }
+        isGrokAccountOperationInProgress = true
+        grokAccountOperationMessage = l10n.text(.grokLoginWaiting)
+        grokLastError = nil
+        defer {
+            isGrokAccountOperationInProgress = false
+            grokAccountOperationWork = nil
+        }
+        do {
+            let (batch, state) = try await grokModule.importPastedText(text)
+            applyGrokAccountState(state)
+            if batch.successCount > 0 {
+                grokAccountState.officialIdentityChangedExternally = false
+                grokPanelState.externalLoginChanged = false
+                grokAccountOperationMessage = String(
+                    format: l10n.text(.accountsImportSucceeded),
+                    batch.successCount)
+                if batch.failureCount > 0 {
+                    grokLastError = "\(l10n.text(.accountsImportFailed)): \(humanizeGrokImportFailures(batch.failures))"
+                } else {
+                    grokLastError = nil
+                }
+                // Background quota refresh for newly imported accounts.
+                refreshGrok(.all)
+                return true
+            }
+            grokAccountOperationMessage = nil
+            if batch.failures.contains("no_credentials") || batch.failures.isEmpty {
+                grokLastError = l10n.text(.grokAccountsImportNoCredentials)
+            } else {
+                grokLastError = "\(l10n.text(.accountsImportFailed)): \(humanizeGrokImportFailures(batch.failures))"
+            }
+            return false
+        } catch is CancellationError {
+            grokAccountOperationMessage = nil
+            grokLastError = l10n.text(.grokLoginCancelled)
+            return false
+        } catch {
+            grokAccountOperationMessage = nil
+            grokLastError = grokErrorText(error)
+            return false
+        }
+    }
+
+    private func humanizeGrokImportFailures(_ failures: [String]) -> String {
+        failures.prefix(3).map { failure in
+            if failure == "no_credentials" {
+                return l10n.text(.grokAccountsImportNoCredentials)
+            }
+            return failure
+        }.joined(separator: "; ")
+    }
+
     func switchGrokAccount(id: String, allowWhileRunning: Bool = false) {
         cancelGrokRefresh()
         runGrokCommand(
