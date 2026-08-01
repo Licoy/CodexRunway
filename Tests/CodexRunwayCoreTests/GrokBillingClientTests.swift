@@ -306,17 +306,33 @@ private final class MockBillingURLProtocol: URLProtocol, @unchecked Sendable {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
         }
-        Task {
-            do {
-                let (response, data) = try await handler(request)
-                client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-                client?.urlProtocol(self, didLoad: data)
-                client?.urlProtocolDidFinishLoading(self)
-            } catch {
-                client?.urlProtocol(self, didFailWithError: error)
-            }
-        }
+        // Avoid capturing non-Sendable `self` in a sending Task closure.
+        let request = self.request
+        NonisolatedBillingURLProtocolResponder.fulfill(request: request, handler: handler, protocol: self)
     }
 
     override func stopLoading() {}
+}
+
+/// Bridges async mock handlers back to URLProtocol without a sending-`self` Task capture.
+private enum NonisolatedBillingURLProtocolResponder {
+    nonisolated static func fulfill(
+        request: URLRequest,
+        handler: @escaping @Sendable (URLRequest) async throws -> (HTTPURLResponse, Data),
+        protocol urlProtocol: URLProtocol)
+    {
+        let client = urlProtocol.client
+        // URLProtocol is not Sendable; the mock is single-session and serialised by suite.
+        nonisolated(unsafe) let protocolInstance = urlProtocol
+        Task {
+            do {
+                let (response, data) = try await handler(request)
+                client?.urlProtocol(protocolInstance, didReceive: response, cacheStoragePolicy: .notAllowed)
+                client?.urlProtocol(protocolInstance, didLoad: data)
+                client?.urlProtocolDidFinishLoading(protocolInstance)
+            } catch {
+                client?.urlProtocol(protocolInstance, didFailWithError: error)
+            }
+        }
+    }
 }
