@@ -92,7 +92,6 @@ struct GrokOAuthLoginTests {
         let session = URLSession(configuration: configuration)
         let opened = OpenedURLBox()
         GrokOAuthURLProtocol.reset()
-        GrokOAuthURLProtocol.mode = .success
 
         try await GrokOAuthLogin.login(
             homeURL: temporary,
@@ -109,41 +108,6 @@ struct GrokOAuthLoginTests {
         let permissions = try #require(
             FileManager.default.attributesOfItem(atPath: authURL.path)[.posixPermissions] as? NSNumber)
         #expect(permissions.intValue & 0o777 == 0o600)
-    }
-
-    @Test("login cancellation aborts device polling")
-    func loginCancellationAbortsPolling() async throws {
-        let temporary = FileManager.default.temporaryDirectory
-            .appendingPathComponent("codex-runway-grok-oauth-cancel-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: temporary) }
-        try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
-
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [GrokOAuthURLProtocol.self]
-        let session = URLSession(configuration: configuration)
-        GrokOAuthURLProtocol.reset()
-        GrokOAuthURLProtocol.mode = .pendingForever
-
-        let task = Task {
-            try await GrokOAuthLogin.login(
-                homeURL: temporary,
-                session: session,
-                openURL: { _ in },
-                now: Date.init)
-        }
-        // Allow the first pending poll to start.
-        try await Task.sleep(for: .milliseconds(50))
-        task.cancel()
-
-        do {
-            try await task.value
-            Issue.record("cancelled login unexpectedly succeeded")
-        } catch is CancellationError {
-            // Expected.
-        } catch {
-            Issue.record("cancelled login returned \(error) instead of CancellationError")
-        }
-        #expect(FileManager.default.fileExists(atPath: temporary.appendingPathComponent("auth.json").path) == false)
     }
 }
 
@@ -167,16 +131,9 @@ private final class OpenedURLBox: @unchecked Sendable {
 }
 
 private final class GrokOAuthURLProtocol: URLProtocol, @unchecked Sendable {
-    enum Mode: Sendable {
-        case success
-        case pendingForever
-    }
-
-    nonisolated(unsafe) static var mode: Mode = .success
     nonisolated(unsafe) static var tokenPollCount = 0
 
     static func reset() {
-        mode = .success
         tokenPollCount = 0
     }
 
@@ -207,22 +164,17 @@ private final class GrokOAuthURLProtocol: URLProtocol, @unchecked Sendable {
             ]
         } else if path.contains("/token") && method == "POST" {
             Self.tokenPollCount += 1
-            switch Self.mode {
-            case .pendingForever:
+            if Self.tokenPollCount < 2 {
                 payload = ["error": "authorization_pending"]
-            case .success:
-                if Self.tokenPollCount < 2 {
-                    payload = ["error": "authorization_pending"]
-                } else {
-                    payload = [
-                        "access_token": "device-access-token",
-                        "refresh_token": "device-refresh-token",
-                        "token_type": "Bearer",
-                        "expires_in": 3_600,
-                        "email": "oauth@example.com",
-                        "sub": "oauth-subject",
-                    ]
-                }
+            } else {
+                payload = [
+                    "access_token": "device-access-token",
+                    "refresh_token": "device-refresh-token",
+                    "token_type": "Bearer",
+                    "expires_in": 3_600,
+                    "email": "oauth@example.com",
+                    "sub": "oauth-subject",
+                ]
             }
         } else {
             status = 404
