@@ -6,20 +6,41 @@ import Foundation
 /// and CLIProxyAPI's documented chat-proxy base URL. Uses the managed OAuth access token
 /// from the account home's `auth.json` — not browser cookies.
 ///
+/// Chat-proxy requests carry Grok CLI identity headers (`User-Agent`,
+/// `X-XAI-Token-Auth`, `x-grok-client-version`). The client version is resolved
+/// from the local `grok --version` output (see ``GrokCLIClientVersionProvider``).
+///
 /// Enrichment (best effort, same token):
 /// - `/v1/settings` → `subscription_tier_display` (plan name; credits payload often omits it)
 /// - `/v1/billing` (default / cents) → `monthlyLimit` / `used` USD-equivalent allowance
 /// - JWT `tier` claim → plan fallback when settings/billing omit the tier
 public struct GrokBillingClient: Sendable {
+    public typealias ClientVersionProvider = @Sendable () async -> String
+
     public var session: URLSession
     public var baseURL: URL
+    /// Returns the bare CLI version (e.g. `0.2.114`) used in chat-proxy identity headers.
+    public var clientVersionProvider: ClientVersionProvider
 
     public init(
         session: URLSession = RunwayNetwork.session,
-        baseURL: URL = URL(string: "https://cli-chat-proxy.grok.com/v1")!)
+        baseURL: URL = URL(string: "https://cli-chat-proxy.grok.com/v1")!,
+        clientVersionProvider: @escaping ClientVersionProvider)
     {
         self.session = session
         self.baseURL = baseURL
+        self.clientVersionProvider = clientVersionProvider
+    }
+
+    public init(
+        session: URLSession = RunwayNetwork.session,
+        baseURL: URL = URL(string: "https://cli-chat-proxy.grok.com/v1")!,
+        clientVersion: GrokCLIClientVersionProvider? = nil)
+    {
+        let provider = clientVersion ?? GrokCLIClientVersionProvider.sharedLive
+        self.session = session
+        self.baseURL = baseURL
+        self.clientVersionProvider = { await provider.clientVersion() }
     }
 
     public func fetch(homeURL: URL) async throws -> GrokQuotaSnapshot {
@@ -42,9 +63,24 @@ public struct GrokBillingClient: Sendable {
     }
 
     public func fetch(accessToken: String, now: Date = Date()) async throws -> GrokQuotaSnapshot {
-        async let creditsResult = fetchData(path: "billing", query: [("format", "credits")], accessToken: accessToken)
-        async let centsResult = fetchData(path: "billing", query: [], accessToken: accessToken)
-        async let settingsResult = fetchData(path: "settings", query: [], accessToken: accessToken)
+        // Resolve once per fetch so the three parallel chat-proxy calls share one version.
+        let clientVersion = GrokCLIChatProxyIdentity.normalizedClientVersion(
+            await clientVersionProvider())
+        async let creditsResult = fetchData(
+            path: "billing",
+            query: [("format", "credits")],
+            accessToken: accessToken,
+            clientVersion: clientVersion)
+        async let centsResult = fetchData(
+            path: "billing",
+            query: [],
+            accessToken: accessToken,
+            clientVersion: clientVersion)
+        async let settingsResult = fetchData(
+            path: "settings",
+            query: [],
+            accessToken: accessToken,
+            clientVersion: clientVersion)
 
         let creditsData = try await creditsResult
         var snapshot = try decodeCredits(creditsData, now: now)
@@ -85,7 +121,8 @@ public struct GrokBillingClient: Sendable {
     private func fetchData(
         path: String,
         query: [(String, String)],
-        accessToken: String) async throws -> Data
+        accessToken: String,
+        clientVersion: String) async throws -> Data
     {
         guard let url = makeURL(path: path, query: query) else {
             throw GrokCLIError.requestFailed("invalid billing URL")
@@ -94,6 +131,16 @@ public struct GrokBillingClient: Sendable {
         request.timeoutInterval = 20
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        // CLI chat-proxy identity (CLIProxyAPI `applyXAIChatHeaders`).
+        request.setValue(
+            GrokCLIChatProxyIdentity.tokenAuthValue,
+            forHTTPHeaderField: GrokCLIChatProxyIdentity.tokenAuthHeader)
+        request.setValue(
+            clientVersion,
+            forHTTPHeaderField: GrokCLIChatProxyIdentity.clientVersionHeader)
+        request.setValue(
+            GrokCLIChatProxyIdentity.userAgent(clientVersion: clientVersion),
+            forHTTPHeaderField: GrokCLIChatProxyIdentity.userAgentHeader)
 
         let data: Data
         let response: URLResponse

@@ -80,7 +80,34 @@ public struct GrokCLIClient: Sendable {
         openURL: @escaping GrokOAuthLogin.OpenURL = GrokOAuthLogin.openInDefaultBrowser,
         onDeviceCode: DeviceCodeHandler? = nil)
     {
-        let billingClient = GrokBillingClient(session: session, baseURL: billingBaseURL)
+        // Shared resolver so billing identity headers track the local CLI version
+        // (re-probed when the binary path/mtime changes).
+        let clientVersion = GrokCLIClientVersionProvider(
+            locateExecutable: {
+                executableURL ?? GrokExecutableLocator.locate(environment: environment)
+            },
+            readVersion: { located in
+                let command = GrokCommandProcess(
+                    executableURL: located,
+                    arguments: ["--no-auto-update", "--version"],
+                    environment: environment,
+                    homeURL: nil,
+                    capturesOutput: true)
+                let data = try await command.run(
+                    timeout: min(commandTimeout, 10),
+                    operation: "version")
+                guard let value = String(data: data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                    !value.isEmpty
+                else {
+                    throw GrokCLIError.malformedResponse("empty version output")
+                }
+                return value
+            })
+        let billingClient = GrokBillingClient(
+            session: session,
+            baseURL: billingBaseURL,
+            clientVersion: clientVersion)
         self.init(
             billing: { homeURL in
                 // Official Grok CLI fetches credits via cli-chat-proxy HTTP, not agent stdio RPC.

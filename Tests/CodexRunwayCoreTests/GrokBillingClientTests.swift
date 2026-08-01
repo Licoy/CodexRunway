@@ -55,7 +55,8 @@ struct GrokBillingClientTests {
 
         let client = GrokBillingClient(
             session: MockBillingURLProtocol.session(),
-            baseURL: URL(string: "https://cli-chat-proxy.grok.com/v1")!)
+            baseURL: URL(string: "https://cli-chat-proxy.grok.com/v1")!,
+            clientVersionProvider: { "0.2.114" })
         let snapshot = try await client.fetch(homeURL: temporary.url)
 
         #expect(snapshot.includedUsagePercent == 44.0)
@@ -70,6 +71,40 @@ struct GrokBillingClientTests {
         #expect(urls.contains { $0.hasSuffix("/billing") })
         #expect(urls.contains { $0.contains("/settings") })
         #expect(await recorder.authorizations.allSatisfy { $0 == "Bearer home-access-token-for-tests" })
+        let userAgents = await recorder.headerValues(GrokCLIChatProxyIdentity.userAgentHeader)
+        let tokenAuth = await recorder.headerValues(GrokCLIChatProxyIdentity.tokenAuthHeader)
+        let clientVersions = await recorder.headerValues(GrokCLIChatProxyIdentity.clientVersionHeader)
+        #expect(userAgents.allSatisfy { $0 == "xai-grok-workspace/0.2.114" })
+        #expect(tokenAuth.allSatisfy { $0 == GrokCLIChatProxyIdentity.tokenAuthValue })
+        #expect(clientVersions.allSatisfy { $0 == "0.2.114" })
+        #expect(userAgents.count == 3)
+    }
+
+    @Test("chat-proxy identity headers track the injected CLI version")
+    func identityHeadersTrackCLIVersion() async throws {
+        let recorder = BillingRequestRecorder()
+        MockBillingURLProtocol.handler = { request in
+            await recorder.record(request)
+            let body = Data(#"""
+            {"config":{"creditUsagePercent":1,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-07-01T00:00:00Z","end":"2026-07-08T00:00:00Z"}}}
+            """#.utf8)
+            return (
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil)!,
+                body)
+        }
+        defer { MockBillingURLProtocol.handler = nil }
+
+        let client = GrokBillingClient(
+            session: MockBillingURLProtocol.session(),
+            clientVersionProvider: { "1.4.0" })
+        _ = try await client.fetch(accessToken: "token-for-tests")
+
+        #expect(await recorder.headerValues("User-Agent").allSatisfy { $0 == "xai-grok-workspace/1.4.0" })
+        #expect(await recorder.headerValues("x-grok-client-version").allSatisfy { $0 == "1.4.0" })
     }
 
     @Test("falls back to JWT tier when settings omit the plan")
@@ -99,7 +134,9 @@ struct GrokBillingClientTests {
         }
         defer { MockBillingURLProtocol.handler = nil }
 
-        let client = GrokBillingClient(session: MockBillingURLProtocol.session())
+        let client = GrokBillingClient(
+            session: MockBillingURLProtocol.session(),
+            clientVersionProvider: { "0.2.114" })
         let snapshot = try await client.fetch(accessToken: token)
         #expect(snapshot.plan == "SuperGrok Heavy")
         #expect(snapshot.includedLimitCents == 30_000)
@@ -109,7 +146,9 @@ struct GrokBillingClientTests {
     func missingAuthIsAuthenticationRequired() async throws {
         let temporary = try TemporaryBillingDirectory()
         defer { withExtendedLifetime(temporary) {} }
-        let client = GrokBillingClient(session: MockBillingURLProtocol.session())
+        let client = GrokBillingClient(
+            session: MockBillingURLProtocol.session(),
+            clientVersionProvider: { "0.2.114" })
 
         await #expect(throws: GrokCLIError.authenticationRequired) {
             try await client.fetch(homeURL: temporary.url)
@@ -128,7 +167,9 @@ struct GrokBillingClientTests {
                 Data(#"{"error":"unauthorized"}"#.utf8))
         }
         defer { MockBillingURLProtocol.handler = nil }
-        let client = GrokBillingClient(session: MockBillingURLProtocol.session())
+        let client = GrokBillingClient(
+            session: MockBillingURLProtocol.session(),
+            clientVersionProvider: { "0.2.114" })
 
         await #expect(throws: GrokCLIError.authenticationRequired) {
             try await client.fetch(accessToken: "expired-token-for-tests")
@@ -147,7 +188,9 @@ struct GrokBillingClientTests {
                 Data(#"{"unexpected":true}"#.utf8))
         }
         defer { MockBillingURLProtocol.handler = nil }
-        let client = GrokBillingClient(session: MockBillingURLProtocol.session())
+        let client = GrokBillingClient(
+            session: MockBillingURLProtocol.session(),
+            clientVersionProvider: { "0.2.114" })
 
         await #expect(throws: GrokCLIError.malformedResponse("billing parse failed")) {
             try await client.fetch(accessToken: "token-for-tests")
@@ -236,6 +279,10 @@ private actor BillingRequestRecorder {
     var last: URLRequest? { requests.last }
     var urls: [String] { requests.compactMap(\.url?.absoluteString) }
     var authorizations: [String?] { requests.map { $0.value(forHTTPHeaderField: "Authorization") } }
+
+    func headerValues(_ name: String) -> [String?] {
+        requests.map { $0.value(forHTTPHeaderField: name) }
+    }
 
     func record(_ request: URLRequest) {
         requests.append(request)

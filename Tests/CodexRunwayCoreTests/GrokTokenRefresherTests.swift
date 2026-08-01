@@ -223,18 +223,34 @@ private final class MockGrokTokenURLProtocol: URLProtocol, @unchecked Sendable {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
         }
+        // Mirror MockBillingURLProtocol: keep the URLProtocol client callbacks on this
+        // instance without isolating through a Sendable capture of `self`.
         let request = self.request
-        Task {
-            do {
-                let (response, data) = try await handler(request)
-                self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-                self.client?.urlProtocol(self, didLoad: data)
-                self.client?.urlProtocolDidFinishLoading(self)
-            } catch {
-                self.client?.urlProtocol(self, didFailWithError: error)
-            }
-        }
+        NonisolatedURLProtocolResponder.fulfill(request: request, handler: handler, protocol: self)
     }
 
     override func stopLoading() {}
+}
+
+/// Bridges async mock handlers back to URLProtocol without a sending-`self` Task capture.
+private enum NonisolatedURLProtocolResponder {
+    nonisolated static func fulfill(
+        request: URLRequest,
+        handler: @escaping @Sendable (URLRequest) async throws -> (HTTPURLResponse, Data),
+        protocol urlProtocol: URLProtocol)
+    {
+        let client = urlProtocol.client
+        // URLProtocol is not Sendable; the mock is single-session and serialised by suite.
+        nonisolated(unsafe) let protocolInstance = urlProtocol
+        Task {
+            do {
+                let (response, data) = try await handler(request)
+                client?.urlProtocol(protocolInstance, didReceive: response, cacheStoragePolicy: .notAllowed)
+                client?.urlProtocol(protocolInstance, didLoad: data)
+                client?.urlProtocolDidFinishLoading(protocolInstance)
+            } catch {
+                client?.urlProtocol(protocolInstance, didFailWithError: error)
+            }
+        }
+    }
 }
