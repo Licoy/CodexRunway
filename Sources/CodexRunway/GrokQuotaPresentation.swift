@@ -11,6 +11,8 @@ struct GrokQuotaPresentation: Sendable, Equatable {
     var plan: String
     /// Overall included quota meter first, then product breakdown meters.
     var meters: [QuotaMeter]
+    /// Account included allowance as USD, e.g. `$147.23 / $150.00`.
+    var includedUSDAllowance: String?
     var prepaidBalance: String?
     var onDemandUsage: String?
     var source: String
@@ -26,14 +28,20 @@ struct GrokQuotaPresentation: Sendable, Equatable {
             usedPercent: usedPercent,
             windowMinutes: snapshot.period.map(windowMinutes),
             resetsAt: snapshot.period?.resetsAt)
+        let includedUSD = includedUSDText(snapshot)
         let prepaid = snapshot.prepaidBalanceCents.map(money)
         let onDemand = onDemandText(snapshot)
         let source = l10n.text(.grokSourceCLI)
-        let plan = nonEmpty(snapshot.plan) ?? l10n.text(.unknown)
+        let plan = GrokSubscriptionTier.displayName(from: snapshot.plan)
+            ?? nonEmpty(snapshot.plan)
+            ?? l10n.text(.unknown)
         var lines = [
             Line(title: l10n.text(.grokPlan), value: plan),
             Line(title: periodTitle, value: "\(usedPercent)% \(l10n.text(.used))"),
         ]
+        if let includedUSD {
+            lines.append(Line(title: l10n.text(.grokIncludedUSD), value: includedUSD))
+        }
         if let resetsAt = snapshot.period?.resetsAt {
             lines.append(Line(title: l10n.text(.grokResetAt), value: resetsAt.formatted()))
         }
@@ -65,12 +73,29 @@ struct GrokQuotaPresentation: Sendable, Equatable {
         return Self(
             plan: plan,
             meters: meters,
+            includedUSDAllowance: includedUSD,
             prepaidBalance: prepaid,
             onDemandUsage: onDemand,
             source: source,
             updatedAt: snapshot.updatedAt,
             lines: lines,
             productLines: productLines)
+    }
+
+    /// Compact account-row summary: `$2.77 / $150.00 · 94% left` when USD is known.
+    static func accountSummary(snapshot: GrokQuotaSnapshot, l10n: L10n) -> String {
+        let remainingPercent = max(0, min(100, 100 - Int(snapshot.includedUsagePercent.rounded())))
+        let percentPart = "\(remainingPercent)% \(l10n.text(.left))"
+        if let included = includedUSDText(snapshot) {
+            return "\(included) · \(percentPart)"
+        }
+        return "\(percentPart) · \(l10n.text(.lastUpdated)) \(snapshot.updatedAt.formatted(date: .omitted, time: .shortened))"
+    }
+
+    static func includedUSDText(_ snapshot: GrokQuotaSnapshot) -> String? {
+        guard let limit = snapshot.includedLimitCents, limit > 0 else { return nil }
+        let used = max(0, snapshot.includedUsedCents ?? 0)
+        return "\(money(used)) / \(money(limit))"
     }
 
     static func productTitle(_ product: String, l10n: L10n) -> String {

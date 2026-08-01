@@ -519,7 +519,7 @@ extension RunwayModel {
         grokPanelState = GrokPanelViewState(
             availability: availability,
             identityName: current?.resolvedDisplayName ?? state.officialCredentialStatus.identity?.resolvedDisplayName,
-            planName: quota?.plan,
+            planName: GrokSubscriptionTier.displayName(from: quota?.plan) ?? quota?.plan,
             quota: quota,
             localUsage: localUsage,
             isRefreshingLocalUsage: isRefreshingLocalUsage,

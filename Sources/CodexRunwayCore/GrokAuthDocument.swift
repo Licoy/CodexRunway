@@ -133,6 +133,70 @@ public struct GrokAuthDocument: Sendable, Equatable {
         return key
     }
 
+    public func refreshToken() throws -> String {
+        let root = try Self.rootObject(from: rawData)
+        guard let object = root[identity.scope] as? [String: Any],
+              let token = Self.nonEmptyString(object["refresh_token"])
+        else {
+            throw GrokAuthDocumentError.invalidManagedCredential
+        }
+        return token
+    }
+
+    /// Merge a successful OAuth token response into the managed scope of an auth.json document.
+    /// Preserves sibling scopes (e.g. API keys) and identity fields.
+    public static func applyingTokenRefresh(
+        to data: Data,
+        accessToken: String,
+        refreshToken: String?,
+        expiresIn: Int?,
+        now: Date = Date()) throws -> Data
+    {
+        let document = try parse(data)
+        var root = try rootObject(from: data)
+        guard var object = root[document.identity.scope] as? [String: Any] else {
+            throw GrokAuthDocumentError.invalidManagedCredential
+        }
+        let trimmedAccess = accessToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAccess.isEmpty else {
+            throw GrokAuthDocumentError.invalidManagedCredential
+        }
+        object["key"] = trimmedAccess
+        if let refreshToken {
+            let trimmedRefresh = refreshToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedRefresh.isEmpty {
+                object["refresh_token"] = trimmedRefresh
+            }
+        }
+        if let expiresIn, expiresIn > 0 {
+            object["expires_at"] = iso8601String(now.addingTimeInterval(TimeInterval(expiresIn)))
+        }
+        root[document.identity.scope] = object
+        guard JSONSerialization.isValidJSONObject(root) else {
+            throw GrokAuthDocumentError.invalidRoot
+        }
+        do {
+            let encoded = try JSONSerialization.data(
+                withJSONObject: root,
+                options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+            // Re-parse to ensure the document remains valid.
+            _ = try parse(encoded)
+            return encoded
+        } catch GrokAuthDocumentError.invalidManagedCredential {
+            throw GrokAuthDocumentError.invalidManagedCredential
+        } catch GrokAuthDocumentError.noManagedCredential {
+            throw GrokAuthDocumentError.noManagedCredential
+        } catch {
+            throw GrokAuthDocumentError.invalidRoot
+        }
+    }
+
+    private static func iso8601String(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.string(from: date)
+    }
+
     public static func replacingManagedScopes(in officialData: Data?, with targetData: Data) throws -> Data {
         let targetDocument = try parse(targetData)
         var official = try officialData.map(rootObject(from:)) ?? [:]

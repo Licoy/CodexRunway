@@ -87,4 +87,32 @@ struct GrokQuotaPresentationTests {
         #expect(presentation.prepaidBalance == "$0.00")
         #expect(presentation.onDemandUsage == nil)
     }
+
+    @Test("included USD allowance appears in details and account summary")
+    func includedUSDAllowance() throws {
+        let snapshot = GrokQuotaSnapshot(
+            plan: "supergrok",
+            includedUsagePercent: 6.0,
+            period: GrokQuotaPeriod(kind: .weekly, startsAt: nil, resetsAt: nil),
+            includedLimitCents: 15_000,
+            includedUsedCents: 277,
+            prepaidBalanceCents: 0,
+            onDemandEnabled: false,
+            onDemandUsedCents: nil,
+            onDemandLimitCents: nil,
+            source: .current,
+            updatedAt: Date(timeIntervalSince1970: 1_785_139_420))
+
+        let l10n = L10n(language: .english)
+        let presentation = GrokQuotaPresentation.make(snapshot: snapshot, l10n: l10n)
+        #expect(presentation.plan == "SuperGrok")
+        #expect(presentation.includedUSDAllowance == "$2.77 / $150.00")
+        #expect(presentation.lines.contains {
+            $0.title == "Included USD credit" && $0.value == "$2.77 / $150.00"
+        })
+
+        let summary = GrokQuotaPresentation.accountSummary(snapshot: snapshot, l10n: l10n)
+        #expect(summary.contains("$2.77 / $150.00"))
+        #expect(summary.contains("94% left"))
+    }
 }

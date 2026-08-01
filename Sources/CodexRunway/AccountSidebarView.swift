@@ -399,7 +399,7 @@ private struct AccountIconActionButton: View {
     }
 }
 
-/// Shared plan tag for accounts UI.
+/// Shared plan tag for Codex accounts UI.
 struct SubscriptionTierTag: View {
     var tier: CodexSubscriptionTier
     var l10n: L10n
@@ -410,5 +410,22 @@ struct SubscriptionTierTag: View {
             label: SubscriptionTierBadge.localizedTitle(for: tier, l10n: l10n),
             horizontalPadding: 5,
             verticalPadding: 1)
+    }
+}
+
+/// Shared plan tag for Grok accounts UI — resolves plan string to a styled metallic badge.
+struct GrokSubscriptionTierTag: View {
+    var plan: String?
+    var l10n: L10n
+    var horizontalPadding: CGFloat = 5
+    var verticalPadding: CGFloat = 1
+
+    var body: some View {
+        let tier = GrokSubscriptionTier.resolve(plan)
+        SubscriptionTierBadge(
+            tier: tier,
+            label: SubscriptionTierBadge.localizedTitle(for: tier, planRaw: plan, l10n: l10n),
+            horizontalPadding: horizontalPadding,
+            verticalPadding: verticalPadding)
     }
 }

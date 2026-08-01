@@ -127,6 +127,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case grokImportFailed
     case grokImportSucceeded
     case grokIncludedQuota
+    case grokIncludedUSD
     case grokLoginCancelled
     case grokLoginFailed
     case grokLoginWaiting

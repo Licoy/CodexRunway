@@ -19,11 +19,13 @@ struct DevTierBadgeGallery: View {
         .unknown,
     ]
 
+    private static let grokTiers: [GrokSubscriptionTier] = Array(GrokSubscriptionTier.allCases)
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
 
-            sectionCard(title: "Plan tiers + identity text") {
+            sectionCard(title: "Codex plan tiers + identity text") {
                 ForEach(Array(Self.tiers.enumerated()), id: \.offset) { _, tier in
                     HStack(spacing: 6) {
                         SubscriptionTierBadge(
@@ -34,6 +36,20 @@ struct DevTierBadgeGallery: View {
                             text: "user@example.com",
                             truncationMode: .middle)
                             .frame(maxWidth: 140, alignment: .leading)
+                        Text(debugName(tier))
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.tertiary)
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+
+            sectionCard(title: "Grok plan tiers") {
+                ForEach(Array(Self.grokTiers.enumerated()), id: \.offset) { _, tier in
+                    HStack(spacing: 6) {
+                        SubscriptionTierBadge(
+                            tier: tier,
+                            label: SubscriptionTierBadge.localizedTitle(for: tier, l10n: l10n))
                         Text(debugName(tier))
                             .font(.caption2.monospaced())
                             .foregroundStyle(.tertiary)
@@ -111,6 +127,21 @@ struct DevTierBadgeGallery: View {
         case .enterprise: return "enterprise"
         case .edu: return "edu"
         case .api: return "api"
+        case .unknown: return "unknown"
+        }
+    }
+
+    private func debugName(_ tier: GrokSubscriptionTier) -> String {
+        switch tier {
+        case .free: return "free"
+        case .superGrok: return "superGrok"
+        case .superGrokHeavy: return "superGrokHeavy"
+        case .superGrokLite: return "superGrokLite"
+        case .superGrokPlus: return "superGrokPlus"
+        case .xBasic: return "xBasic"
+        case .xPremium: return "xPremium"
+        case .xPremiumPlus: return "xPremiumPlus"
+        case .apiKey: return "apiKey"
         case .unknown: return "unknown"
         }
     }

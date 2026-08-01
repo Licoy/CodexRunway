@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import CodexRunwayCore
 
-@Suite("Grok account module")
+@Suite("Grok account module", .serialized)
 struct GrokAccountModuleTests {
     @Test("load imports the official OAuth identity as the current managed account")
     func loadImportsOfficialIdentity() async throws {
@@ -24,6 +24,132 @@ struct GrokAccountModuleTests {
         #expect(account.email == "current@example.com")
         #expect(try fixture.store.loadCredentialData(id: account.id) == official)
         #expect(state.officialCredentialStatus.identity?.stableID == account.id)
+    }
+
+    @Test("expired non-current OAuth tokens are refreshed without touching official auth")
+    func refreshesExpiredNonCurrentTokenSilently() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let currentData = Self.credential(email: "current@example.com", userID: "current-user")
+        let otherData = Self.credential(
+            email: "other@example.com",
+            userID: "other-user",
+            accessToken: "expired-other-access",
+            expiresAt: "2020-01-01T00:00:00Z",
+            refreshToken: "other-refresh-token-for-tests",
+            clientID: GrokOAuthLogin.clientID)
+        try fixture.writeOfficial(currentData)
+        _ = try fixture.store.upsertCredentialData(currentData, makeCurrent: true, now: fixture.now)
+        let other = try fixture.store.upsertCredentialData(otherData, makeCurrent: false, now: fixture.now)
+
+        MockGrokModuleTokenURLProtocol.handler = { request in
+            #expect(request.httpMethod == "POST")
+            let response = Data(
+                #"""
+                {
+                  "access_token": "renewed-other-access-token",
+                  "refresh_token": "rotated-other-refresh-token",
+                  "expires_in": 7200
+                }
+                """#.utf8)
+            return (
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil)!,
+                response)
+        }
+        defer { MockGrokModuleTokenURLProtocol.handler = nil }
+
+        let seenHomes = HomeRecorder()
+        let cli = GrokCLIClient(
+            billing: { homeURL in
+                await seenHomes.append(homeURL)
+                let token = try GrokAuthDocument.accessToken(
+                    from: Data(contentsOf: homeURL.appendingPathComponent("auth.json")))
+                #expect(token == "renewed-other-access-token")
+                return Self.quota(now: fixture.now)
+            },
+            loginOAuth: { _ in },
+            version: { "grok 0.2.114" })
+        let module = GrokAccountModule(
+            store: fixture.store,
+            cli: cli,
+            runningProcessIDs: { [] },
+            now: { fixture.now },
+            tokenRefresher: GrokTokenRefresher(
+                session: MockGrokModuleTokenURLProtocol.session(),
+                tokenURL: URL(string: "https://auth.x.ai/oauth2/token")!))
+
+        let report = await module.refresh(.account(id: other.id))
+
+        #expect(report.outcomes.first?.snapshot?.includedUsagePercent == 42.25)
+        #expect(try fixture.store.loadOfficialCredentialData() == currentData)
+        let renewed = try fixture.store.loadCredentialData(id: other.id)
+        #expect(try GrokAuthDocument.accessToken(from: renewed) == "renewed-other-access-token")
+        #expect(try GrokAuthDocument.parse(renewed).refreshToken() == "rotated-other-refresh-token")
+        #expect(await seenHomes.values == [fixture.store.accountDirectory(id: other.id)])
+    }
+
+    @Test("refreshing current also keep-alives non-current tokens without billing them")
+    func currentRefreshKeepAlivesOtherTokens() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let currentData = Self.credential(email: "current@example.com", userID: "current-user")
+        let otherData = Self.credential(
+            email: "other@example.com",
+            userID: "other-user",
+            accessToken: "stale-other-access",
+            expiresAt: "2020-01-01T00:00:00Z",
+            refreshToken: "keep-alive-refresh-token",
+            clientID: GrokOAuthLogin.clientID)
+        try fixture.writeOfficial(currentData)
+        _ = try fixture.store.upsertCredentialData(currentData, makeCurrent: true, now: fixture.now)
+        let other = try fixture.store.upsertCredentialData(otherData, makeCurrent: false, now: fixture.now)
+
+        let hits = TokenRefreshHitCounter()
+        MockGrokModuleTokenURLProtocol.handler = { _ in
+            await hits.increment()
+            let response = Data(#"{"access_token":"kept-alive-access","expires_in":3600}"#.utf8)
+            return (
+                HTTPURLResponse(
+                    url: URL(string: "https://auth.x.ai/oauth2/token")!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil)!,
+                response)
+        }
+        defer { MockGrokModuleTokenURLProtocol.handler = nil }
+
+        let seenHomes = HomeRecorder()
+        let cli = GrokCLIClient(
+            billing: { homeURL in
+                await seenHomes.append(homeURL)
+                return Self.quota(now: fixture.now)
+            },
+            loginOAuth: { _ in },
+            version: { "grok 0.2.114" })
+        let module = GrokAccountModule(
+            store: fixture.store,
+            cli: cli,
+            runningProcessIDs: { [] },
+            now: { fixture.now },
+            tokenRefresher: GrokTokenRefresher(
+                session: MockGrokModuleTokenURLProtocol.session(),
+                tokenURL: URL(string: "https://auth.x.ai/oauth2/token")!))
+
+        let report = await module.refresh(.current)
+
+        let currentID = try fixture.store.loadIndex().currentAccountID
+        #expect(report.outcomes.count == 1)
+        #expect(report.outcomes.first?.accountID == currentID)
+        #expect(await seenHomes.values == [fixture.store.officialHomeURL])
+        #expect(await hits.count >= 1)
+        #expect(
+            try GrokAuthDocument.accessToken(from: fixture.store.loadCredentialData(id: other.id))
+                == "kept-alive-access")
+        #expect(try fixture.store.loadIndex().account(id: other.id)?.cachedQuota == nil)
     }
 
     @Test("refreshing a non-current account uses its isolated home and preserves official auth bytes")
@@ -764,21 +890,24 @@ struct GrokAccountModuleTests {
     private static func credential(
         email: String,
         userID: String,
-        accessToken: String = "access-token-for-tests-only"
+        accessToken: String = "access-token-for-tests-only",
+        expiresAt: String = "2099-08-01T12:00:00Z",
+        refreshToken: String = "refresh-token-for-tests-only",
+        clientID: String = "desktop-client"
     ) -> Data {
         Data(
             """
             {
-              "https://auth.x.ai::desktop-client": {
+              "https://auth.x.ai::\(clientID)": {
                 "auth_mode": "oidc",
                 "email": "\(email)",
-                "expires_at": "2099-08-01T12:00:00Z",
+                "expires_at": "\(expiresAt)",
                 "key": "\(accessToken)",
-                "oidc_client_id": "desktop-client",
+                "oidc_client_id": "\(clientID)",
                 "oidc_issuer": "https://auth.x.ai",
                 "principal_id": "principal-\(userID)",
                 "principal_type": "User",
-                "refresh_token": "refresh-token-for-tests-only",
+                "refresh_token": "\(refreshToken)",
                 "user_id": "\(userID)"
               }
             }
@@ -803,6 +932,44 @@ private actor HomeRecorder {
     func append(_ value: URL) {
         values.append(value)
     }
+}
+
+private actor TokenRefreshHitCounter {
+    private(set) var count = 0
+    func increment() { count += 1 }
+}
+
+private final class MockGrokModuleTokenURLProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var handler: (@Sendable (URLRequest) async throws -> (HTTPURLResponse, Data))?
+
+    static func session() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockGrokModuleTokenURLProtocol.self]
+        return URLSession(configuration: configuration)
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let handler = Self.handler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        let request = self.request
+        Task {
+            do {
+                let (response, data) = try await handler(request)
+                self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+                self.client?.urlProtocol(self, didLoad: data)
+                self.client?.urlProtocolDidFinishLoading(self)
+            } catch {
+                self.client?.urlProtocol(self, didFailWithError: error)
+            }
+        }
+    }
+
+    override func stopLoading() {}
 }
 
 private actor RefreshStartedSignal {

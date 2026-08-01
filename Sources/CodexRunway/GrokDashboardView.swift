@@ -36,7 +36,7 @@ struct GrokAccountIdentityRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                RunwayTag(plan ?? l10n.text(.providerGrok), tone: .neutral)
+                planBadge
                 Text(displayName)
                     .font(.callout.weight(.semibold))
                     .lineLimit(1)
@@ -58,6 +58,15 @@ struct GrokAccountIdentityRow: View {
         .help(l10n.text(.grokAccountsTitle))
         .pointingHandCursor()
         .onHover { isHovered = $0 }
+    }
+
+    @ViewBuilder
+    private var planBadge: some View {
+        if let plan, !plan.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            GrokSubscriptionTierTag(plan: plan, l10n: l10n, horizontalPadding: 7, verticalPadding: 3)
+        } else {
+            RunwayTag(l10n.text(.providerGrok), tone: .neutral)
+        }
     }
 }
 

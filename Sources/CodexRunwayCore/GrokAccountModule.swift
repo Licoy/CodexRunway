@@ -11,6 +11,7 @@ public actor GrokAccountModule {
 
     private let store: GrokAccountStore
     private let cli: GrokCLIClient
+    private let tokenRefresher: GrokTokenRefresher
     private let runningProcessIDs: RunningProcessIDs
     private let now: @Sendable () -> Date
     private var operationLocked = false
@@ -20,6 +21,7 @@ public actor GrokAccountModule {
     public init() {
         self.store = GrokAccountStore()
         self.cli = GrokCLIClient()
+        self.tokenRefresher = GrokTokenRefresher()
         self.runningProcessIDs = { try await GrokProcessInspector.runningProcessIDs() }
         self.now = Date.init
     }
@@ -28,10 +30,12 @@ public actor GrokAccountModule {
         store: GrokAccountStore,
         cli: GrokCLIClient,
         runningProcessIDs: @escaping RunningProcessIDs,
-        now: @escaping @Sendable () -> Date = Date.init)
+        now: @escaping @Sendable () -> Date = Date.init,
+        tokenRefresher: GrokTokenRefresher = GrokTokenRefresher())
     {
         self.store = store
         self.cli = cli
+        self.tokenRefresher = tokenRefresher
         self.runningProcessIDs = runningProcessIDs
         self.now = now
     }
@@ -54,6 +58,9 @@ public actor GrokAccountModule {
         let outcomes: [GrokRefreshOutcome]
         do {
             let state = try reconcileOfficialIdentity(consumingExternalChange: false)
+            // Quietly renew OAuth access tokens for every managed account so
+            // non-current multi-accounts do not expire while idle.
+            await keepAllTokensFresh(state: state)
             let ids = refreshAccountIDs(target: target, state: state)
             var collected: [GrokRefreshOutcome] = []
             for id in ids {
@@ -247,6 +254,65 @@ public actor GrokAccountModule {
         }
     }
 
+    /// Best-effort OAuth keep-alive for every managed Grok account.
+    private func keepAllTokensFresh(state: GrokAccountState) async {
+        for account in state.accounts {
+            guard !Task.isCancelled else { return }
+            let isCurrent = account.id == state.currentAccountID
+            do {
+                _ = try await ensureValidCredential(id: account.id, isCurrent: isCurrent)
+            } catch {
+                // Token keep-alive failures are recorded on the next billing refresh;
+                // do not abort the whole multi-account pass.
+                if isAuthenticationFailure(error) {
+                    do {
+                        var updated = try requireAccount(account.id)
+                        updated = updated.applying(
+                            error: persistedRefreshErrorCode(error),
+                            requiresReauth: true)
+                        try store.updateMetadata(updated)
+                    } catch {
+                        // Ignore secondary metadata write failures during keep-alive.
+                    }
+                }
+            }
+        }
+    }
+
+    /// Ensure the account credential has a non-expired access token.
+    /// - Current account: refreshes official `~/.grok/auth.json` and mirrors to the managed copy.
+    /// - Non-current: refreshes only the managed account library copy (never official auth).
+    @discardableResult
+    private func ensureValidCredential(id: String, isCurrent: Bool) async throws -> Data {
+        let data: Data
+        if isCurrent {
+            data = try store.loadOfficialCredentialData()
+        } else {
+            data = try store.loadCredentialData(id: id)
+        }
+        let result = try await tokenRefresher.ensureFresh(data, now: now())
+        guard result.didRefresh else {
+            return result.data
+        }
+        if isCurrent {
+            try store.saveOfficialAuthDataAtomically(result.data)
+            try store.saveCredentialData(id: id, data: result.data)
+        } else {
+            try store.saveCredentialData(id: id, data: result.data)
+        }
+        if var account = try? requireAccount(id) {
+            account.identity = result.document.identity
+            if account.requiresReauth || account.lastError != nil {
+                account.requiresReauth = result.document.requiresReauthentication(at: now())
+                if !account.requiresReauth {
+                    account.lastError = nil
+                }
+            }
+            try? store.updateMetadata(account)
+        }
+        return result.data
+    }
+
     private func refreshAccount(id: String) async -> GrokRefreshOutcome {
         let account: GrokManagedAccount
         let currentID: String?
@@ -263,6 +329,15 @@ public actor GrokAccountModule {
 
         let isCurrent = id == currentID
         let homeURL = isCurrent ? store.officialHomeURL : store.accountDirectory(id: id)
+
+        // Ensure a fresh access token immediately before billing. keepAllTokensFresh may
+        // already have done this; a second ensureFresh is a cheap no-op when still valid.
+        do {
+            _ = try await ensureValidCredential(id: id, isCurrent: isCurrent)
+        } catch {
+            return refreshFailureOutcome(error, account: account)
+        }
+
         let originalCredential: Data?
         do {
             originalCredential = isCurrent ? nil : try store.loadCredentialData(id: id)
@@ -270,11 +345,30 @@ public actor GrokAccountModule {
             return refreshFailureOutcome(error, account: account)
         }
 
-        let attempt: GrokBillingAttempt
+        var attempt: GrokBillingAttempt
         do {
             attempt = .success(try await cli.billing(homeURL: homeURL))
         } catch {
-            attempt = .failure(error)
+            // One retry after a forced token refresh when the API rejects the access token.
+            if isAuthenticationFailure(error), account.identity.hasRefreshToken {
+                do {
+                    let data = isCurrent
+                        ? try store.loadOfficialCredentialData()
+                        : try store.loadCredentialData(id: id)
+                    let forced = try await tokenRefresher.refresh(data, now: now())
+                    if isCurrent {
+                        try store.saveOfficialAuthDataAtomically(forced)
+                        try store.saveCredentialData(id: id, data: forced)
+                    } else {
+                        try store.saveCredentialData(id: id, data: forced)
+                    }
+                    attempt = .success(try await cli.billing(homeURL: homeURL))
+                } catch {
+                    attempt = .failure(error)
+                }
+            } else {
+                attempt = .failure(error)
+            }
         }
 
         var credentialFinalizationError: Error?
@@ -461,6 +555,9 @@ public actor GrokAccountModule {
                 throw GrokAccountError.grokProcessesRunning(processIDs)
             }
         }
+        try Task.checkCancellation()
+        // Renew access token on the managed copy before installing into official auth.
+        _ = try await ensureValidCredential(id: id, isCurrent: false)
         try Task.checkCancellation()
         try installCurrentAccount(id: id)
     }

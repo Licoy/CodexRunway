@@ -4,27 +4,45 @@ import Testing
 
 @Suite("Grok billing client", .serialized)
 struct GrokBillingClientTests {
-    @Test("reads access token from home auth.json and requests format=credits")
-    func fetchUsesHomeTokenAndCreditsQuery() async throws {
+    @Test("enriches credits billing with settings plan and cents allowance")
+    func fetchEnrichesPlanAndUSDAllowance() async throws {
         let temporary = try TemporaryBillingDirectory()
         defer { withExtendedLifetime(temporary) {} }
         try temporary.writeAuth(accessToken: "home-access-token-for-tests")
         let recorder = BillingRequestRecorder()
         MockBillingURLProtocol.handler = { request in
             await recorder.record(request)
-            let body = Data(#"""
-            {
-              "config": {
-                "creditUsagePercent": 44.0,
-                "currentPeriod": {
-                  "type": "USAGE_PERIOD_TYPE_WEEKLY",
-                  "start": "2026-07-29T09:32:35Z",
-                  "end": "2026-08-05T09:32:35Z"
-                },
-                "prepaidBalance": {"val": 0}
-              }
+            let path = request.url?.path ?? ""
+            let query = request.url?.query ?? ""
+            let body: Data
+            if path.hasSuffix("/settings") {
+                body = Data(#"{"subscription_tier_display":"SuperGrok"}"#.utf8)
+            } else if path.hasSuffix("/billing"), query.contains("format=credits") {
+                body = Data(#"""
+                {
+                  "config": {
+                    "creditUsagePercent": 44.0,
+                    "currentPeriod": {
+                      "type": "USAGE_PERIOD_TYPE_WEEKLY",
+                      "start": "2026-07-29T09:32:35Z",
+                      "end": "2026-08-05T09:32:35Z"
+                    },
+                    "prepaidBalance": {"val": 0}
+                  }
+                }
+                """#.utf8)
+            } else if path.hasSuffix("/billing") {
+                body = Data(#"""
+                {
+                  "config": {
+                    "monthlyLimit": {"val": 15000},
+                    "used": {"val": 277}
+                  }
+                }
+                """#.utf8)
+            } else {
+                body = Data(#"{}"#.utf8)
             }
-            """#.utf8)
             return (
                 HTTPURLResponse(
                     url: request.url!,
@@ -42,11 +60,49 @@ struct GrokBillingClientTests {
 
         #expect(snapshot.includedUsagePercent == 44.0)
         #expect(snapshot.period?.kind == .weekly)
-        let request = try #require(await recorder.last)
-        #expect(request.url?.absoluteString
-            == "https://cli-chat-proxy.grok.com/v1/billing?format=credits")
-        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer home-access-token-for-tests")
-        #expect(request.value(forHTTPHeaderField: "Accept") == "application/json")
+        #expect(snapshot.plan == "SuperGrok")
+        #expect(snapshot.includedLimitCents == 15_000)
+        #expect(snapshot.includedUsedCents == 277)
+        #expect(snapshot.includedRemainingCents == 14_723)
+
+        let urls = await recorder.urls
+        #expect(urls.contains { $0.contains("/billing?format=credits") })
+        #expect(urls.contains { $0.hasSuffix("/billing") })
+        #expect(urls.contains { $0.contains("/settings") })
+        #expect(await recorder.authorizations.allSatisfy { $0 == "Bearer home-access-token-for-tests" })
+    }
+
+    @Test("falls back to JWT tier when settings omit the plan")
+    func fetchFallsBackToJWTTier() async throws {
+        // payload {"tier":5} → SuperGrok Heavy
+        let token = "eyJhbGciOiJub25lIn0.eyJ0aWVyIjo1fQ.sig"
+        MockBillingURLProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            let query = request.url?.query ?? ""
+            let body: Data
+            if path.hasSuffix("/settings") {
+                body = Data(#"{}"#.utf8)
+            } else if path.hasSuffix("/billing"), query.contains("format=credits") {
+                body = Data(#"""
+                {"config":{"creditUsagePercent":10,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-07-01T00:00:00Z","end":"2026-07-08T00:00:00Z"}}}
+                """#.utf8)
+            } else {
+                body = Data(#"{"config":{"monthlyLimit":{"val":30000},"used":{"val":1000}}}"#.utf8)
+            }
+            return (
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"])!,
+                body)
+        }
+        defer { MockBillingURLProtocol.handler = nil }
+
+        let client = GrokBillingClient(session: MockBillingURLProtocol.session())
+        let snapshot = try await client.fetch(accessToken: token)
+        #expect(snapshot.plan == "SuperGrok Heavy")
+        #expect(snapshot.includedLimitCents == 30_000)
     }
 
     @Test("missing auth.json is authentication required")
@@ -104,9 +160,18 @@ struct GrokBillingClientTests {
         defer { withExtendedLifetime(temporary) {} }
         try temporary.writeAuth(accessToken: "cli-default-token-for-tests")
         MockBillingURLProtocol.handler = { request in
-            let body = Data(#"""
-            {"config":{"creditUsagePercent":12.5,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_MONTHLY","start":"2026-07-01T00:00:00Z","end":"2026-08-01T00:00:00Z"}}}
-            """#.utf8)
+            let path = request.url?.path ?? ""
+            let query = request.url?.query ?? ""
+            let body: Data
+            if path.hasSuffix("/billing"), query.contains("format=credits") {
+                body = Data(#"""
+                {"config":{"creditUsagePercent":12.5,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_MONTHLY","start":"2026-07-01T00:00:00Z","end":"2026-08-01T00:00:00Z"}}}
+                """#.utf8)
+            } else if path.hasSuffix("/settings") {
+                body = Data(#"{"subscription_tier_display":"SuperGrok"}"#.utf8)
+            } else {
+                body = Data(#"{"config":{"monthlyLimit":{"val":15000},"used":{"val":0}}}"#.utf8)
+            }
             return (
                 HTTPURLResponse(
                     url: request.url!,
@@ -124,6 +189,8 @@ struct GrokBillingClientTests {
         let snapshot = try await client.billing(homeURL: temporary.url)
         #expect(snapshot.includedUsagePercent == 12.5)
         #expect(snapshot.period?.kind == .monthly)
+        #expect(snapshot.plan == "SuperGrok")
+        #expect(snapshot.includedLimitCents == 15_000)
     }
 }
 
@@ -164,10 +231,14 @@ private final class TemporaryBillingDirectory: @unchecked Sendable {
 }
 
 private actor BillingRequestRecorder {
-    private(set) var last: URLRequest?
+    private(set) var requests: [URLRequest] = []
+
+    var last: URLRequest? { requests.last }
+    var urls: [String] { requests.compactMap(\.url?.absoluteString) }
+    var authorizations: [String?] { requests.map { $0.value(forHTTPHeaderField: "Authorization") } }
 
     func record(_ request: URLRequest) {
-        last = request
+        requests.append(request)
     }
 }
 

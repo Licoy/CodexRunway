@@ -200,6 +200,172 @@ struct SubscriptionTierLook: Equatable {
         }
     }
 
+    /// Grok / SuperGrok / X plan looks — same chrome language as Codex, distinct per tier.
+    static func resolve(_ tier: GrokSubscriptionTier, colorScheme: ColorScheme) -> SubscriptionTierLook {
+        let light = colorScheme == .light
+        switch tier {
+        case .free:
+            let ink = Color(nsColor: .secondaryLabelColor)
+            return plain(
+                foreground: ink,
+                fill: light ? Color.black.opacity(0.10) : Color.white.opacity(0.14),
+                stroke: Color(nsColor: .separatorColor).opacity(light ? 0.9 : 0.55),
+                textGradient: [ink])
+        case .superGrokLite:
+            // Soft sky silver — entry SuperGrok.
+            return steel(
+                light: light,
+                base: (0.28, 0.52, 0.72),
+                highlight: (0.58, 0.78, 0.95),
+                shadow: (0.16, 0.36, 0.52),
+                textLight: (0.10, 0.28, 0.42),
+                textDark: (0.78, 0.92, 1.0))
+        case .superGrok:
+            // Cool silver / white metal (flagship mid tier).
+            let textGradient: [Color] = light
+                ? [
+                    Color(red: 0.32, green: 0.34, blue: 0.38),
+                    Color(red: 0.52, green: 0.55, blue: 0.60),
+                    Color(red: 0.72, green: 0.74, blue: 0.78),
+                    Color(red: 0.42, green: 0.44, blue: 0.48),
+                ]
+                : [
+                    Color(red: 0.78, green: 0.80, blue: 0.84),
+                    Color(red: 0.94, green: 0.95, blue: 0.97),
+                    Color(red: 1.0, green: 1.0, blue: 1.0),
+                    Color(red: 0.82, green: 0.84, blue: 0.88),
+                ]
+            return SubscriptionTierLook(
+                foreground: light
+                    ? Color(red: 0.22, green: 0.24, blue: 0.28)
+                    : Color(red: 0.94, green: 0.95, blue: 0.98),
+                fill: light
+                    ? [
+                        Color(red: 0.78, green: 0.80, blue: 0.84),
+                        Color(red: 0.94, green: 0.95, blue: 0.97),
+                        Color(red: 0.70, green: 0.73, blue: 0.78),
+                    ]
+                    : [
+                        Color(red: 0.42, green: 0.45, blue: 0.50),
+                        Color(red: 0.72, green: 0.74, blue: 0.78),
+                        Color(red: 0.38, green: 0.40, blue: 0.45),
+                    ],
+                stroke: light
+                    ? Color(red: 0.58, green: 0.61, blue: 0.66).opacity(0.85)
+                    : Color(red: 0.82, green: 0.84, blue: 0.88).opacity(0.55),
+                shimmer: Color.white.opacity(light ? 0.72 : 0.55),
+                shimmerEnabled: true,
+                textGradient: textGradient)
+        case .superGrokPlus:
+            // Classic gold.
+            let textGradient: [Color] = light
+                ? [
+                    Color(red: 0.48, green: 0.32, blue: 0.04),
+                    Color(red: 0.72, green: 0.52, blue: 0.10),
+                    Color(red: 0.92, green: 0.72, blue: 0.22),
+                    Color(red: 0.58, green: 0.40, blue: 0.06),
+                ]
+                : [
+                    Color(red: 0.86, green: 0.66, blue: 0.22),
+                    Color(red: 1.0, green: 0.88, blue: 0.45),
+                    Color(red: 1.0, green: 0.96, blue: 0.72),
+                    Color(red: 0.92, green: 0.74, blue: 0.30),
+                ]
+            return SubscriptionTierLook(
+                foreground: light
+                    ? Color(red: 0.35, green: 0.22, blue: 0.05)
+                    : Color(red: 1.0, green: 0.92, blue: 0.62),
+                fill: light
+                    ? [
+                        Color(red: 0.82, green: 0.62, blue: 0.18),
+                        Color(red: 0.98, green: 0.86, blue: 0.42),
+                        Color(red: 0.72, green: 0.52, blue: 0.12),
+                    ]
+                    : [
+                        Color(red: 0.55, green: 0.40, blue: 0.10),
+                        Color(red: 0.88, green: 0.70, blue: 0.28),
+                        Color(red: 0.48, green: 0.34, blue: 0.08),
+                    ],
+                stroke: light
+                    ? Color(red: 0.62, green: 0.44, blue: 0.10).opacity(0.9)
+                    : Color(red: 0.95, green: 0.78, blue: 0.35).opacity(0.55),
+                shimmer: Color(red: 1.0, green: 0.96, blue: 0.78).opacity(light ? 0.78 : 0.62),
+                shimmerEnabled: true,
+                textGradient: textGradient)
+        case .superGrokHeavy:
+            // Black-gold flagship.
+            let textGradient: [Color] = light
+                ? [
+                    Color(red: 0.42, green: 0.30, blue: 0.06),
+                    Color(red: 0.72, green: 0.54, blue: 0.12),
+                    Color(red: 0.95, green: 0.78, blue: 0.32),
+                    Color(red: 0.55, green: 0.40, blue: 0.08),
+                ]
+                : [
+                    Color(red: 0.78, green: 0.60, blue: 0.22),
+                    Color(red: 0.96, green: 0.80, blue: 0.38),
+                    Color(red: 1.0, green: 0.92, blue: 0.58),
+                    Color(red: 0.88, green: 0.70, blue: 0.28),
+                ]
+            return SubscriptionTierLook(
+                foreground: Color(red: 0.93, green: 0.78, blue: 0.38),
+                fill: light
+                    ? [
+                        Color(red: 0.12, green: 0.11, blue: 0.10),
+                        Color(red: 0.26, green: 0.22, blue: 0.16),
+                        Color(red: 0.10, green: 0.09, blue: 0.08),
+                    ]
+                    : [
+                        Color(red: 0.08, green: 0.07, blue: 0.06),
+                        Color(red: 0.22, green: 0.18, blue: 0.12),
+                        Color(red: 0.06, green: 0.05, blue: 0.05),
+                    ],
+                stroke: Color(red: 0.78, green: 0.62, blue: 0.24).opacity(light ? 0.92 : 0.75),
+                shimmer: Color(red: 1.0, green: 0.88, blue: 0.48).opacity(0.70),
+                shimmerEnabled: true,
+                textGradient: textGradient)
+        case .xBasic:
+            return steel(
+                light: light,
+                base: (0.18, 0.42, 0.78),
+                highlight: (0.48, 0.68, 0.98),
+                shadow: (0.10, 0.28, 0.58),
+                textLight: (0.08, 0.22, 0.48),
+                textDark: (0.75, 0.88, 1.0))
+        case .xPremium:
+            return steel(
+                light: light,
+                base: (0.42, 0.22, 0.72),
+                highlight: (0.72, 0.52, 0.95),
+                shadow: (0.28, 0.12, 0.52),
+                textLight: (0.24, 0.10, 0.42),
+                textDark: (0.90, 0.80, 1.0))
+        case .xPremiumPlus:
+            return steel(
+                light: light,
+                base: (0.62, 0.16, 0.42),
+                highlight: (0.92, 0.42, 0.68),
+                shadow: (0.42, 0.08, 0.28),
+                textLight: (0.38, 0.06, 0.22),
+                textDark: (1.0, 0.78, 0.90))
+        case .apiKey:
+            return steel(
+                light: light,
+                base: (0.12, 0.52, 0.68),
+                highlight: (0.42, 0.82, 0.95),
+                shadow: (0.08, 0.36, 0.48),
+                textLight: (0.06, 0.28, 0.38),
+                textDark: (0.70, 0.94, 1.0))
+        case .unknown:
+            let ink = Color(nsColor: .secondaryLabelColor)
+            return plain(
+                foreground: ink,
+                fill: light ? Color.black.opacity(0.08) : Color.white.opacity(0.12),
+                stroke: Color(nsColor: .separatorColor).opacity(light ? 0.95 : 0.55),
+                textGradient: [ink])
+        }
+    }
+
     private static func plain(
         foreground: Color,
         fill: Color,
@@ -279,7 +445,13 @@ struct SubscriptionTierLook: Equatable {
 
 /// Compact capsule for plan tiers with optional metallic sheen.
 struct SubscriptionTierBadge: View {
-    var tier: CodexSubscriptionTier
+    private enum Source: Equatable {
+        case codex(CodexSubscriptionTier)
+        case grok(GrokSubscriptionTier)
+        case look(SubscriptionTierLook)
+    }
+
+    private var source: Source
     var label: String
     var font: Font = .caption2.weight(.semibold)
     var horizontalPadding: CGFloat = 7
@@ -288,8 +460,50 @@ struct SubscriptionTierBadge: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    init(
+        tier: CodexSubscriptionTier,
+        label: String,
+        font: Font = .caption2.weight(.semibold),
+        horizontalPadding: CGFloat = 7,
+        verticalPadding: CGFloat = 3)
+    {
+        self.source = .codex(tier)
+        self.label = label
+        self.font = font
+        self.horizontalPadding = horizontalPadding
+        self.verticalPadding = verticalPadding
+    }
+
+    init(
+        tier: GrokSubscriptionTier,
+        label: String,
+        font: Font = .caption2.weight(.semibold),
+        horizontalPadding: CGFloat = 7,
+        verticalPadding: CGFloat = 3)
+    {
+        self.source = .grok(tier)
+        self.label = label
+        self.font = font
+        self.horizontalPadding = horizontalPadding
+        self.verticalPadding = verticalPadding
+    }
+
+    init(
+        look: SubscriptionTierLook,
+        label: String,
+        font: Font = .caption2.weight(.semibold),
+        horizontalPadding: CGFloat = 7,
+        verticalPadding: CGFloat = 3)
+    {
+        self.source = .look(look)
+        self.label = label
+        self.font = font
+        self.horizontalPadding = horizontalPadding
+        self.verticalPadding = verticalPadding
+    }
+
     var body: some View {
-        let look = SubscriptionTierLook.resolve(tier, colorScheme: colorScheme)
+        let look = resolvedLook
         Text(label)
             .font(font)
             .foregroundStyle(look.foreground)
@@ -304,6 +518,17 @@ struct SubscriptionTierBadge: View {
                     .strokeBorder(look.stroke, lineWidth: colorScheme == .light ? 1.0 : 0.85)
             }
             .accessibilityLabel(label)
+    }
+
+    private var resolvedLook: SubscriptionTierLook {
+        switch source {
+        case let .codex(tier):
+            return SubscriptionTierLook.resolve(tier, colorScheme: colorScheme)
+        case let .grok(tier):
+            return SubscriptionTierLook.resolve(tier, colorScheme: colorScheme)
+        case let .look(look):
+            return look
+        }
     }
 
     @ViewBuilder
@@ -498,7 +723,7 @@ private struct SubscriptionTierFlowingSheen: View {
 }
 
 extension SubscriptionTierBadge {
-    /// Localized label for every known tier.
+    /// Localized label for every known Codex tier.
     static func localizedTitle(for tier: CodexSubscriptionTier, l10n: L10n) -> String {
         switch tier {
         case .free: return l10n.text(.planFree)
@@ -511,6 +736,21 @@ extension SubscriptionTierBadge {
         case .edu: return l10n.text(.planEdu)
         case .api: return l10n.text(.planAPI)
         case .unknown: return l10n.text(.planUnknown)
+        }
+    }
+
+    /// Label for Grok tiers. Brand names stay English; free/unknown use L10n.
+    static func localizedTitle(for tier: GrokSubscriptionTier, planRaw: String? = nil, l10n: L10n) -> String {
+        switch tier {
+        case .free:
+            return l10n.text(.planFree)
+        case .unknown:
+            if let raw = planRaw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+                return GrokSubscriptionTier.displayName(from: raw) ?? raw
+            }
+            return l10n.text(.planUnknown)
+        default:
+            return tier.displayName
         }
     }
 }

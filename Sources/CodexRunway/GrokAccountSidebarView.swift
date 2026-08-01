@@ -272,8 +272,8 @@ private struct GrokAccountDetailCard: View {
                         .truncationMode(.middle)
                     HStack(spacing: 6) {
                         if isCurrent { CurrentAccountTag(l10n: l10n) }
-                        if let plan = account.cachedQuota?.plan {
-                            RunwayTag(plan, tone: .neutral, horizontalPadding: 5, verticalPadding: 1)
+                        if account.cachedQuota?.plan != nil {
+                            GrokSubscriptionTierTag(plan: account.cachedQuota?.plan, l10n: l10n)
                         }
                         if let email = account.email, email != account.resolvedDisplayName {
                             Text(email)
@@ -334,11 +334,22 @@ private struct GrokAccountDetailCard: View {
                                 .font(.caption2.weight(.medium))
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            Text("\(meter.remainingPercent)% \(l10n.text(.left))")
-                                .font(.caption2.monospacedDigit().weight(.semibold))
+                            if let includedUSD = quota.includedUSDAllowance {
+                                Text(includedUSD)
+                                    .font(.caption2.monospacedDigit().weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("\(meter.remainingPercent)% \(l10n.text(.left))")
+                                    .font(.caption2.monospacedDigit().weight(.semibold))
+                            }
                         }
                         RunwayProgressBar(meter: meter)
                             .frame(height: RunwayProgressBar.barHeight)
+                        if quota.includedUSDAllowance != nil {
+                            Text("\(meter.remainingPercent)% \(l10n.text(.left))")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             } else {

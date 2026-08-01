@@ -2,9 +2,14 @@ import Foundation
 
 /// Fetches SuperGrok / Grok Build included credits from the official CLI chat-proxy.
 ///
-/// Endpoint matches the local Grok CLI (`cli-chat-proxy.grok.com/v1/billing?format=credits`)
+/// Primary endpoint matches the local Grok CLI (`cli-chat-proxy.grok.com/v1/billing?format=credits`)
 /// and CLIProxyAPI's documented chat-proxy base URL. Uses the managed OAuth access token
 /// from the account home's `auth.json` — not browser cookies.
+///
+/// Enrichment (best effort, same token):
+/// - `/v1/settings` → `subscription_tier_display` (plan name; credits payload often omits it)
+/// - `/v1/billing` (default / cents) → `monthlyLimit` / `used` USD-equivalent allowance
+/// - JWT `tier` claim → plan fallback when settings/billing omit the tier
 public struct GrokBillingClient: Sendable {
     public var session: URLSession
     public var baseURL: URL
@@ -37,7 +42,52 @@ public struct GrokBillingClient: Sendable {
     }
 
     public func fetch(accessToken: String, now: Date = Date()) async throws -> GrokQuotaSnapshot {
-        guard let url = billingURL else {
+        async let creditsResult = fetchData(path: "billing", query: [("format", "credits")], accessToken: accessToken)
+        async let centsResult = fetchData(path: "billing", query: [], accessToken: accessToken)
+        async let settingsResult = fetchData(path: "settings", query: [], accessToken: accessToken)
+
+        let creditsData = try await creditsResult
+        var snapshot = try decodeCredits(creditsData, now: now)
+
+        if let centsData = try? await centsResult,
+           let money = try? GrokQuotaSnapshot.decodeMoneyAllowance(from: centsData)
+        {
+            snapshot = snapshot.mergingMoneyAllowance(
+                limitCents: money.limitCents,
+                usedCents: money.usedCents)
+        }
+
+        if let settingsData = try? await settingsResult,
+           let plan = GrokQuotaSnapshot.decodeSettingsPlan(from: settingsData)
+        {
+            snapshot = snapshot.mergingPlan(plan, overwrite: true)
+        } else {
+            snapshot = snapshot.mergingPlan(nil)
+        }
+
+        if snapshot.plan == nil || snapshot.plan?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
+            snapshot = snapshot.mergingPlan(
+                GrokSubscriptionTier.displayName(fromAccessToken: accessToken),
+                overwrite: true)
+        }
+
+        return snapshot
+    }
+
+    private func decodeCredits(_ data: Data, now: Date) throws -> GrokQuotaSnapshot {
+        do {
+            return try GrokQuotaSnapshot.decodeBillingResponse(from: data, now: now)
+        } catch {
+            throw GrokCLIError.malformedResponse("billing parse failed")
+        }
+    }
+
+    private func fetchData(
+        path: String,
+        query: [(String, String)],
+        accessToken: String) async throws -> Data
+    {
+        guard let url = makeURL(path: path, query: query) else {
             throw GrokCLIError.requestFailed("invalid billing URL")
         }
         var request = URLRequest(url: url)
@@ -63,11 +113,7 @@ public struct GrokBillingClient: Sendable {
         }
         switch http.statusCode {
         case 200..<300:
-            do {
-                return try GrokQuotaSnapshot.decodeBillingResponse(from: data, now: now)
-            } catch {
-                throw GrokCLIError.malformedResponse("billing parse failed")
-            }
+            return data
         case 401, 403:
             throw GrokCLIError.authenticationRequired
         default:
@@ -75,11 +121,13 @@ public struct GrokBillingClient: Sendable {
         }
     }
 
-    private var billingURL: URL? {
+    private func makeURL(path: String, query: [(String, String)]) -> URL? {
         var components = URLComponents(
-            url: baseURL.appendingPathComponent("billing"),
+            url: baseURL.appendingPathComponent(path),
             resolvingAgainstBaseURL: false)
-        components?.queryItems = [URLQueryItem(name: "format", value: "credits")]
+        if !query.isEmpty {
+            components?.queryItems = query.map { URLQueryItem(name: $0.0, value: $0.1) }
+        }
         return components?.url
     }
 }

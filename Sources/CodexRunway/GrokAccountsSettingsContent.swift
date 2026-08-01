@@ -97,8 +97,8 @@ struct GrokAccountsSettingsContent: View {
                             .font(.body.weight(.semibold))
                             .lineLimit(1)
                         if isCurrent(account) { CurrentAccountTag(l10n: l10n) }
-                        if let plan = account.cachedQuota?.plan {
-                            RunwayTag(plan, tone: .neutral, horizontalPadding: 5, verticalPadding: 1)
+                        if account.cachedQuota?.plan != nil {
+                            GrokSubscriptionTierTag(plan: account.cachedQuota?.plan, l10n: l10n)
                         }
                     }
                     if let email = account.email, email != account.resolvedDisplayName {
@@ -114,10 +114,10 @@ struct GrokAccountsSettingsContent: View {
                             .foregroundStyle(.orange)
                             .lineLimit(2)
                     } else if let quota = account.cachedQuota {
-                        let remaining = max(0, min(100, 100 - Int(quota.includedUsagePercent.rounded())))
-                        Text("\(remaining)% · \(l10n.text(.lastUpdated)) \(quota.updatedAt.formatted(date: .omitted, time: .shortened))")
+                        Text(GrokQuotaPresentation.accountSummary(snapshot: quota, l10n: l10n))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(2)
                     }
                 }
                 Spacer()
