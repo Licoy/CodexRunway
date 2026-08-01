@@ -21,7 +21,7 @@ public struct RateLimitResetTodayClient: Sendable {
 
     public func fetchStatus(
         now: Date = Date(),
-        calendar: Calendar = .current) async throws -> RateLimitResetTodaySnapshot
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) async throws -> RateLimitResetTodaySnapshot
     {
         if let devMockKind {
             return RateLimitResetTodaySnapshot.devMock(kind: devMockKind, now: now)

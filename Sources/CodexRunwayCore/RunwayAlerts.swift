@@ -50,11 +50,15 @@ public enum RunwayAlertDecider {
     }
 
     /// Alerts when a reset becomes newly detected, or when a scheduled reset is within 1h / 30m.
+    ///
+    /// "Today" uses the viewer's local Gregorian day (via `calendar`), not the UTC
+    /// date prefix on feed timestamps — otherwise a late-UTC reset can notify the
+    /// wrong local calendar day.
     public static func rateLimitResetTodayAlerts(
         previous: RateLimitResetTodaySnapshot?,
         current: RateLimitResetTodaySnapshot,
         now: Date = Date(),
-        calendar: Calendar = .current) -> [RunwayAlert]
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> [RunwayAlert]
     {
         var alerts: [RunwayAlert] = []
 

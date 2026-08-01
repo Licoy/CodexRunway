@@ -4,19 +4,22 @@ extension RateLimitResetTodaySnapshot {
     public static func decode(
         from data: Data,
         now: Date = Date(),
-        calendar: Calendar = .current) throws -> RateLimitResetTodaySnapshot
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) throws -> RateLimitResetTodaySnapshot
     {
         let decoder = JSONDecoder()
+        // Feed timestamps are absolute instants (RFC 3339 with offset / Z).
+        // Parse via ISO8601DateFormatter so fractional seconds work and bare
+        // local wall-clock strings (no timezone) are rejected — treating those
+        // as local would shift "today" and fire wrong reset notifications.
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let value = try container.decode(String.self)
-            do {
-                return try Date(value, strategy: .iso8601)
-            } catch {
+            guard let date = RunwayDates.parse(value) else {
                 throw DecodingError.dataCorruptedError(
                     in: container,
-                    debugDescription: "Expected an RFC 3339 timestamp.")
+                    debugDescription: "Expected an RFC 3339 timestamp with timezone offset.")
             }
+            return date
         }
         let response = try decoder.decode(RateLimitResetTodayResponse.self, from: data)
         guard response.schemaVersion == 1 else {

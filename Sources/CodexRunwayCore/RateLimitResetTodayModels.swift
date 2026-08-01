@@ -71,6 +71,17 @@ public struct RateLimitResetTodayEvent: Decodable, Sendable, Equatable {
 public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
     public static let staleAfter: TimeInterval = 30 * 3_600
 
+    /// Gregorian local-day calendar using the device timezone.
+    ///
+    /// Feed timestamps are absolute UTC instants. "Today" must be the viewer's
+    /// local Gregorian calendar day — never the UTC date string, and never a
+    /// non-Gregorian preferred calendar (which can shift day boundaries).
+    public static var localDayCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .autoupdatingCurrent
+        return calendar
+    }
+
     public var schemaVersion: Int
     public var generatedAt: Date
     public var lastSuccessfulCheckAt: Date?
@@ -115,9 +126,13 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
     ///
     /// "Yes" means the local calendar day has a reset — either already effective
     /// or still scheduled later today. Multiple same-day resets are allowed.
+    ///
+    /// - Important: `announcedAt` / `effectiveAt` are absolute UTC instants from the
+    ///   feed. Same-day checks convert them through `calendar.timeZone` (default:
+    ///   the device local zone). Never treat the ISO date prefix as a local day.
     public func resolvedState(
         now: Date = Date(),
-        calendar: Calendar = .current) -> RateLimitResetTodayState
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> RateLimitResetTodayState
     {
         if let stateOverride { return stateOverride }
         guard monitor.status == .ok, let lastSuccessfulCheckAt,
@@ -140,7 +155,7 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
     /// True when a reset has already taken effect on the local calendar day.
     public func hasAlreadyEffectiveResetToday(
         now: Date = Date(),
-        calendar: Calendar = .current) -> Bool
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> Bool
     {
         events.contains { event in
             guard let occurredAt = event.resetOccurrenceAt, occurredAt <= now else {
@@ -153,17 +168,13 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
     /// True when any reset (completed or scheduled) lands on the local calendar day.
     public func hasResetOnLocalDay(
         now: Date = Date(),
-        calendar: Calendar = .current) -> Bool
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> Bool
     {
         if hasAlreadyEffectiveResetToday(now: now, calendar: calendar) {
             return true
         }
-        if let next = nextScheduledReset(now: now),
-           calendar.isDate(next.effectiveAt, inSameDayAs: now)
-        {
-            return true
-        }
-        return false
+        // Prefer same-day schedules even when an earlier future schedule falls tomorrow.
+        return nextScheduledReset(onLocalDayOf: now, calendar: calendar) != nil
     }
 
     public var latestEvent: RateLimitResetTodayEvent? {
@@ -171,17 +182,15 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
     }
 
     /// Prefer the event that best explains the current answer, not merely the newest tweet.
-    /// When multiple same-day resets exist, the next upcoming schedule outranks past ones.
+    /// When multiple same-day resets exist, the next upcoming *same-day* schedule outranks past ones.
     public func primaryEvidenceEvent(
         now: Date = Date(),
-        calendar: Calendar = .current) -> RateLimitResetTodayEvent?
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> RateLimitResetTodayEvent?
     {
         switch resolvedState(now: now, calendar: calendar) {
         case .yes:
-            if let next = nextScheduledReset(now: now),
-               calendar.isDate(next.effectiveAt, inSameDayAs: now)
-            {
-                return next.event
+            if let nextSameDay = nextScheduledReset(onLocalDayOf: now, calendar: calendar) {
+                return nextSameDay.event
             }
             return events
                 .filter { event in
@@ -204,7 +213,7 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
 
     public func evidenceURL(
         now: Date = Date(),
-        calendar: Calendar = .current) -> URL?
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> URL?
     {
         primaryEvidenceEvent(now: now, calendar: calendar)?.source.url
             ?? latestEvent?.source.url
@@ -214,7 +223,7 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
     public func evidenceLine(
         l10n: L10n,
         now: Date = Date(),
-        calendar: Calendar = .current) -> String?
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> String?
     {
         guard let event = primaryEvidenceEvent(now: now, calendar: calendar) else { return nil }
         let key: L10nKey = switch event.kind {
@@ -242,9 +251,29 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
 
     /// Next future `reset_scheduled` effective time, if any.
     public func nextScheduledReset(now: Date = Date()) -> (effectiveAt: Date, event: RateLimitResetTodayEvent)? {
+        nextScheduledReset(after: now, matchingLocalDayOf: nil, calendar: nil)
+    }
+
+    /// Next future schedule that lands on the same local day as `now`.
+    public func nextScheduledReset(
+        onLocalDayOf now: Date,
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar)
+        -> (effectiveAt: Date, event: RateLimitResetTodayEvent)?
+    {
+        nextScheduledReset(after: now, matchingLocalDayOf: now, calendar: calendar)
+    }
+
+    private func nextScheduledReset(
+        after now: Date,
+        matchingLocalDayOf day: Date?,
+        calendar: Calendar?) -> (effectiveAt: Date, event: RateLimitResetTodayEvent)?
+    {
         var best: (effectiveAt: Date, event: RateLimitResetTodayEvent)?
         for event in events {
             guard event.kind == .resetScheduled, let when = event.effectiveAt, when > now else {
+                continue
+            }
+            if let day, let calendar, !calendar.isDate(when, inSameDayAs: day) {
                 continue
             }
             if best == nil || when < best!.effectiveAt {
@@ -361,7 +390,7 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         return RateLimitResetTodaySnapshot(
             response: response,
             now: now,
-            calendar: .current)
+            calendar: localDayCalendar)
     }
 }
 

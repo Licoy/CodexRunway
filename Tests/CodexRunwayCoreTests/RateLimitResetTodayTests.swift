@@ -402,4 +402,176 @@ struct RateLimitResetTodayTests {
                 calendar: resetStatusUTCCalendar) == .no)
     }
 
+    @Test("UTC date prefix is not treated as the local calendar day")
+    func utcDatePrefixIsNotLocalDay() throws {
+        // 2026-08-01T03:32:37Z is still 2026-07-31 evening in Los Angeles.
+        let now = try resetStatusDate("2026-08-01T09:25:19Z")
+        var losAngeles = Calendar(identifier: .gregorian)
+        losAngeles.timeZone = try #require(TimeZone(identifier: "America/Los_Angeles"))
+        var shanghai = Calendar(identifier: .gregorian)
+        shanghai.timeZone = try #require(TimeZone(identifier: "Asia/Shanghai"))
+
+        let snapshotLA = try ResetStatusFeedFixture(
+            event: .init(kind: "reset_completed", announcedAt: "2026-08-01T03:32:37.000Z"),
+            now: now)
+            .checked(at: "2026-08-01T09:25:19Z")
+            .using(losAngeles)
+            .decode()
+        let snapshotCN = try ResetStatusFeedFixture(
+            event: .init(kind: "reset_completed", announcedAt: "2026-08-01T03:32:37.000Z"),
+            now: now)
+            .checked(at: "2026-08-01T09:25:19Z")
+            .using(shanghai)
+            .decode()
+
+        #expect(snapshotLA.state == .no)
+        #expect(snapshotCN.state == .yes)
+        #expect(snapshotLA.hasAlreadyEffectiveResetToday(now: now, calendar: losAngeles) == false)
+        #expect(snapshotCN.hasAlreadyEffectiveResetToday(now: now, calendar: shanghai) == true)
+    }
+
+    @Test("detected alert follows local day, not the UTC date string")
+    func detectedAlertFollowsLocalDay() throws {
+        let now = try resetStatusDate("2026-08-01T09:25:19Z")
+        var losAngeles = Calendar(identifier: .gregorian)
+        losAngeles.timeZone = try #require(TimeZone(identifier: "America/Los_Angeles"))
+        var shanghai = Calendar(identifier: .gregorian)
+        shanghai.timeZone = try #require(TimeZone(identifier: "Asia/Shanghai"))
+
+        let previous = try ResetStatusFeedFixture(eventsJSON: "", now: now)
+            .checked(at: "2026-08-01T09:25:19Z")
+            .decode()
+        let current = try ResetStatusFeedFixture(
+            event: .init(kind: "reset_completed", announcedAt: "2026-08-01T03:32:37.000Z"),
+            now: now)
+            .checked(at: "2026-08-01T09:25:19Z")
+            .decode()
+
+        let laAlerts = RunwayAlertDecider.rateLimitResetTodayAlerts(
+            previous: previous,
+            current: current,
+            now: now,
+            calendar: losAngeles)
+        let cnAlerts = RunwayAlertDecider.rateLimitResetTodayAlerts(
+            previous: previous,
+            current: current,
+            now: now,
+            calendar: shanghai)
+
+        #expect(laAlerts.isEmpty)
+        #expect(cnAlerts.count == 1)
+        #expect(cnAlerts[0].kind == .rateLimitResetDetected)
+    }
+
+    @Test("decodes live CDN payload with fractional seconds and ignores optional text")
+    func decodesLiveCDNPayloadShape() throws {
+        let now = try resetStatusDate("2026-08-01T09:25:19Z")
+        let data = """
+        {
+          "schemaVersion": 1,
+          "generatedAt": "2026-08-01T09:25:19.679Z",
+          "lastSuccessfulCheckAt": "2026-08-01T09:25:19.679Z",
+          "monitor": {"status": "ok", "errorCode": null},
+          "events": [
+            {
+              "kind": "reset_completed",
+              "announcedAt": "2026-08-01T03:32:37.000Z",
+              "effectiveAt": null,
+              "scope": {"plans": ["all"], "windows": ["unknown"]},
+              "source": {
+                "handle": "thsottiaux",
+                "postId": "2083395449814229287",
+                "url": "https://x.com/thsottiaux/status/2083395449814229287"
+              },
+              "confidence": 0.99,
+              "rationale": "Explicit Codex quota reset announcement.",
+              "text": "optional post body must be ignored by the client"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        var shanghai = Calendar(identifier: .gregorian)
+        shanghai.timeZone = try #require(TimeZone(identifier: "Asia/Shanghai"))
+        let snapshot = try RateLimitResetTodaySnapshot.decode(
+            from: data,
+            now: now,
+            calendar: shanghai)
+
+        let expectedAnnouncedAt = try resetStatusDate("2026-08-01T03:32:37Z")
+        #expect(snapshot.events.count == 1)
+        #expect(snapshot.events[0].kind == .resetCompleted)
+        #expect(snapshot.events[0].announcedAt == expectedAnnouncedAt)
+        #expect(snapshot.resolvedState(now: now, calendar: shanghai) == .yes)
+        #expect(
+            snapshot.evidenceLine(l10n: L10n(language: .english), now: now, calendar: shanghai)
+                == "An explicit Codex quota reset was announced.")
+    }
+
+    @Test("rejects timestamps without a timezone offset")
+    func rejectsTimestampsWithoutTimezone() throws {
+        let now = try resetStatusDate("2026-08-01T12:00:00Z")
+        let data = """
+        {
+          "schemaVersion": 1,
+          "generatedAt": "2026-08-01T12:00:00",
+          "lastSuccessfulCheckAt": "2026-08-01T12:00:00Z",
+          "monitor": {"status": "ok", "errorCode": null},
+          "events": []
+        }
+        """.data(using: .utf8)!
+
+        #expect(throws: DecodingError.self) {
+            try RateLimitResetTodaySnapshot.decode(from: data, now: now)
+        }
+    }
+
+    @Test("same-day schedule evidence prefers local day even when global next is farther")
+    func sameDayScheduleEvidencePrefersLocalDay() throws {
+        // Two future same-day schedules: primary evidence should be the sooner one.
+        let now = try resetStatusDate("2026-08-01T12:00:00Z")
+        let snapshot = try ResetStatusFeedFixture(
+            eventsJSON: """
+            {
+              "kind": "reset_scheduled",
+              "announcedAt": "2026-08-01T10:00:00.000Z",
+              "effectiveAt": "2026-08-01T20:00:00.000Z",
+              "scope": {"plans": ["all"], "windows": ["weekly"]},
+              "source": {
+                "handle": "thsottiaux",
+                "postId": "100",
+                "url": "https://x.com/thsottiaux/status/100"
+              },
+              "confidence": 0.9,
+              "rationale": "Explicit Codex quota reset schedule."
+            },
+            {
+              "kind": "reset_scheduled",
+              "announcedAt": "2026-08-01T11:00:00.000Z",
+              "effectiveAt": "2026-08-01T15:00:00.000Z",
+              "scope": {"plans": ["all"], "windows": ["weekly"]},
+              "source": {
+                "handle": "thsottiaux",
+                "postId": "200",
+                "url": "https://x.com/thsottiaux/status/200"
+              },
+              "confidence": 0.9,
+              "rationale": "Explicit Codex quota reset schedule."
+            }
+            """,
+            now: now)
+            .checked(at: "2026-08-01T12:00:00Z")
+            .using(resetStatusUTCCalendar)
+            .decode()
+
+        #expect(snapshot.resolvedState(now: now, calendar: resetStatusUTCCalendar) == .yes)
+        #expect(snapshot.nextScheduledReset(now: now)?.event.source.postID == "200")
+        #expect(
+            snapshot.nextScheduledReset(onLocalDayOf: now, calendar: resetStatusUTCCalendar)?
+                .event.source.postID == "200")
+        #expect(
+            snapshot.primaryEvidenceEvent(now: now, calendar: resetStatusUTCCalendar)?
+                .source.postID == "200")
+    }
+
 }

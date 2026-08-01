@@ -1136,14 +1136,16 @@ final class RunwayModel: ObservableObject {
 
     private func refreshRateLimitResetTodayDisplayIfNeeded(now: Date) {
         guard let snapshot = rateLimitResetToday else { return }
+        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
         // Re-check approaching scheduled resets on the local timer (refresh may be hourly).
         deliverAlerts(
             RunwayAlertDecider.rateLimitResetTodayAlerts(
                 previous: snapshot,
                 current: snapshot,
-                now: now),
+                now: now,
+                calendar: calendar),
             enabled: settings.preferences.rateLimitResetTodayAlertsEnabled)
-        let state = snapshot.resolvedState(now: now)
+        let state = snapshot.resolvedState(now: now, calendar: calendar)
         let stateText = rateLimitResetTodayStateText(state)
         if rateLimitResetTodayText != stateText {
             rateLimitResetTodayText = stateText
@@ -1159,7 +1161,11 @@ final class RunwayModel: ObservableObject {
         lines[statusIndex] = DetailLine(title: l10n.text(.status), value: hintText)
         // Rebuild next-schedule line when local midnight changes the answer context.
         if let next = snapshot.nextScheduledReset(now: now) {
-            let nextValue = ResetCreditDateFormatter.updatedAt(next.effectiveAt, language: l10n.language)
+            let nextValue = ResetLabelFormatter.shortLabel(
+                for: next.effectiveAt,
+                now: now,
+                language: l10n.language,
+                calendar: calendar)
             if let nextIndex = lines.firstIndex(where: { $0.title == l10n.text(.rateLimitResetTodayNextScheduled) }) {
                 lines[nextIndex] = DetailLine(
                     title: l10n.text(.rateLimitResetTodayNextScheduled),
@@ -1207,13 +1213,15 @@ final class RunwayModel: ObservableObject {
         let previous = rateLimitResetToday
         rateLimitResetToday = snapshot
         let now = Date()
-        let state = snapshot.resolvedState(now: now)
+        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
+        let state = snapshot.resolvedState(now: now, calendar: calendar)
         rateLimitResetTodayText = rateLimitResetTodayStateText(state)
         deliverAlerts(
             RunwayAlertDecider.rateLimitResetTodayAlerts(
                 previous: previous,
                 current: snapshot,
-                now: now),
+                now: now,
+                calendar: calendar),
             enabled: settings.preferences.rateLimitResetTodayAlertsEnabled)
         var lines: [DetailLine] = [
             DetailLine(title: l10n.text(.status), value: rateLimitResetTodayHintText(snapshot, now: now)),
@@ -1222,7 +1230,11 @@ final class RunwayModel: ObservableObject {
             lines.append(
                 DetailLine(
                     title: l10n.text(.rateLimitResetTodayNextScheduled),
-                    value: ResetCreditDateFormatter.updatedAt(next.effectiveAt, language: l10n.language)))
+                    value: ResetLabelFormatter.shortLabel(
+                        for: next.effectiveAt,
+                        now: now,
+                        language: l10n.language,
+                        calendar: calendar)))
         }
         if let checkedAt = snapshot.lastSuccessfulCheckAt {
             lines.append(
@@ -1230,13 +1242,13 @@ final class RunwayModel: ObservableObject {
                     title: l10n.text(.rateLimitResetTodayLastCheck),
                     value: DurationFormatter.relativePast(since: checkedAt, language: l10n.language)))
         }
-        if let evidence = snapshot.evidenceLine(l10n: l10n, now: now) {
+        if let evidence = snapshot.evidenceLine(l10n: l10n, now: now, calendar: calendar) {
             lines.append(
                 DetailLine(
                     title: l10n.text(.rateLimitResetTodayLatestEvidence),
                     value: evidence))
         }
-        if let event = snapshot.primaryEvidenceEvent(now: now),
+        if let event = snapshot.primaryEvidenceEvent(now: now, calendar: calendar),
            let scope = snapshot.scopeSummary(for: event, l10n: l10n)
         {
             lines.append(
@@ -1244,7 +1256,7 @@ final class RunwayModel: ObservableObject {
                     title: l10n.text(.rateLimitResetTodayPlans),
                     value: scope))
         }
-        if let event = snapshot.primaryEvidenceEvent(now: now) {
+        if let event = snapshot.primaryEvidenceEvent(now: now, calendar: calendar) {
             lines.append(
                 DetailLine(
                     title: l10n.text(.rateLimitResetTodayConfidence),
@@ -1254,7 +1266,11 @@ final class RunwayModel: ObservableObject {
             lines.append(
                 DetailLine(
                     title: l10n.text(.lastReset),
-                    value: ResetCreditDateFormatter.updatedAt(resetAt, language: l10n.language)))
+                    value: ResetLabelFormatter.shortLabel(
+                        for: resetAt,
+                        now: now,
+                        language: l10n.language,
+                        calendar: calendar)))
         }
         lines.append(
             DetailLine(
@@ -1278,23 +1294,34 @@ final class RunwayModel: ObservableObject {
         _ snapshot: RateLimitResetTodaySnapshot,
         now: Date) -> String
     {
-        switch snapshot.resolvedState(now: now) {
+        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
+        switch snapshot.resolvedState(now: now, calendar: calendar) {
         case .yes:
             // Prefer the next same-day schedule when today has multiple resets.
-            if let next = snapshot.nextScheduledReset(now: now),
-               Calendar.current.isDate(next.effectiveAt, inSameDayAs: now)
-            {
-                let when = ResetCreditDateFormatter.updatedAt(next.effectiveAt, language: l10n.language)
+            if let next = snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar) {
+                let when = ResetLabelFormatter.shortLabel(
+                    for: next.effectiveAt,
+                    now: now,
+                    language: l10n.language,
+                    calendar: calendar)
                 return String(format: l10n.text(.rateLimitResetTodayYesHintScheduledWithTime), when)
             }
             if let resetAt = snapshot.latestResetAt(now: now) {
-                let when = ResetCreditDateFormatter.updatedAt(resetAt, language: l10n.language)
+                let when = ResetLabelFormatter.shortLabel(
+                    for: resetAt,
+                    now: now,
+                    language: l10n.language,
+                    calendar: calendar)
                 return String(format: l10n.text(.rateLimitResetTodayYesHintWithTime), when)
             }
             return l10n.text(.rateLimitResetTodayYesHint)
         case .no:
             if let next = snapshot.nextScheduledReset(now: now) {
-                let when = ResetCreditDateFormatter.updatedAt(next.effectiveAt, language: l10n.language)
+                let when = ResetLabelFormatter.shortLabel(
+                    for: next.effectiveAt,
+                    now: now,
+                    language: l10n.language,
+                    calendar: calendar)
                 return String(format: l10n.text(.rateLimitResetTodayNoHintWithNext), when)
             }
             return l10n.text(.rateLimitResetTodayNoHint)
