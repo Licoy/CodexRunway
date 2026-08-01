@@ -18,7 +18,7 @@ Codex Runway is a native macOS menu bar app for checking Codex and Grok quota. I
 - On the Grok panel, reuse the same Token Usage multi-chart (heatmap / line / bar) and API Equivalent Cost modules as Codex, plus recent local sessions from Grok CLI logs.
 - Manage multiple Grok OAuth / SuperGrok accounts with isolated sign-in, current-login import, paste token/JSON, refresh, aliases, ordering, removal, and explicit switching.
 - View 5-hour, weekly, and additional quota windows.
-- See whether Codex rate limits have reset today from the project-hosted public status feed, with a link to the related public post.
+- See whether Codex rate limits have reset today (data from [codexreset.gitcdn.top](https://codexreset.gitcdn.top)), with a link to the related public post.
 - Toggle the “reset today?” section in settings and configure its own refresh interval (on by default, every 1 hour).
 - Manage multiple Codex accounts: browser sign-in, import local `auth.json`, paste token/JSON (including `/auth/session`), import files, or add an API key.
 - Switch accounts safely after confirmation by atomically writing `~/.codex/auth.json`, with an optional Codex restart so CLI / IDE stay in sync.
@@ -105,12 +105,12 @@ The self-check reads local state only and makes no network request. It prints re
 - API-equivalent cost is computed from local session JSONL logs by default, with derived data such as a local incremental index under `~/.codex-runway/`. Session contents are not uploaded.
 - Online usage supplements API-equivalent cost only when local token data is unavailable. The chart’s “Official stats (all devices)” series comes from current-account profile statistics and may lag or be revised; “Local logs (all sessions)” scans the sessions present on this Mac and historical entries may span accounts. The two series are not a subset relationship and should not be subtracted.
 - Session repair only touches `~/.codex/session_index.jsonl`, creates a backup before writing, and never deletes session files.
-- “Reset today?” only downloads the derived status JSON published by this project. It sends no Codex account, token, or local session content. The backend AI analysis searches public X posts only and receives no app-user data.
+- “Reset today?” only downloads the public status feed. It sends no Codex account, token, or local session content.
 - Update checks request only version information. Codex account and session data are not uploaded.
 
 ## Data sources
 
-- **Reset today?**: The status comes from this repository’s published static feed (the app defaults to [codexreset.gitcdn.top/api/status.json](https://codexreset.gitcdn.top/api/status.json)). The backend uses Grok to inspect public posts from `@thsottiaux` and produce structured events; the app then evaluates them against the user’s local calendar day. This is unofficial AI analysis and is advisory only. Scheduled runs and publication are both best effort and may be delayed or temporarily unavailable.
+- **Reset today?**: Data comes from [https://codexreset.gitcdn.top](https://codexreset.gitcdn.top). Unofficial and advisory only; may be delayed or temporarily unavailable.
 - **Quota / reset credits / official token usage / some online usage**: When signed in, requests use your local credentials against official ChatGPT / Codex backend APIs. Official token usage belongs to the current account and shows the backend statistics date.
 - **Grok quota**: Returned only by the official CLI chat-proxy `/v1/billing?format=credits` endpoint using a local OAuth / SuperGrok login. There is no secondary data source, and API billing or local-session statistics are not mixed into this quota.
 - **Local-log token usage / API-equivalent cost / recent sessions**: Computed by default from local `~/.codex` session logs and the local index. Historical local logs have no reliable account attribution, so they may include multiple accounts.
@@ -118,26 +118,10 @@ The self-check reads local state only and makes no network request. It prints re
 ## Development and Contribution
 
 ```bash
-npm test --prefix api/hasreset
 swift test
 swift build
 swift build -c release
 ```
-
-### Self-hosting the “Reset Today?” Feed
-
-The service source lives in [`api/hasreset`](api/hasreset), and `.github/workflows/update-hasreset.yml` performs scheduled publication. To deploy your own fork:
-
-1. Add `GROK_API_BASE_URL`, `GROK_MODEL`, and `GROK_API_KEY` as repository Actions Secrets. The base URL must be an HTTPS API-version root such as `https://api.x.ai/v1`; the selected model must support the Responses API, X Search, and Structured Outputs. Optionally set `GROK_USE_WS=true` to use WebSocket instead of the default HTTP transport.
-2. Under **Settings > Actions > General > Workflow permissions**, allow `GITHUB_TOKEN` read and write access to repository contents. No PAT is required.
-3. In **Settings > Pages**, set Source to **GitHub Actions**.
-4. Manually run the **Update reset-today status** workflow once, then verify the Pages site and `api/status.json`.
-
-The workflow triggers once per hour at minute 17 UTC. It does not retry failed upstream calls. It updates the orphan `gh-pages` branch and deploys Pages only when the status changes or a daily heartbeat is due. GitHub schedules are not real-time and may drift or occasionally be dropped; use `workflow_dispatch` for a manual catch-up, or an external cron that posts `repository_dispatch` with `event_type=update-hasreset`.
-
-This design keeps Actions limited to low-frequency, low-load publication of static project content; it is not an on-demand serverless service. Do not change it directly to 5/15-minute polling, a commercial service, or a general-purpose API. Recheck GitHub’s [Actions additional terms](https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features#actions) and [Pages limits](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits) before expanding its frequency or purpose, and contact GitHub Support when appropriate.
-
-The Grok key and raw responses are never written to the repository, Pages, or logs. The public feed contains only derived events, timestamps, source links, and safe error codes—not full post text. Public rationale text is mapped from the event kind instead of publishing model-authored free text. Do not print Secrets in workflow debugging output.
 
 See [CONTRIBUTORS.md](CONTRIBUTORS.md) for contribution notes.
 

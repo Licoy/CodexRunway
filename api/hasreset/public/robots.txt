@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://licoy.github.io/codex-runway/sitemap.xml
