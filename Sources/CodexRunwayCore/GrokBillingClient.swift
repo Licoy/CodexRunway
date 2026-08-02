@@ -82,10 +82,44 @@ public struct GrokBillingClient: Sendable {
             accessToken: accessToken,
             clientVersion: clientVersion)
 
-        let creditsData = try await creditsResult
-        var snapshot = try decodeCredits(creditsData, now: now)
+        // Credits is preferred, but cents alone is enough for a usable snapshot when the
+        // credits shape is empty/variant (common right after login / account switch).
+        let creditsData: Data?
+        do {
+            creditsData = try await creditsResult
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as GrokCLIError where error == .authenticationRequired {
+            throw error
+        } catch {
+            creditsData = nil
+        }
 
-        if let centsData = try? await centsResult,
+        let centsData: Data?
+        do {
+            centsData = try await centsResult
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as GrokCLIError where error == .authenticationRequired {
+            // Prefer surfacing auth when credits also failed for the same reason.
+            if creditsData == nil { throw error }
+            centsData = nil
+        } catch {
+            centsData = nil
+        }
+
+        var snapshot: GrokQuotaSnapshot?
+        if let creditsData {
+            snapshot = try? GrokQuotaSnapshot.decodeBillingResponse(from: creditsData, now: now)
+        }
+        if snapshot == nil, let centsData {
+            snapshot = try? GrokQuotaSnapshot.decodeBillingResponse(from: centsData, now: now)
+        }
+        guard var snapshot else {
+            throw GrokCLIError.malformedResponse("billing parse failed")
+        }
+
+        if let centsData,
            let money = try? GrokQuotaSnapshot.decodeMoneyAllowance(from: centsData)
         {
             snapshot = snapshot.mergingMoneyAllowance(
@@ -108,14 +142,6 @@ public struct GrokBillingClient: Sendable {
         }
 
         return snapshot
-    }
-
-    private func decodeCredits(_ data: Data, now: Date) throws -> GrokQuotaSnapshot {
-        do {
-            return try GrokQuotaSnapshot.decodeBillingResponse(from: data, now: now)
-        } catch {
-            throw GrokCLIError.malformedResponse("billing parse failed")
-        }
     }
 
     private func fetchData(

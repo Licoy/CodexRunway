@@ -679,7 +679,13 @@ public actor GrokAccountModule {
     }
 
     private func isAuthenticationFailure(_ error: Error) -> Bool {
-        if let error = error as? GrokCLIError, error == .authenticationRequired { return true }
+        guard let error = error as? GrokCLIError else { return false }
+        if error == .authenticationRequired { return true }
+        if case let .malformedResponse(message) = error,
+           message.lowercased().contains("token")
+        {
+            return true
+        }
         return false
     }
 
@@ -691,8 +697,16 @@ public actor GrokAccountModule {
             return "authentication_required"
         case GrokCLIError.timeout:
             return "timeout"
-        case GrokCLIError.malformedResponse:
-            return "billing_parse_failed"
+        case let GrokCLIError.malformedResponse(message):
+            // Do not label token-refresh / version parse failures as "billing structure".
+            let lower = message.lowercased()
+            if lower.contains("token") {
+                return "authentication_required"
+            }
+            if lower.contains("billing") {
+                return "billing_parse_failed"
+            }
+            return "refresh_failed"
         case is GrokBillingDecodingError, is DecodingError:
             return "billing_parse_failed"
         case is CancellationError:

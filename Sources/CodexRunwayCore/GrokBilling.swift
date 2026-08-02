@@ -186,14 +186,15 @@ public struct GrokQuotaSnapshot: Codable, Sendable, Equatable {
         let source: GrokBillingSource
         if let currentPercent = config.creditUsagePercent {
             percent = currentPercent
-            period = try config.currentPeriod?.quotaPeriod()
+            // Period is best-effort: unknown types / bad dates must not discard usage %.
+            period = config.currentPeriod?.bestEffortQuotaPeriod()
             source = .current
         } else if let limit = config.monthlyLimit?.val,
                   limit > 0,
                   let used = config.used?.val
         {
             percent = Double(used) / Double(limit) * 100
-            period = try quotaPeriod(
+            period = makeBestEffortQuotaPeriod(
                 kind: .monthly,
                 start: config.billingPeriodStart,
                 end: config.billingPeriodEnd)
@@ -214,7 +215,7 @@ public struct GrokQuotaSnapshot: Codable, Sendable, Equatable {
             onDemandEnabled: response.onDemandEnabled,
             onDemandUsedCents: config.onDemandUsed?.val,
             onDemandLimitCents: config.onDemandCap?.val,
-            productUsage: try config.decodedProductUsage(),
+            productUsage: config.decodedProductUsage(),
             isUnifiedBillingUser: config.isUnifiedBillingUser,
             source: source,
             updatedAt: now)
@@ -234,7 +235,7 @@ public struct GrokQuotaSnapshot: Codable, Sendable, Equatable {
         return Self(
             plan: GrokSubscriptionTier.displayName(from: response.subscriptionTier),
             includedUsagePercent: percent,
-            period: try quotaPeriod(
+            period: makeBestEffortQuotaPeriod(
                 kind: .monthly,
                 start: response.billingCycle?.billingPeriodStart,
                 end: response.billingCycle?.billingPeriodEnd),
@@ -320,15 +321,19 @@ private struct BillingResponse: Decodable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        config = try container.decodeIfPresent(BillingConfig.self, forKey: .config)
-        onDemandEnabled = try container.decodeIfPresent(Bool.self, forKey: .onDemandEnabled)
-            ?? container.decodeIfPresent(Bool.self, forKey: .onDemandEnabledSnake)
-        subscriptionTier = try container.decodeIfPresent(String.self, forKey: .subscriptionTier)
-            ?? container.decodeIfPresent(String.self, forKey: .subscriptionTierSnake)
-        billingCycle = try container.decodeIfPresent(LegacyBillingCycle.self, forKey: .billingCycle)
-        monthlyLimit = try container.decodeIfPresent(Cent.self, forKey: .monthlyLimit)
-        onDemandCap = try container.decodeIfPresent(Cent.self, forKey: .onDemandCap)
-        usage = try container.decodeIfPresent(LegacyBillingUsage.self, forKey: .usage)
+        // Optional branches are best-effort so one nested type mismatch cannot
+        // discard an otherwise usable credits / cents payload.
+        config = try? container.decodeIfPresent(BillingConfig.self, forKey: .config)
+        onDemandEnabled = (try? container.decodeIfPresent(Bool.self, forKey: .onDemandEnabled))
+            ?? (try? container.decodeIfPresent(Bool.self, forKey: .onDemandEnabledSnake))
+            ?? nil
+        subscriptionTier = (try? container.decodeIfPresent(String.self, forKey: .subscriptionTier))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .subscriptionTierSnake))
+            ?? nil
+        billingCycle = try? container.decodeIfPresent(LegacyBillingCycle.self, forKey: .billingCycle)
+        monthlyLimit = try? container.decodeIfPresent(Cent.self, forKey: .monthlyLimit)
+        onDemandCap = try? container.decodeIfPresent(Cent.self, forKey: .onDemandCap)
+        usage = try? container.decodeIfPresent(LegacyBillingUsage.self, forKey: .usage)
     }
 }
 
@@ -345,7 +350,56 @@ private struct BillingConfig: Decodable {
     var productUsage: [ProductUsageEntry]?
     var isUnifiedBillingUser: Bool?
 
-    func decodedProductUsage() throws -> [GrokProductUsage] {
+    enum CodingKeys: String, CodingKey {
+        case creditUsagePercent
+        case currentPeriod
+        case onDemandCap
+        case onDemandUsed
+        case prepaidBalance
+        case monthlyLimit
+        case used
+        case billingPeriodStart
+        case billingPeriodEnd
+        case productUsage
+        case isUnifiedBillingUser
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        creditUsagePercent = Self.decodeFlexibleDouble(from: container, forKey: .creditUsagePercent)
+        currentPeriod = try? container.decodeIfPresent(UsagePeriod.self, forKey: .currentPeriod)
+        onDemandCap = try? container.decodeIfPresent(Cent.self, forKey: .onDemandCap)
+        onDemandUsed = try? container.decodeIfPresent(Cent.self, forKey: .onDemandUsed)
+        prepaidBalance = try? container.decodeIfPresent(Cent.self, forKey: .prepaidBalance)
+        monthlyLimit = try? container.decodeIfPresent(Cent.self, forKey: .monthlyLimit)
+        used = try? container.decodeIfPresent(Cent.self, forKey: .used)
+        billingPeriodStart = try? container.decodeIfPresent(String.self, forKey: .billingPeriodStart)
+        billingPeriodEnd = try? container.decodeIfPresent(String.self, forKey: .billingPeriodEnd)
+        // productUsage may arrive as an array of objects (current) or an unexpected shape.
+        productUsage = try? container.decodeIfPresent([ProductUsageEntry].self, forKey: .productUsage)
+        isUnifiedBillingUser = try? container.decodeIfPresent(Bool.self, forKey: .isUnifiedBillingUser)
+    }
+
+    private static func decodeFlexibleDouble(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) -> Double? {
+        if let value = try? container.decodeIfPresent(Double.self, forKey: key) {
+            return value
+        }
+        if let value = try? container.decodeIfPresent(Int64.self, forKey: key) {
+            return Double(value)
+        }
+        if let text = try? container.decodeIfPresent(String.self, forKey: key),
+           let value = Double(text)
+        {
+            return value
+        }
+        return nil
+    }
+
+    /// Best-effort product breakdown; skips bad rows instead of failing the snapshot.
+    func decodedProductUsage() -> [GrokProductUsage] {
         guard let productUsage else { return [] }
         var result: [GrokProductUsage] = []
         result.reserveCapacity(productUsage.count)
@@ -353,9 +407,7 @@ private struct BillingConfig: Decodable {
             let name = entry.product?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !name.isEmpty else { continue }
             let percent = entry.usagePercent ?? 0
-            guard percent.isFinite else {
-                throw GrokBillingDecodingError.invalidPercentage
-            }
+            guard percent.isFinite else { continue }
             result.append(GrokProductUsage(product: name, usagePercent: percent))
         }
         return result.sorted {
@@ -370,6 +422,27 @@ private struct BillingConfig: Decodable {
 private struct ProductUsageEntry: Decodable {
     var product: String?
     var usagePercent: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case product
+        case usagePercent
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        product = try? container.decodeIfPresent(String.self, forKey: .product)
+        if let value = try? container.decodeIfPresent(Double.self, forKey: .usagePercent) {
+            usagePercent = value
+        } else if let value = try? container.decodeIfPresent(Int64.self, forKey: .usagePercent) {
+            usagePercent = Double(value)
+        } else if let text = try? container.decodeIfPresent(String.self, forKey: .usagePercent),
+                  let value = Double(text)
+        {
+            usagePercent = value
+        } else {
+            usagePercent = nil
+        }
+    }
 }
 
 private struct Cent: Decodable {
@@ -380,8 +453,49 @@ private struct Cent: Decodable {
     }
 
     init(from decoder: Decoder) throws {
+        // Bare number: 15000
+        if let single = try? decoder.singleValueContainer() {
+            if let intVal = try? single.decode(Int64.self) {
+                val = intVal
+                return
+            }
+            if let doubleVal = try? single.decode(Double.self), doubleVal.isFinite {
+                val = Int64(doubleVal.rounded())
+                return
+            }
+            if let text = try? single.decode(String.self), let parsed = Self.parseInt64(text) {
+                val = parsed
+                return
+            }
+        }
+
+        // Proto-style object: {"val": 15000}
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        val = try container.decodeIfPresent(Int64.self, forKey: .val) ?? 0
+        if let intVal = try? container.decode(Int64.self, forKey: .val) {
+            val = intVal
+            return
+        }
+        if let doubleVal = try? container.decode(Double.self, forKey: .val), doubleVal.isFinite {
+            val = Int64(doubleVal.rounded())
+            return
+        }
+        if let text = try? container.decode(String.self, forKey: .val),
+           let parsed = Self.parseInt64(text)
+        {
+            val = parsed
+            return
+        }
+        // Missing or empty object defaults to proto3 zero.
+        val = 0
+    }
+
+    private static func parseInt64(_ text: String) -> Int64? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let value = Int64(trimmed) { return value }
+        if let double = Double(trimmed), double.isFinite {
+            return Int64(double.rounded())
+        }
+        return nil
     }
 }
 
@@ -401,44 +515,36 @@ private struct UsagePeriod: Decodable {
     var start: String?
     var end: String?
 
-    func quotaPeriod() throws -> GrokQuotaPeriod {
+    /// Best-effort period decode. Unknown types or unparseable dates yield `nil`
+    /// so included usage percent can still surface.
+    func bestEffortQuotaPeriod() -> GrokQuotaPeriod? {
         let kind: GrokQuotaPeriodKind
         switch type {
         case "USAGE_PERIOD_TYPE_WEEKLY":
             kind = .weekly
         case "USAGE_PERIOD_TYPE_MONTHLY":
             kind = .monthly
-        case let value?:
-            throw GrokBillingDecodingError.invalidPeriodType(value)
-        case nil:
-            throw GrokBillingDecodingError.invalidPeriodType("missing")
+        default:
+            return nil
         }
-        let startsAt = try start.map(parseDate)
-        let resetsAt = try end.map(parseDate)
-        if let startsAt, let resetsAt, resetsAt <= startsAt {
-            throw GrokBillingDecodingError.invalidPeriod
-        }
-        return GrokQuotaPeriod(kind: kind, startsAt: startsAt, resetsAt: resetsAt)
+        return makeBestEffortQuotaPeriod(kind: kind, start: start, end: end)
     }
 }
 
-private func parseDate(_ value: String) throws -> Date {
-    guard let date = RunwayDates.parse(value) else {
-        throw GrokBillingDecodingError.invalidDate(value)
-    }
-    return date
-}
-
-private func quotaPeriod(
+private func makeBestEffortQuotaPeriod(
     kind: GrokQuotaPeriodKind,
     start: String?,
-    end: String?) throws -> GrokQuotaPeriod?
+    end: String?) -> GrokQuotaPeriod?
 {
-    guard start != nil || end != nil else { return nil }
-    let startsAt = try start.map(parseDate)
-    let resetsAt = try end.map(parseDate)
+    guard start != nil || end != nil else {
+        return GrokQuotaPeriod(kind: kind, startsAt: nil, resetsAt: nil)
+    }
+    if let start, RunwayDates.parse(start) == nil { return nil }
+    if let end, RunwayDates.parse(end) == nil { return nil }
+    let startsAt = start.flatMap(RunwayDates.parse)
+    let resetsAt = end.flatMap(RunwayDates.parse)
     if let startsAt, let resetsAt, resetsAt <= startsAt {
-        throw GrokBillingDecodingError.invalidPeriod
+        return nil
     }
     return GrokQuotaPeriod(kind: kind, startsAt: startsAt, resetsAt: resetsAt)
 }

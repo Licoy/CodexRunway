@@ -530,18 +530,32 @@ extension RunwayModel {
     }
 
     private func applyGrokRefreshReport(_ report: GrokRefreshReport) {
-        let failures = report.outcomes.compactMap(\.error)
-        guard let firstFailure = failures.first else {
-            if !report.outcomes.isEmpty {
-                grokLastError = nil
-                grokAccountOperationMessage = grokPanelState.externalLoginChanged
-                    ? l10n.text(.grokExternalLoginChanged)
-                    : nil
-            }
+        // Panel availability follows the account the user is looking at — never a
+        // non-current sibling failure from refresh(.all).
+        let relevantOutcomes: [GrokRefreshOutcome]
+        switch report.target {
+        case .current:
+            let currentID = grokAccountState.currentAccountID
+            relevantOutcomes = report.outcomes.filter { $0.accountID == currentID }
+        case .account(let id):
+            relevantOutcomes = report.outcomes.filter { $0.accountID == id }
+        case .all:
+            let currentID = grokAccountState.currentAccountID
+            relevantOutcomes = report.outcomes.filter { $0.accountID == currentID }
+        }
+
+        guard !relevantOutcomes.isEmpty else { return }
+
+        if let firstFailure = relevantOutcomes.compactMap(\.error).first {
+            grokLastError = grokErrorText(firstFailure)
+            grokPanelState.availability = grokAvailability(for: firstFailure)
             return
         }
-        grokLastError = grokErrorText(firstFailure)
-        grokPanelState.availability = grokAvailability(for: firstFailure)
+
+        grokLastError = nil
+        grokAccountOperationMessage = grokPanelState.externalLoginChanged
+            ? l10n.text(.grokExternalLoginChanged)
+            : nil
     }
 
     private func finishGrokRefresh(generation: Int) {
@@ -592,6 +606,9 @@ extension RunwayModel {
         case .loginOAuth, .importOfficial, .makeCurrent:
             grokAccountState.officialIdentityChangedExternally = false
             grokPanelState.externalLoginChanged = false
+            // Pull billing for the newly current identity immediately so the panel
+            // does not sit on stale cache or an empty state after switch/import.
+            refreshGrok(.current)
         case .remove, .setAlias, .reorder:
             break
         }

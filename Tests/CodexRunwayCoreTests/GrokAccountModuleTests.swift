@@ -843,7 +843,8 @@ struct GrokAccountModuleTests {
         let reloaded = try await module.load()
         let account = try #require(reloaded.accounts.first { $0.id == accountID })
         #expect(account.lastError == failure.code)
-        #expect(account.requiresReauth == (failure == .authenticationRequired))
+        let expectsReauth = failure == .authenticationRequired || failure == .tokenRefreshMalformed
+        #expect(account.requiresReauth == expectsReauth)
     }
 
     private static let unusedCLI = GrokCLIClient(
@@ -1055,6 +1056,7 @@ private enum RefreshFailureFixture: CaseIterable, Equatable, Sendable {
     case authenticationRequired
     case timeout
     case billingParseFailed
+    case tokenRefreshMalformed
     case cancelled
     case refreshFailed
 
@@ -1064,6 +1066,7 @@ private enum RefreshFailureFixture: CaseIterable, Equatable, Sendable {
         case .authenticationRequired: "authentication_required"
         case .timeout: "timeout"
         case .billingParseFailed: "billing_parse_failed"
+        case .tokenRefreshMalformed: "authentication_required"
         case .cancelled: "cancelled"
         case .refreshFailed: "refresh_failed"
         }
@@ -1079,6 +1082,8 @@ private enum RefreshFailureFixture: CaseIterable, Equatable, Sendable {
             throw GrokCLIError.timeout(operation: "billing")
         case .billingParseFailed:
             throw GrokBillingDecodingError.unknownStructure
+        case .tokenRefreshMalformed:
+            throw GrokCLIError.malformedResponse("token refresh parse failed")
         case .cancelled:
             throw CancellationError()
         case .refreshFailed:

@@ -284,7 +284,59 @@ struct RunwayModelProviderTests {
         #expect(!model.isRefreshingGrok)
         await blocker.release()
         try await waitUntil { !model.isGrokAccountOperationInProgress }
-        #expect(model.grokPanelState.quota?.meters.first?.usedPercent == 18)
+        // Switch success triggers a fresh current-account billing pull.
+        try await waitUntil {
+            !model.isRefreshingGrok
+                && model.grokPanelState.quota?.meters.first?.usedPercent == 88
+        }
+        #expect(model.grokPanelState.quota?.meters.first?.usedPercent == 88)
+    }
+
+    @Test("refresh-all sibling billing failures do not cover the current panel")
+    func refreshAllSiblingFailureDoesNotCoverPanel() async throws {
+        let fixture = try GrokModelFixture(cachedPercent: 17.5)
+        defer { fixture.remove() }
+        let second = try fixture.store.upsertCredentialData(
+            GrokModelFixture.credential(
+                email: "sibling@example.com",
+                userID: "sibling-grok-user"),
+            makeCurrent: false,
+            now: fixture.now)
+        let currentID = try #require(try fixture.store.loadIndex().currentAccountID)
+        let currentHome = fixture.store.officialHomeURL
+        let siblingHome = fixture.store.accountDirectory(id: second.id)
+        let model = RunwayModel(
+            settings: runwaySettings(selectedProvider: .grok),
+            services: testServices(),
+            accountStore: isolatedAccountStore(),
+            grokModule: GrokAccountModule(
+                store: fixture.store,
+                cli: GrokCLIClient(
+                    billing: { homeURL in
+                        if homeURL == siblingHome {
+                            throw GrokBillingDecodingError.unknownStructure
+                        }
+                        if homeURL == currentHome {
+                            return fixture.quota(percent: 41)
+                        }
+                        return fixture.quota(percent: 41)
+                    },
+                    loginOAuth: { _ in },
+                    version: { "grok 0.2.114" }),
+                runningProcessIDs: { [] },
+                now: { fixture.now }),
+            grokCLIAvailable: true)
+
+        try await waitUntil { model.grokPanelState.quota != nil }
+        model.refreshGrok(.all)
+        try await waitUntil { !model.isRefreshingGrok }
+
+        #expect(model.grokPanelState.quota?.meters.first?.usedPercent == 41)
+        #expect(model.grokPanelState.availability == .ready)
+        #expect(model.grokLastError == nil)
+        #expect(model.grokAccountState.accounts.first { $0.id == second.id }?.lastError
+            == "billing_parse_failed")
+        #expect(model.grokAccountState.accounts.first { $0.id == currentID }?.lastError == nil)
     }
 
     @Test("external Grok identity warning stays until a successful identity command")

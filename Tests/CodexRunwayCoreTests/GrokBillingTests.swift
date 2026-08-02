@@ -144,8 +144,8 @@ struct GrokBillingTests {
         #expect(snapshot.source == .current)
     }
 
-    @Test("invalid billing dates fail instead of dropping reset data")
-    func invalidDateFails() {
+    @Test("invalid billing dates drop period but keep usage percent")
+    func invalidDateDropsPeriodOnly() throws {
         let data = Data(#"""
         {
           "config": {
@@ -159,9 +159,77 @@ struct GrokBillingTests {
         }
         """#.utf8)
 
-        #expect(throws: GrokBillingDecodingError.invalidDate("not-a-date")) {
-            try GrokQuotaSnapshot.decodeBillingResponse(from: data)
+        let snapshot = try GrokQuotaSnapshot.decodeBillingResponse(from: data)
+        #expect(snapshot.includedUsagePercent == 10)
+        #expect(snapshot.period == nil)
+        #expect(snapshot.source == .current)
+    }
+
+    @Test("unknown period types drop period but keep usage percent")
+    func unknownPeriodTypeDropsPeriodOnly() throws {
+        let data = Data(#"""
+        {
+          "config": {
+            "creditUsagePercent": 22.5,
+            "currentPeriod": {
+              "type": "USAGE_PERIOD_TYPE_DAILY",
+              "start": "2026-07-01T00:00:00Z",
+              "end": "2026-07-02T00:00:00Z"
+            }
+          }
         }
+        """#.utf8)
+
+        let snapshot = try GrokQuotaSnapshot.decodeBillingResponse(from: data)
+        #expect(snapshot.includedUsagePercent == 22.5)
+        #expect(snapshot.period == nil)
+        #expect(snapshot.source == .current)
+    }
+
+    @Test("live-shaped fractional second timestamps with +00:00 decode")
+    func liveShapedFractionalTimestampsDecode() throws {
+        let data = Data(#"""
+        {
+          "config": {
+            "currentPeriod": {
+              "type": "USAGE_PERIOD_TYPE_WEEKLY",
+              "start": "2026-07-30T16:46:56.082611+00:00",
+              "end": "2026-08-06T16:46:56.082611+00:00"
+            },
+            "creditUsagePercent": 15.0,
+            "productUsage": [
+              {"product": "GrokBuild", "usagePercent": 15.0}
+            ],
+            "isUnifiedBillingUser": true,
+            "prepaidBalance": {"val": 0}
+          }
+        }
+        """#.utf8)
+
+        let snapshot = try GrokQuotaSnapshot.decodeBillingResponse(from: data)
+        #expect(snapshot.includedUsagePercent == 15)
+        #expect(snapshot.period?.kind == .weekly)
+        #expect(snapshot.period?.startsAt != nil)
+        #expect(snapshot.period?.resetsAt != nil)
+        #expect(snapshot.productUsage.map(\.product) == ["GrokBuild"])
+        #expect(snapshot.source == .current)
+    }
+
+    @Test("malformed productUsage does not discard usage percent")
+    func malformedProductUsageIsIgnored() throws {
+        let data = Data(#"""
+        {
+          "config": {
+            "creditUsagePercent": 33,
+            "productUsage": {"GrokBuild": 33}
+          }
+        }
+        """#.utf8)
+
+        let snapshot = try GrokQuotaSnapshot.decodeBillingResponse(from: data)
+        #expect(snapshot.includedUsagePercent == 33)
+        #expect(snapshot.productUsage.isEmpty)
+        #expect(snapshot.source == .current)
     }
 
     @Test("unknown billing structures fail explicitly")
@@ -173,9 +241,18 @@ struct GrokBillingTests {
         }
     }
 
-    @Test("top-level JSON type mismatches are normalized as unknown billing structures")
-    func topLevelTypeMismatchIsNormalized() {
+    @Test("string-encoded creditUsagePercent is accepted")
+    func stringEncodedPercentIsAccepted() throws {
         let data = Data(#"{"config":{"creditUsagePercent":"42.5"}}"#.utf8)
+
+        let snapshot = try GrokQuotaSnapshot.decodeBillingResponse(from: data)
+        #expect(snapshot.includedUsagePercent == 42.5)
+        #expect(snapshot.source == .current)
+    }
+
+    @Test("top-level non-object JSON is normalized as unknown billing structures")
+    func topLevelNonObjectIsNormalized() {
+        let data = Data(#"["not","an","object"]"#.utf8)
 
         #expect(throws: GrokBillingDecodingError.unknownStructure) {
             try GrokQuotaSnapshot.decodeBillingResponse(from: data)

@@ -197,6 +197,52 @@ struct GrokBillingClientTests {
         }
     }
 
+    @Test("falls back to cents billing when credits payload is empty")
+    func fallsBackToCentsWhenCreditsEmpty() async throws {
+        MockBillingURLProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            let query = request.url?.query ?? ""
+            let body: Data
+            if path.hasSuffix("/billing"), query.contains("format=credits") {
+                body = Data(#"{"config":{}}"#.utf8)
+            } else if path.hasSuffix("/billing") {
+                body = Data(#"""
+                {
+                  "config": {
+                    "monthlyLimit": {"val": 15000},
+                    "used": {"val": 750},
+                    "billingPeriodStart": "2026-08-01T00:00:00+00:00",
+                    "billingPeriodEnd": "2026-09-01T00:00:00+00:00"
+                  }
+                }
+                """#.utf8)
+            } else if path.hasSuffix("/settings") {
+                body = Data(#"{"subscription_tier_display":"SuperGrok"}"#.utf8)
+            } else {
+                body = Data(#"{}"#.utf8)
+            }
+            return (
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"])!,
+                body)
+        }
+        defer { MockBillingURLProtocol.handler = nil }
+
+        let client = GrokBillingClient(
+            session: MockBillingURLProtocol.session(),
+            clientVersionProvider: { "0.2.114" })
+        let snapshot = try await client.fetch(accessToken: "token-for-tests")
+
+        #expect(snapshot.includedUsagePercent == 5)
+        #expect(snapshot.includedLimitCents == 15_000)
+        #expect(snapshot.includedUsedCents == 750)
+        #expect(snapshot.source == .deprecated)
+        #expect(snapshot.plan == "SuperGrok")
+    }
+
     @Test("default GrokCLIClient billing path uses the HTTP client over home auth")
     func defaultCLIClientBillingUsesHTTP() async throws {
         let temporary = try TemporaryBillingDirectory()
