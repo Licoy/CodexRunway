@@ -18,7 +18,7 @@ Codex Runway 是一个原生 macOS 状态栏应用，帮你在菜单栏查看 Co
 - Grok 主面板与 Codex 一致：展示 Token 用量多图表（热力图 / 折线 / 柱状）与 API 等价成本（本机会话日志），以及最近对话。
 - 管理多个 Grok OAuth / SuperGrok 账号：隔离登录、导入当前登录、粘贴 Token / JSON、刷新、别名、排序、删除和显式切号。
 - 查看 5 小时、每周和附加额度窗口。
-- 查看今日速率限制是否已重置（数据来自 [codexreset.gitcdn.top](https://codexreset.gitcdn.top)），并可跳转到相关公开动态。
+- 查看今日速率限制是否已重置（数据来自 [www.codexrunway.com](https://www.codexrunway.com)），并可跳转到相关公开动态。
 - 设置中可开关「今日是否重置」栏目，并单独配置其刷新间隔（默认开启、每 1 小时）。
 - 管理多个 Codex 账号：浏览器登录、导入本机 `auth.json`、粘贴 token / JSON（含 `/auth/session`）、导入文件或 API Key。
 - 确认后安全切号，原子写回 `~/.codex/auth.json`，可选立即重启 Codex，使 CLI / IDE 同步。
@@ -110,7 +110,7 @@ swift run CodexRunway --self-check
 
 ## 数据来源
 
-- **今日是否重置**：数据来源于 [https://codexreset.gitcdn.top](https://codexreset.gitcdn.top)，非官方且仅供参考，可能延迟或暂时不可用。
+- **今日是否重置**：数据来源于 [https://www.codexrunway.com/api/status.json](https://www.codexrunway.com/api/status.json)，非官方且仅供参考，可能延迟或暂时不可用。
 - **配额 / reset credits / Token 用量官方统计 / 部分在线用量**：在你已登录的前提下，通过本机凭据访问官方 ChatGPT / Codex 后端接口；官方 Token 统计仅对应当前账号，并显示服务端统计截至日期。
 - **Grok 额度**：仅由官方 CLI chat-proxy 的 `/v1/billing?format=credits` 返回（使用本机 OAuth / SuperGrok 登录凭据）。应用不提供第二数据源，也不会把 API 账单或本机会话统计混入该额度。
 - **Token 用量本机日志 / API 等价成本 / 最近会话**：默认基于本机 `~/.codex` 会话日志与本地索引计算。本机历史日志没有可靠的账号归属，因此可能包含多个账号的数据。

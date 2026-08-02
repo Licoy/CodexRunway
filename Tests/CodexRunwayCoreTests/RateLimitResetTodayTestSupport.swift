@@ -20,7 +20,8 @@ struct ResetStatusEventFixture {
             "url": "https://x.com/thsottiaux/status/123"
           },
           "confidence": 0.98,
-          "rationale": "\(rationale)"
+          "rationale": "\(rationale)",
+          "text": "fixture post text for \(kind)"
         }
         """
     }
@@ -36,7 +37,7 @@ struct ResetStatusEventFixture {
         case "limit_increase":
             "Quota limit increase announcement; not a reset."
         default:
-            "Relevant announcement could not be classified safely."
+            "Not a clear reset signal."
         }
     }
 }

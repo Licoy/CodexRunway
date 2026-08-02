@@ -65,7 +65,28 @@ public struct RateLimitResetTodayEvent: Decodable, Sendable, Equatable {
     public var source: RateLimitResetTodaySource
     public var confidence: Double
     public var rationale: String
+    /// Original subject post text from the feed. Validated on decode; UI uses app-owned copy.
+    public var text: String
 
+    public init(
+        kind: RateLimitResetTodayEventKind,
+        announcedAt: Date,
+        effectiveAt: Date? = nil,
+        scope: RateLimitResetTodayScope,
+        source: RateLimitResetTodaySource,
+        confidence: Double,
+        rationale: String,
+        text: String)
+    {
+        self.kind = kind
+        self.announcedAt = announcedAt
+        self.effectiveAt = effectiveAt
+        self.scope = scope
+        self.source = source
+        self.confidence = confidence
+        self.rationale = rationale
+        self.text = text
+    }
 }
 
 public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
@@ -135,21 +156,31 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> RateLimitResetTodayState
     {
         if let stateOverride { return stateOverride }
+        // Only degraded / missing / stale monitor data is "unknown".
+        // A healthy feed with only uncertain (or empty) events means "no" —
+        // matching the hosted status page: 是 / 否, never "unavailable" for clear
+        // "not a reset signal" commentary.
         guard monitor.status == .ok, let lastSuccessfulCheckAt,
               now.timeIntervalSince(lastSuccessfulCheckAt) <= Self.staleAfter
         else {
             return .unknown
         }
-        // Same-day schedule or completed reset wins over uncertain commentary.
         if hasResetOnLocalDay(now: now, calendar: calendar) {
             return .yes
         }
-        if events.contains(where: {
-            $0.kind == .uncertain && calendar.isDate($0.announcedAt, inSameDayAs: now)
-        }) {
-            return .unknown
-        }
         return .no
+    }
+
+    /// True when the best explanation for "no" is same-day uncertain commentary
+    /// (website: "今日无明确的重置信号"), not merely an empty event log.
+    public func hasUncertainNoSignalToday(
+        now: Date = Date(),
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> Bool
+    {
+        guard resolvedState(now: now, calendar: calendar) == .no else { return false }
+        return events.contains {
+            $0.kind == .uncertain && calendar.isDate($0.announcedAt, inSameDayAs: now)
+        }
     }
 
     /// True when a reset has already taken effect on the local calendar day.
@@ -202,12 +233,21 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
                 .max { $0.announcedAt < $1.announcedAt }
                 ?? latestEvent
         case .no:
+            // Prefer same-day non-reset commentary that explains today's "no".
+            if let sameDayCommentary = events
+                .filter({
+                    calendar.isDate($0.announcedAt, inSameDayAs: now)
+                        && ($0.kind == .uncertain
+                            || $0.kind == .bankedReset
+                            || $0.kind == .limitIncrease)
+                })
+                .max(by: { $0.announcedAt < $1.announcedAt })
+            {
+                return sameDayCommentary
+            }
             return nextScheduledReset(now: now)?.event ?? latestEvent
         case .unknown:
-            return events
-                .filter { $0.kind == .uncertain && calendar.isDate($0.announcedAt, inSameDayAs: now) }
-                .max { $0.announcedAt < $1.announcedAt }
-                ?? latestEvent
+            return latestEvent
         }
     }
 
@@ -287,13 +327,16 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         for event: RateLimitResetTodayEvent,
         l10n: L10n) -> String?
     {
-        var parts: [String] = []
+        // Pure "unknown" scope is noise on the status card; only show real plan/window labels.
         let plans = event.scope.plans
+            .filter { $0 != "unknown" }
             .map { planLabel($0, l10n: l10n) }
             .filter { !$0.isEmpty }
         let windows = event.scope.windows
+            .filter { $0 != "unknown" }
             .map { windowLabel($0, l10n: l10n) }
             .filter { !$0.isEmpty }
+        var parts: [String] = []
         if !plans.isEmpty {
             parts.append("\(l10n.text(.rateLimitResetTodayPlans)): \(plans.joined(separator: ", "))")
         }
@@ -376,7 +419,8 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
                         postID: "2079433708986319143",
                         url: URL(string: "https://x.com/thsottiaux/status/2079433708986319143")!),
                     confidence: 0.98,
-                    rationale: "Explicit Codex quota reset announcement."),
+                    rationale: "Explicit Codex quota reset announcement.",
+                    text: "I have reset usage limits for Codex."),
             ]
         } else {
             events = []

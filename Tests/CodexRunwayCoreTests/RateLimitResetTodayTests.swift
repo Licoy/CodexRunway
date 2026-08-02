@@ -4,12 +4,12 @@ import Testing
 
 @Suite("Rate limit reset today")
 struct RateLimitResetTodayTests {
-    @Test("uses the Codex reset CDN endpoints")
-    func usesCodexResetCDNEndpoints() {
-        #expect(RateLimitResetTodayClient.siteURL.absoluteString == "https://codexreset.gitcdn.top/")
+    @Test("uses the Codex Runway status endpoints")
+    func usesCodexRunwayStatusEndpoints() {
+        #expect(RateLimitResetTodayClient.siteURL.absoluteString == "https://www.codexrunway.com/")
         #expect(
             RateLimitResetTodayClient.statusURL.absoluteString
-                == "https://codexreset.gitcdn.top/api/status.json")
+                == "https://www.codexrunway.com/api/status.json")
     }
 
     @Test("notifies when a reset becomes newly detected and when schedule is near")
@@ -48,7 +48,8 @@ struct RateLimitResetTodayTests {
                 "url": "https://x.com/thsottiaux/status/999"
               },
               "confidence": 0.9,
-              "rationale": "Explicit Codex quota reset schedule."
+              "rationale": "Explicit Codex quota reset schedule.",
+              "text": "Scheduled reset later today."
             }
             """,
             now: now)
@@ -87,7 +88,8 @@ struct RateLimitResetTodayTests {
                 "url": "https://x.com/thsottiaux/status/2082341416681001277"
               },
               "confidence": 0.85,
-              "rationale": "Explicit Codex quota reset schedule."
+              "rationale": "Explicit Codex quota reset schedule.",
+              "text": "Reset scheduled for Friday."
             },
             {
               "kind": "reset_completed",
@@ -100,7 +102,8 @@ struct RateLimitResetTodayTests {
                 "url": "https://x.com/thsottiaux/status/2082317452755751098"
               },
               "confidence": 0.95,
-              "rationale": "Explicit Codex quota reset announcement."
+              "rationale": "Explicit Codex quota reset announcement.",
+              "text": "Usage limits have been reset."
             }
             """,
             now: now)
@@ -132,7 +135,8 @@ struct RateLimitResetTodayTests {
                 "url": "https://x.com/thsottiaux/status/123"
               },
               "confidence": 0.98,
-              "rationale": "Explicit Codex quota reset announcement."
+              "rationale": "Explicit Codex quota reset announcement.",
+              "text": "I have reset usage limits for Codex."
             }
             """,
             now: now)
@@ -155,6 +159,7 @@ struct RateLimitResetTodayTests {
         #expect(event.source.url.absoluteString == "https://x.com/thsottiaux/status/123")
         #expect(event.confidence == 0.98)
         #expect(event.rationale == "Explicit Codex quota reset announcement.")
+        #expect(event.text == "I have reset usage limits for Codex.")
         #expect(snapshot.state == .yes)
         #expect(
             snapshot.evidenceLine(l10n: L10n(language: .english))
@@ -246,7 +251,8 @@ struct RateLimitResetTodayTests {
                 "url": "https://x.com/thsottiaux/status/100"
               },
               "confidence": 0.95,
-              "rationale": "Explicit Codex quota reset announcement."
+              "rationale": "Explicit Codex quota reset announcement.",
+              "text": "Limits reset this morning."
             },
             {
               "kind": "reset_scheduled",
@@ -259,7 +265,8 @@ struct RateLimitResetTodayTests {
                 "url": "https://x.com/thsottiaux/status/200"
               },
               "confidence": 0.88,
-              "rationale": "Explicit Codex quota reset schedule."
+              "rationale": "Explicit Codex quota reset schedule.",
+              "text": "Another reset later today."
             }
             """,
             now: now)
@@ -318,7 +325,8 @@ struct RateLimitResetTodayTests {
                 "url": "https://x.com/thsottiaux/status/456"
               },
               "confidence": 0.99,
-              "rationale": "Explicit Codex quota reset announcement."
+              "rationale": "Explicit Codex quota reset announcement.",
+              "text": "I have reset usage limits."
             },
             {
               "kind": "uncertain",
@@ -331,14 +339,53 @@ struct RateLimitResetTodayTests {
                 "url": "https://x.com/thsottiaux/status/789"
               },
               "confidence": 0.5,
-              "rationale": "Relevant announcement could not be classified safely."
+              "rationale": "Not a clear reset signal.",
+              "text": "Something for everyone."
             }
             """,
             now: now)
             .decode()
 
-        #expect(uncertainOnly.state == .unknown)
+        // Healthy feed with only uncertain commentary is "no", not "unavailable".
+        #expect(uncertainOnly.state == .no)
+        #expect(uncertainOnly.hasUncertainNoSignalToday(now: now) == true)
         #expect(confirmedWithUncertain.state == .yes)
+    }
+
+    @Test("healthy uncertain feed resolves to no with clear-signal copy")
+    func healthyUncertainFeedResolvesToNo() throws {
+        let now = try resetStatusDate("2026-08-02T08:10:25Z")
+        let snapshot = try ResetStatusFeedFixture(
+            eventsJSON: """
+            {
+              "kind": "uncertain",
+              "announcedAt": "2026-08-02T02:43:02Z",
+              "effectiveAt": null,
+              "scope": {"plans": ["unknown"], "windows": ["unknown"]},
+              "source": {
+                "handle": "thsottiaux",
+                "postId": "2083745358610342270",
+                "url": "https://x.com/thsottiaux/status/2083745358610342270"
+              },
+              "confidence": 0.98,
+              "rationale": "Not a clear reset signal.",
+              "text": "Valid complaint. What would help?"
+            }
+            """,
+            now: now)
+            .checked(at: "2026-08-02T08:10:25Z")
+            .decode()
+
+        #expect(snapshot.state == .no)
+        #expect(snapshot.hasUncertainNoSignalToday(now: now) == true)
+        #expect(snapshot.primaryEvidenceEvent(now: now)?.kind == .uncertain)
+        #expect(snapshot.scopeSummary(for: snapshot.events[0], l10n: L10n(language: .english)) == nil)
+        #expect(
+            snapshot.evidenceLine(l10n: L10n(language: .english), now: now)
+                == "Not a clear reset signal.")
+        #expect(
+            snapshot.evidenceLine(l10n: L10n(language: .simplifiedChinese), now: now)
+                == "不是明确的重置信号。")
     }
 
     @Test("degraded or stale monitor forces unknown")
@@ -463,8 +510,8 @@ struct RateLimitResetTodayTests {
         #expect(cnAlerts[0].kind == .rateLimitResetDetected)
     }
 
-    @Test("decodes live CDN payload with fractional seconds and ignores optional text")
-    func decodesLiveCDNPayloadShape() throws {
+    @Test("decodes live status payload with fractional seconds and required text")
+    func decodesLiveStatusPayloadShape() throws {
         let now = try resetStatusDate("2026-08-01T09:25:19Z")
         let data = """
         {
@@ -485,7 +532,7 @@ struct RateLimitResetTodayTests {
               },
               "confidence": 0.99,
               "rationale": "Explicit Codex quota reset announcement.",
-              "text": "optional post body must be ignored by the client"
+              "text": "I have reset usage limits for Codex and ChatGPT Work."
             }
           ]
         }
@@ -502,6 +549,7 @@ struct RateLimitResetTodayTests {
         #expect(snapshot.events.count == 1)
         #expect(snapshot.events[0].kind == .resetCompleted)
         #expect(snapshot.events[0].announcedAt == expectedAnnouncedAt)
+        #expect(snapshot.events[0].text == "I have reset usage limits for Codex and ChatGPT Work.")
         #expect(snapshot.resolvedState(now: now, calendar: shanghai) == .yes)
         #expect(
             snapshot.evidenceLine(l10n: L10n(language: .english), now: now, calendar: shanghai)
@@ -543,7 +591,8 @@ struct RateLimitResetTodayTests {
                 "url": "https://x.com/thsottiaux/status/100"
               },
               "confidence": 0.9,
-              "rationale": "Explicit Codex quota reset schedule."
+              "rationale": "Explicit Codex quota reset schedule.",
+              "text": "Reset tonight."
             },
             {
               "kind": "reset_scheduled",
@@ -556,7 +605,8 @@ struct RateLimitResetTodayTests {
                 "url": "https://x.com/thsottiaux/status/200"
               },
               "confidence": 0.9,
-              "rationale": "Explicit Codex quota reset schedule."
+              "rationale": "Explicit Codex quota reset schedule.",
+              "text": "Reset this afternoon."
             }
             """,
             now: now)

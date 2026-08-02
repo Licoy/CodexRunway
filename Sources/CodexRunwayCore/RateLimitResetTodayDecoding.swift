@@ -68,8 +68,10 @@ extension RateLimitResetTodaySnapshot {
             else {
                 throw invalidPayload("Event source must identify a valid @thsottiaux X post.")
             }
-            guard event.rationale == event.kind.derivedRationale
-            else {
+            guard !event.text.isEmpty else {
+                throw invalidPayload("Event text must be a non-empty original post body.")
+            }
+            guard event.kind.acceptedRationales.contains(event.rationale) else {
                 throw invalidPayload("Event rationale must be the derived explanation for its kind.")
             }
             switch event.kind {
@@ -97,18 +99,24 @@ extension RateLimitResetTodaySnapshot {
 }
 
 private extension RateLimitResetTodayEventKind {
-    var derivedRationale: String {
+    /// Schema enum rationales for each kind. `uncertain` accepts the current
+    /// canonical string and one legacy wording during feed transition.
+    var acceptedRationales: Set<String> {
         switch self {
         case .resetCompleted:
-            "Explicit Codex quota reset announcement."
+            ["Explicit Codex quota reset announcement."]
         case .resetScheduled:
-            "Explicit Codex quota reset schedule."
+            ["Explicit Codex quota reset schedule."]
         case .bankedReset:
-            "Banked reset announcement; not a completed reset."
+            ["Banked reset announcement; not a completed reset."]
         case .limitIncrease:
-            "Quota limit increase announcement; not a reset."
+            ["Quota limit increase announcement; not a reset."]
         case .uncertain:
-            "Relevant announcement could not be classified safely."
+            [
+                "Not a clear reset signal.",
+                // Legacy feed wording retained briefly for cached/old payloads.
+                "Relevant announcement could not be classified safely.",
+            ]
         }
     }
 }

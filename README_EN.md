@@ -18,7 +18,7 @@ Codex Runway is a native macOS menu bar app for checking Codex and Grok quota. I
 - On the Grok panel, reuse the same Token Usage multi-chart (heatmap / line / bar) and API Equivalent Cost modules as Codex, plus recent local sessions from Grok CLI logs.
 - Manage multiple Grok OAuth / SuperGrok accounts with isolated sign-in, current-login import, paste token/JSON, refresh, aliases, ordering, removal, and explicit switching.
 - View 5-hour, weekly, and additional quota windows.
-- See whether Codex rate limits have reset today (data from [codexreset.gitcdn.top](https://codexreset.gitcdn.top)), with a link to the related public post.
+- See whether Codex rate limits have reset today (data from [www.codexrunway.com](https://www.codexrunway.com)), with a link to the related public post.
 - Toggle the “reset today?” section in settings and configure its own refresh interval (on by default, every 1 hour).
 - Manage multiple Codex accounts: browser sign-in, import local `auth.json`, paste token/JSON (including `/auth/session`), import files, or add an API key.
 - Switch accounts safely after confirmation by atomically writing `~/.codex/auth.json`, with an optional Codex restart so CLI / IDE stay in sync.
@@ -110,7 +110,7 @@ The self-check reads local state only and makes no network request. It prints re
 
 ## Data sources
 
-- **Reset today?**: Data comes from [https://codexreset.gitcdn.top](https://codexreset.gitcdn.top). Unofficial and advisory only; may be delayed or temporarily unavailable.
+- **Reset today?**: Data comes from [https://www.codexrunway.com/api/status.json](https://www.codexrunway.com/api/status.json). Unofficial and advisory only; may be delayed or temporarily unavailable.
 - **Quota / reset credits / official token usage / some online usage**: When signed in, requests use your local credentials against official ChatGPT / Codex backend APIs. Official token usage belongs to the current account and shows the backend statistics date.
 - **Grok quota**: Returned only by the official CLI chat-proxy `/v1/billing?format=credits` endpoint using a local OAuth / SuperGrok login. There is no secondary data source, and API billing or local-session statistics are not mixed into this quota.
 - **Local-log token usage / API-equivalent cost / recent sessions**: Computed by default from local `~/.codex` session logs and the local index. Historical local logs have no reliable account attribution, so they may include multiple accounts.

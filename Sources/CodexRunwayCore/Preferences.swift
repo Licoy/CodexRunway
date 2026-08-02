@@ -258,6 +258,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case rateLimitResetTodayNextScheduledWithCountdown
     case rateLimitResetTodayNo
     case rateLimitResetTodayNoHint
+    case rateLimitResetTodayNoHintUncertain
     case rateLimitResetTodayNoHintWithNext
     case rateLimitResetTodayOpenSource
     case rateLimitResetTodayOpenEvidence

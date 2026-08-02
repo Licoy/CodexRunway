@@ -47,12 +47,69 @@ struct RateLimitResetTodayValidationTests {
                     "url": "https://x.com/thsottiaux/status/123"
                   },
                   "confidence": 0.98,
-                  "rationale": "Copied post text is not a derived explanation."
+                  "rationale": "Copied post text is not a derived explanation.",
+                  "text": "I have reset usage limits."
                 }
                 """,
                 now: now)
                 .decode()
         }
+        #expect(throws: DecodingError.self) {
+            try ResetStatusFeedFixture(
+                eventsJSON: """
+                {
+                  "kind": "reset_completed",
+                  "announcedAt": "2026-07-28T11:00:00Z",
+                  "effectiveAt": null,
+                  "scope": {"plans": ["all"], "windows": ["weekly"]},
+                  "source": {
+                    "handle": "thsottiaux",
+                    "postId": "123",
+                    "url": "https://x.com/thsottiaux/status/123"
+                  },
+                  "confidence": 0.98,
+                  "rationale": "Explicit Codex quota reset announcement.",
+                  "text": ""
+                }
+                """,
+                now: now)
+                .decode()
+        }
+    }
+
+    @Test("accepts the current and legacy uncertain rationales")
+    func acceptsCurrentAndLegacyUncertainRationales() throws {
+        let now = try resetStatusDate("2026-07-28T12:00:00Z")
+        let current = try ResetStatusFeedFixture(
+            event: .init(kind: "uncertain", announcedAt: "2026-07-28T11:00:00Z"),
+            now: now)
+            .decode()
+        #expect(current.state == .no)
+        #expect(current.events.first?.rationale == "Not a clear reset signal.")
+
+        let legacy = try ResetStatusFeedFixture(
+            eventsJSON: """
+            {
+              "kind": "uncertain",
+              "announcedAt": "2026-07-28T11:00:00Z",
+              "effectiveAt": null,
+              "scope": {"plans": ["all"], "windows": ["unknown"]},
+              "source": {
+                "handle": "thsottiaux",
+                "postId": "123",
+                "url": "https://x.com/thsottiaux/status/123"
+              },
+              "confidence": 0.5,
+              "rationale": "Relevant announcement could not be classified safely.",
+              "text": "Unclear post."
+            }
+            """,
+            now: now)
+            .decode()
+        #expect(legacy.state == .no)
+        #expect(
+            legacy.events.first?.rationale
+                == "Relevant announcement could not be classified safely.")
     }
 
     @Test("rejects unsupported schema version")
