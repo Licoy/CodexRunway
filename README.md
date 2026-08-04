@@ -44,12 +44,35 @@ Codex Runway 是一个原生 macOS 状态栏应用，帮你在菜单栏查看 Co
 
 ## 安装
 
-从 GitHub Release 下载与你的 Mac 匹配的压缩包：
+### Homebrew（推荐）
 
-- Apple Silicon：`CodexRunway-macos-arm64.zip`
-- Intel：`CodexRunway-macos-x86_64.zip`
+通过项目维护的 [Licoy Homebrew Tap](https://github.com/Licoy/homebrew-tap) 安装：
 
-解压后把 `CodexRunway.app` 放到 `Applications` 或任意目录运行。
+```bash
+brew install --cask licoy/tap/codex-runway
+```
+
+Codex Runway 同时支持应用内更新；如希望通过 Homebrew 强制检查并升级，请使用：
+
+```bash
+brew upgrade --cask --greedy codex-runway
+```
+
+卸载应用时默认保留设置和托管账号副本；添加 `--zap` 会同时移除 `~/.codex-runway` 下的数据，但不会删除官方 `~/.codex`、`~/.grok` 目录或会话：
+
+```bash
+brew uninstall --cask codex-runway
+brew uninstall --cask --zap codex-runway
+```
+
+### 手动安装
+
+从 [GitHub Releases](https://github.com/Licoy/codex-runway/releases) 下载与你的 Mac 匹配的 DMG：
+
+- Apple Silicon：`CodexRunway-macos-arm64.dmg`
+- Intel：`CodexRunway-macos-x86_64.dmg`
+
+打开 DMG 后把 `CodexRunway.app` 拖入 `Applications`，也可以下载同架构的 ZIP 后手动解压。
 
 ### macOS 安全阻挡
 

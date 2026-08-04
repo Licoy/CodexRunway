@@ -44,12 +44,35 @@ Codex Runway is a native macOS menu bar app for checking Codex and Grok quota. I
 
 ## Installation
 
-Download the matching zip from GitHub Releases:
+### Homebrew (recommended)
 
-- Apple Silicon: `CodexRunway-macos-arm64.zip`
-- Intel: `CodexRunway-macos-x86_64.zip`
+Install from the [project-maintained Licoy Homebrew Tap](https://github.com/Licoy/homebrew-tap):
 
-Unzip it and place `CodexRunway.app` in `Applications` or any folder you prefer.
+```bash
+brew install --cask licoy/tap/codex-runway
+```
+
+Codex Runway also supports in-app updates. To force Homebrew to check and install an upgrade, use:
+
+```bash
+brew upgrade --cask --greedy codex-runway
+```
+
+Uninstalling keeps settings and managed account copies by default. Adding `--zap` also removes data under `~/.codex-runway`, but does not delete the official `~/.codex` or `~/.grok` directories or sessions:
+
+```bash
+brew uninstall --cask codex-runway
+brew uninstall --cask --zap codex-runway
+```
+
+### Manual installation
+
+Download the matching DMG from [GitHub Releases](https://github.com/Licoy/codex-runway/releases):
+
+- Apple Silicon: `CodexRunway-macos-arm64.dmg`
+- Intel: `CodexRunway-macos-x86_64.dmg`
+
+Open the DMG and drag `CodexRunway.app` into `Applications`, or download and unpack the ZIP for the same architecture.
 
 ### macOS Security Blocks
 
