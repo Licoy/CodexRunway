@@ -19,6 +19,19 @@ struct AccountsSettingsPane: View {
     @State private var editingAliasId: String?
     @State private var aliasDraft = ""
 
+    @State private var showExportSheet = false
+    @State private var exportSelectedIDs: Set<String> = []
+    @State private var isExporting = false
+
+    @State private var showImportPreviewSheet = false
+    @State private var importSelectedIDs: Set<String> = []
+    @State private var isImportingTransfer = false
+    @State private var codexImportCandidates: [CodexAccountImportCandidate] = []
+    @State private var grokImportCandidates: [GrokAccountImportCandidate] = []
+    @State private var importPreviewItems: [AccountTransferPreviewItem] = []
+    @State private var importPreviewFailures: [String] = []
+    @State private var importTargetProvider: RunwayProvider = .codex
+
     var body: some View {
         PreferencesPane {
             SettingsSection {
@@ -54,6 +67,31 @@ struct AccountsSettingsPane: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $showExportSheet) {
+            AccountTransferExportSheet(
+                l10n: l10n,
+                rows: exportRows,
+                selectedIDs: $exportSelectedIDs,
+                isWorking: isExporting,
+                onCancel: {
+                    showExportSheet = false
+                    isExporting = false
+                },
+                onExport: { performExport() })
+        }
+        .sheet(isPresented: $showImportPreviewSheet) {
+            AccountTransferImportSheet(
+                l10n: l10n,
+                items: importPreviewItems,
+                failures: importPreviewFailures,
+                selectedIDs: $importSelectedIDs,
+                isWorking: isImportingTransfer,
+                onCancel: {
+                    clearImportPreview()
+                    showImportPreviewSheet = false
+                },
+                onImport: { performImportSelection() })
         }
         .sheet(isPresented: $showPasteSheet) {
             importSheet(
@@ -154,6 +192,16 @@ struct AccountsSettingsPane: View {
 
             Spacer(minLength: 8)
 
+            Button {
+                openExportSheet()
+            } label: {
+                Label(l10n.text(.accountsExport), systemImage: "square.and.arrow.up")
+            }
+            .disabled(currentPlatformAccountCount == 0
+                || model.isGrokAccountOperationInProgress
+                || isExporting
+                || isImportingTransfer)
+
             if model.selectedProvider == .grok {
                 Menu {
                     Button(l10n.text(.grokAccountsAddOAuth)) { model.startGrokOAuthLogin() }
@@ -162,6 +210,7 @@ struct AccountsSettingsPane: View {
                         pasteSheetError = nil
                         showPasteSheet = true
                     }
+                    Button(l10n.text(.grokAccountsAddFile)) { pickFiles(for: .grok) }
                     Button(l10n.text(.grokAccountsImportOfficial)) { model.importOfficialGrokAccount() }
                 } label: {
                     Label(l10n.text(.accountsAdd), systemImage: "plus")
@@ -182,7 +231,7 @@ struct AccountsSettingsPane: View {
                 Menu {
                     Button(l10n.text(.accountsAddLocal)) { model.importOfficialAccount() }
                     Button(l10n.text(.accountsAddPaste)) { showPasteSheet = true }
-                    Button(l10n.text(.accountsAddFile)) { pickFiles() }
+                    Button(l10n.text(.accountsAddFile)) { pickFiles(for: .codex) }
                     Button(l10n.text(.accountsAddOAuth)) { model.startOAuthLogin() }
                     Button(l10n.text(.accountsAddAPIKey)) { showAPIKeySheet = true }
                 } label: {
@@ -195,6 +244,71 @@ struct AccountsSettingsPane: View {
                     Label(l10n.text(.accountsRefreshAll), systemImage: "arrow.clockwise")
                 }
                 .disabled(model.isRefreshingAccountQuotas)
+            }
+        }
+    }
+
+    private var currentPlatformAccountCount: Int {
+        if model.selectedProvider == .grok {
+            return model.grokAccountState.accounts.count
+        }
+        return model.managedAccounts.count
+    }
+
+    private var exportRows: [AccountTransferExportRow] {
+        if model.selectedProvider == .grok {
+            return model.grokAccountState.accounts
+                .sorted {
+                    if $0.sortIndex != $1.sortIndex { return $0.sortIndex < $1.sortIndex }
+                    return $0.resolvedDisplayName.localizedCaseInsensitiveCompare($1.resolvedDisplayName)
+                        == .orderedAscending
+                }
+                .map { account in
+                    AccountTransferExportRow(
+                        id: account.id,
+                        title: account.resolvedDisplayName,
+                        subtitle: account.email != account.resolvedDisplayName ? account.email : nil)
+                }
+        }
+        return orderedAccounts.map { account in
+            AccountTransferExportRow(
+                id: account.id,
+                title: account.resolvedDisplayName,
+                subtitle: account.email != account.resolvedDisplayName ? account.email : nil)
+        }
+    }
+
+    private func openExportSheet() {
+        let rows = exportRows
+        exportSelectedIDs = Set(rows.map(\.id))
+        isExporting = false
+        showExportSheet = true
+    }
+
+    private func performExport() {
+        let ids = Array(exportSelectedIDs)
+        guard !ids.isEmpty else { return }
+
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [.json]
+        let provider = model.selectedProvider
+        panel.nameFieldStringValue = provider == .grok
+            ? "codex-runway-grok-accounts.json"
+            : "codex-runway-codex-accounts.json"
+
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            isExporting = true
+            Task { @MainActor in
+                if provider == .grok {
+                    _ = await model.exportGrokAccounts(ids: ids, to: url)
+                } else {
+                    _ = model.exportAccounts(ids: ids, to: url)
+                }
+                isExporting = false
+                // Always dismiss so success/error captions in the pane are visible.
+                showExportSheet = false
             }
         }
     }
@@ -369,7 +483,7 @@ struct AccountsSettingsPane: View {
         .frame(minHeight: sheetError == nil ? 360 : 400)
     }
 
-    private func pickFiles() {
+    private func pickFiles(for entryProvider: RunwayProvider) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
@@ -377,7 +491,114 @@ struct AccountsSettingsPane: View {
         panel.allowedContentTypes = [.json, .text, .plainText]
         panel.begin { response in
             guard response == .OK else { return }
-            model.importCredentialFiles(panel.urls)
+            prepareImportPreview(urls: panel.urls, entryProvider: entryProvider)
+        }
+    }
+
+    private func prepareImportPreview(urls: [URL], entryProvider: RunwayProvider) {
+        Task { @MainActor in
+            isImportingTransfer = true
+            defer { isImportingTransfer = false }
+
+            if entryProvider == .grok {
+                let preview = await model.previewGrokAccountImport(urls: urls)
+                if preview.routedProvider == .codex {
+                    let codexPreview = model.previewAccountImport(urls: urls)
+                    presentCodexImportPreview(codexPreview, switchProvider: true)
+                    return
+                }
+                presentGrokImportPreview(preview, switchProvider: false)
+            } else {
+                let preview = model.previewAccountImport(urls: urls)
+                if preview.routedProvider == .grok {
+                    let grokPreview = await model.previewGrokAccountImport(urls: urls)
+                    presentGrokImportPreview(grokPreview, switchProvider: true)
+                    return
+                }
+                presentCodexImportPreview(preview, switchProvider: false)
+            }
+        }
+    }
+
+    private func presentCodexImportPreview(_ preview: CodexAccountImportPreview, switchProvider: Bool) {
+        if switchProvider {
+            model.selectProvider(.codex)
+        }
+        codexImportCandidates = preview.items
+        grokImportCandidates = []
+        importPreviewItems = preview.items.map(\.preview)
+        importPreviewFailures = sanitizedFailures(preview.failures)
+        importSelectedIDs = Set(preview.items.map(\.id))
+        importTargetProvider = .codex
+        showImportPreviewSheet = !preview.items.isEmpty || !preview.failures.isEmpty
+        if preview.items.isEmpty, !preview.failures.isEmpty {
+            model.lastError = "\(l10n.text(.accountsImportFailed)): \(importPreviewFailures.prefix(3).joined(separator: "; "))"
+        }
+    }
+
+    private func presentGrokImportPreview(_ preview: GrokAccountImportPreview, switchProvider: Bool) {
+        if switchProvider {
+            model.selectProvider(.grok)
+        }
+        grokImportCandidates = preview.items
+        codexImportCandidates = []
+        importPreviewItems = preview.items.map(\.preview)
+        importPreviewFailures = sanitizedFailures(preview.failures)
+        importSelectedIDs = Set(preview.items.map(\.id))
+        importTargetProvider = .grok
+        showImportPreviewSheet = !preview.items.isEmpty || !preview.failures.isEmpty
+        if preview.items.isEmpty, !preview.failures.isEmpty {
+            model.grokLastError = "\(l10n.text(.accountsImportFailed)): \(importPreviewFailures.prefix(3).joined(separator: "; "))"
+        }
+    }
+
+    private func performImportSelection() {
+        let selected = importSelectedIDs
+        guard !selected.isEmpty else { return }
+        isImportingTransfer = true
+        Task { @MainActor in
+            let ok: Bool
+            if importTargetProvider == .grok {
+                ok = await model.commitGrokAccountImport(
+                    candidates: grokImportCandidates,
+                    selectedIDs: selected)
+                if ok {
+                    model.selectProvider(.grok)
+                }
+            } else {
+                ok = await model.commitAccountImport(
+                    candidates: codexImportCandidates,
+                    selectedIDs: selected)
+                if ok {
+                    model.selectProvider(.codex)
+                }
+            }
+            isImportingTransfer = false
+            if ok {
+                clearImportPreview()
+                showImportPreviewSheet = false
+            }
+        }
+    }
+
+    private func clearImportPreview() {
+        codexImportCandidates = []
+        grokImportCandidates = []
+        importPreviewItems = []
+        importPreviewFailures = []
+        importSelectedIDs = []
+        isImportingTransfer = false
+    }
+
+    private func sanitizedFailures(_ failures: [String]) -> [String] {
+        failures.map { failure in
+            if failure == "no_credentials" {
+                return l10n.text(.accountsImportNoCredentials)
+            }
+            if failure == "nothing_selected" {
+                return l10n.text(.accountsExportEmpty)
+            }
+            return failure
         }
     }
 }

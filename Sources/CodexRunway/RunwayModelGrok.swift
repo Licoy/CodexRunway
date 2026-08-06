@@ -374,6 +374,90 @@ extension RunwayModel {
         runGrokCommand(.importOfficial, message: l10n.text(.grokLoginWaiting))
     }
 
+    /// Parse Grok transfer packs / credential files into a selectable preview (no writes).
+    func previewGrokAccountImport(urls: [URL]) async -> GrokAccountImportPreview {
+        guard let grokModule else {
+            return GrokAccountImportPreview(failures: ["no_credentials"])
+        }
+        return await grokModule.previewImportFiles(at: urls)
+    }
+
+    /// Commit selected Grok import preview rows.
+    @discardableResult
+    func commitGrokAccountImport(
+        candidates: [GrokAccountImportCandidate],
+        selectedIDs: Set<String>) async -> Bool
+    {
+        guard let grokModule, !isGrokAccountOperationInProgress else { return false }
+        isGrokAccountOperationInProgress = true
+        grokAccountOperationMessage = l10n.text(.grokLoginWaiting)
+        grokLastError = nil
+        defer {
+            isGrokAccountOperationInProgress = false
+            grokAccountOperationWork = nil
+        }
+        do {
+            let (batch, state) = try await grokModule.importPreviewSelection(
+                candidates,
+                selectedIDs: selectedIDs)
+            applyGrokAccountState(state)
+            if batch.successCount > 0 {
+                grokAccountState.officialIdentityChangedExternally = false
+                grokPanelState.externalLoginChanged = false
+                grokAccountOperationMessage = String(
+                    format: l10n.text(.accountsImportSucceeded),
+                    batch.successCount)
+                if batch.failureCount > 0 {
+                    grokLastError = "\(l10n.text(.accountsImportFailed)): \(humanizeGrokImportFailures(batch.failures))"
+                } else {
+                    grokLastError = nil
+                }
+                refreshGrok(.all)
+                return true
+            }
+            grokAccountOperationMessage = nil
+            if batch.failures.contains("nothing_selected") {
+                grokLastError = l10n.text(.accountsExportEmpty)
+            } else if batch.failures.contains("no_credentials") || batch.failures.isEmpty {
+                grokLastError = l10n.text(.grokAccountsImportNoCredentials)
+            } else {
+                grokLastError = "\(l10n.text(.accountsImportFailed)): \(humanizeGrokImportFailures(batch.failures))"
+            }
+            return false
+        } catch is CancellationError {
+            grokAccountOperationMessage = nil
+            grokLastError = l10n.text(.grokLoginCancelled)
+            return false
+        } catch {
+            grokAccountOperationMessage = nil
+            grokLastError = grokErrorText(error)
+            return false
+        }
+    }
+
+    /// Export selected managed Grok accounts to a transfer pack file.
+    @discardableResult
+    func exportGrokAccounts(ids: [String], to url: URL) async -> Bool {
+        guard let grokModule else { return false }
+        do {
+            let result = try await grokModule.exportAccounts(ids: ids)
+            try AccountTransferCodec.write(result.pack, to: url)
+            grokAccountOperationMessage = String(
+                format: l10n.text(.accountsExportSucceeded),
+                result.exportedCount)
+            if result.failures.isEmpty {
+                grokLastError = nil
+            } else {
+                grokLastError = "\(l10n.text(.accountsExportFailed)): \(result.failures.prefix(3).joined(separator: "; "))"
+            }
+            return true
+        } catch {
+            grokAccountOperationMessage = nil
+            grokLastError = "\(l10n.text(.accountsExportFailed)): \(error.localizedDescription)"
+            return false
+        }
+    }
+
     /// Returns true when at least one Grok account was imported successfully.
     @discardableResult
     func importPastedGrokCredentials(_ text: String) async -> Bool {

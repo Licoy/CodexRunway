@@ -26,11 +26,25 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case accountsDelete
     case accountsDeleteConfirmMessage
     case accountsDeleteConfirmTitle
+    case accountsDeselectAll
     case accountsEmpty
+    case accountsExport
+    case accountsExportEmpty
+    case accountsExportFailed
+    case accountsExportHint
+    case accountsExportSucceeded
+    case accountsExportTitle
+    case accountsExportWarning
     case accountsImportFailed
     case accountsImportNoCredentials
+    case accountsImportPreviewHint
+    case accountsImportPreviewTitle
     case accountsImportProgress
+    case accountsImportProviderNotice
+    case accountsImportSelected
     case accountsImportSucceeded
+    case accountsImportWillAdd
+    case accountsImportWillUpdate
     case accountsIsCurrentLogin
     case accountsMakeCurrent
     case accountsMoveDown
@@ -47,6 +61,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case accountsRestartCodexAfterSwitch
     case accountsRestartCodexFailed
     case accountsRestartCodexSucceeded
+    case accountsSelectAll
     case accountsSidebarTitle
     case accountsSwitchConfirmMessage
     case accountsSwitchConfirmTitle
@@ -100,6 +115,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case checkForUpdates
     case fiveHourUsage
     case general
+    case grokAccountsAddFile
     case grokAccountsAddOAuth
     case grokAccountsAddPaste
     case grokAccountsCurrent

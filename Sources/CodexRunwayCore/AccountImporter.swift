@@ -69,7 +69,7 @@ public struct AccountImporter: Sendable {
         return batch
     }
 
-    private struct ImportCandidate: Sendable {
+    struct ImportCandidate: Sendable {
         var auth: CodexAuth?
         var refreshToken: String?
         var emailHint: String?
@@ -133,7 +133,7 @@ public struct AccountImporter: Sendable {
         return auth
     }
 
-    private func parseCandidates(from text: String) -> [ImportCandidate] {
+    func parseCandidates(from text: String) -> [ImportCandidate] {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
 

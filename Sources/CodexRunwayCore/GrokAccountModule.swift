@@ -114,6 +114,40 @@ public actor GrokAccountModule {
         return state
     }
 
+    /// Preview multi-account pack or raw Grok credential files without writing the library.
+    public func previewImportFiles(at urls: [URL]) async -> GrokAccountImportPreview {
+        await acquireOperation()
+        defer { releaseOperation() }
+        return GrokAccountTransferImporter(store: store).previewFiles(at: urls)
+    }
+
+    /// Commit a previously previewed Grok import selection.
+    public func importPreviewSelection(
+        _ candidates: [GrokAccountImportCandidate],
+        selectedIDs: Set<String>) async throws -> (GrokAccountImportBatchResult, GrokAccountState)
+    {
+        await acquireOperation()
+        defer { releaseOperation() }
+        try Task.checkCancellation()
+
+        let importer = GrokAccountTransferImporter(store: store)
+        let batch = try importer.importPreviewSelection(
+            candidates,
+            selectedIDs: selectedIDs,
+            makeCurrentFirst: true)
+        var state = try reconcileOfficialIdentity(consumingExternalChange: false)
+        if !batch.succeeded.isEmpty {
+            pendingOfficialIdentityChange = false
+            state.officialIdentityChangedExternally = false
+        }
+        return (batch, state)
+    }
+
+    /// Export selected managed Grok accounts into a portable pack (in-memory).
+    public func exportAccounts(ids: [String]) throws -> AccountExportResult {
+        try GrokAccountExporter(store: store).export(accountIDs: ids)
+    }
+
     /// Import pasted Grok auth.json / credential JSON. Partial success is reported in the batch result.
     public func importPastedText(_ text: String) async throws -> (GrokAccountImportBatchResult, GrokAccountState) {
         await acquireOperation()

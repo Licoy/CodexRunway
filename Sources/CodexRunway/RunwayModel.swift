@@ -507,6 +507,64 @@ final class RunwayModel: ObservableObject {
         }
     }
 
+    /// Parse credential / transfer-pack files into a selectable import preview (no writes).
+    func previewAccountImport(urls: [URL]) -> CodexAccountImportPreview {
+        accountImporter.previewFiles(at: urls)
+    }
+
+    /// Commit selected Codex import preview rows.
+    @discardableResult
+    func commitAccountImport(
+        candidates: [CodexAccountImportCandidate],
+        selectedIDs: Set<String>) async -> Bool
+    {
+        let batch = await accountImporter.importPreviewSelection(
+            candidates,
+            selectedIDs: selectedIDs,
+            makeActiveFirst: managedAccounts.isEmpty)
+        reloadAccountIndex()
+        if batch.successCount > 0 {
+            mergeImportedAccounts(batch.succeeded)
+            accountOperationMessage = String(format: l10n.text(.accountsImportSucceeded), batch.successCount)
+            lastError = batch.failureCount > 0
+                ? "\(l10n.text(.accountsImportFailed)): \(humanizeImportFailures(batch.failures))"
+                : nil
+            refreshAllAccountQuotas()
+            return true
+        }
+        accountOperationMessage = nil
+        if batch.failures.contains("nothing_selected") {
+            lastError = l10n.text(.accountsExportEmpty)
+        } else if batch.failures.contains("no_credentials") || batch.failures.isEmpty {
+            lastError = l10n.text(.accountsImportNoCredentials)
+        } else {
+            lastError = "\(l10n.text(.accountsImportFailed)): \(humanizeImportFailures(batch.failures))"
+        }
+        return false
+    }
+
+    /// Export selected managed Codex accounts to a transfer pack file.
+    @discardableResult
+    func exportAccounts(ids: [String], to url: URL) -> Bool {
+        do {
+            let exporter = AccountExporter(
+                store: accountStore,
+                appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
+            let result = try exporter.write(accountIDs: ids, to: url)
+            accountOperationMessage = String(format: l10n.text(.accountsExportSucceeded), result.exportedCount)
+            if result.failures.isEmpty {
+                lastError = nil
+            } else {
+                lastError = "\(l10n.text(.accountsExportFailed)): \(result.failures.prefix(3).joined(separator: "; "))"
+            }
+            return true
+        } catch {
+            accountOperationMessage = nil
+            lastError = "\(l10n.text(.accountsExportFailed)): \(error.localizedDescription)"
+            return false
+        }
+    }
+
     func importAPIKey(_ key: String) {
         Task {
             do {
