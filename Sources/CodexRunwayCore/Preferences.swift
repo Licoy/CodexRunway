@@ -416,6 +416,21 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case version
     case weeklyValueEstimate
     case weeklyUsage
+    case widgetAllDevices
+    case widgetBalance
+    case widgetCost
+    case widgetDataCorrupt
+    case widgetDataOld
+    case widgetMetricTitle
+    case widgetNoData
+    case widgetOverviewTitle
+    case widgetRemaining
+    case widgetResetCredits
+    case widgetResetTodayTitle
+    case widgetThisMac
+    case widgetTokenTrendTitle
+    case widgetUpdated
+    case widgetVersionUnsupported
 }
 
 public struct L10n: Sendable {

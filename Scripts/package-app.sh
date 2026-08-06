@@ -17,16 +17,31 @@ case "$ARCH" in
 esac
 
 TRIPLE="${ARCH}-apple-macosx12.0"
+INCLUDE_WIDGET="${INCLUDE_WIDGET:-0}"
+RUNWAY_BUNDLE_ID="${RUNWAY_BUNDLE_ID:-com.github.codex-runway}"
+RUNWAY_APP_GROUP_ID="${RUNWAY_APP_GROUP_ID:-group.com.github.codex-runway}"
+RUNWAY_WIDGET_BUNDLE_ID="${RUNWAY_WIDGET_BUNDLE_ID:-${RUNWAY_BUNDLE_ID}.widget}"
+RUNWAY_WIDGET_STORAGE_MODE="${RUNWAY_WIDGET_STORAGE_MODE:-local}"
 DIST="$ROOT/dist"
 APP="$DIST/CodexRunway.app"
 CONTENTS="$APP/Contents"
 MACOS="$CONTENTS/MacOS"
 RESOURCES="$CONTENTS/Resources"
 FRAMEWORKS="$CONTENTS/Frameworks"
+PLUGINS="$CONTENTS/PlugIns"
+WIDGET_DERIVED="$DIST/widget-derived-${ARCH}"
 ZIP="$DIST/CodexRunway-macos-${ARCH}.zip"
 TAR_GZ="$DIST/CodexRunway-macos-${ARCH}.app.tar.gz"
 DMG="$DIST/CodexRunway-macos-${ARCH}.dmg"
 DMG_ROOT="$DIST/dmg-${ARCH}"
+
+case "$RUNWAY_WIDGET_STORAGE_MODE" in
+  local|app-group) ;;
+  *)
+    printf 'Unsupported RUNWAY_WIDGET_STORAGE_MODE: %s\n' "$RUNWAY_WIDGET_STORAGE_MODE" >&2
+    exit 2
+    ;;
+esac
 
 rm -rf "$APP"
 mkdir -p "$MACOS" "$RESOURCES" "$FRAMEWORKS"
@@ -45,6 +60,7 @@ if [[ -n "${EXPECTED_MACOS_SDK_MAJOR:-}" ]]; then
   esac
 fi
 cp "$ROOT/Resources/Info.plist" "$CONTENTS/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $RUNWAY_BUNDLE_ID" "$CONTENTS/Info.plist"
 cp "$ROOT/Resources/AppIcon.svg" "$RESOURCES/AppIcon.svg"
 cp "$ROOT/Resources/AppIcon.png" "$RESOURCES/AppIcon.png"
 cp "$ROOT/Resources/AppIcon.icns" "$RESOURCES/AppIcon.icns"
@@ -56,23 +72,85 @@ if [[ -d "$BIN_DIR/Sparkle.framework" ]]; then
   install_name_tool -add_rpath "@executable_path/../Frameworks" "$MACOS/CodexRunway" 2>/dev/null || true
 fi
 
+if [[ "$INCLUDE_WIDGET" == "1" ]]; then
+  rm -rf "$WIDGET_DERIVED"
+  WIDGET_BUILD_SETTINGS=(
+    RUNWAY_WIDGET_BUNDLE_ID="$RUNWAY_WIDGET_BUNDLE_ID"
+    RUNWAY_APP_GROUP_ID="$RUNWAY_APP_GROUP_ID"
+    RUNWAY_WIDGET_DISPLAY_NAME="Codex Runway"
+    RUNWAY_WIDGET_STORAGE_MODE="$RUNWAY_WIDGET_STORAGE_MODE"
+    CODE_SIGNING_ALLOWED=NO
+    ARCHS="$ARCH"
+    ONLY_ACTIVE_ARCH=YES
+  )
+  if [[ "$RUNWAY_WIDGET_STORAGE_MODE" == "local" ]]; then
+    WIDGET_BUILD_SETTINGS+=(ENABLE_APP_SANDBOX=NO CODE_SIGN_ENTITLEMENTS=)
+  fi
+  xcodebuild \
+    -project "$ROOT/WidgetExtension/CodexRunwayWidget.xcodeproj" \
+    -scheme CodexRunwayWidget \
+    -configuration Release \
+    -derivedDataPath "$WIDGET_DERIVED" \
+    "${WIDGET_BUILD_SETTINGS[@]}" \
+    build
+  mkdir -p "$PLUGINS"
+  /usr/bin/ditto \
+    "$WIDGET_DERIVED/Build/Products/Release/CodexRunwayWidget.appex" \
+    "$PLUGINS/CodexRunwayWidget.appex"
+  /usr/libexec/PlistBuddy \
+    -c "Add :RunwayWidgetStorageMode string $RUNWAY_WIDGET_STORAGE_MODE" \
+    "$CONTENTS/Info.plist"
+  if [[ "$RUNWAY_WIDGET_STORAGE_MODE" == "app-group" ]]; then
+    /usr/libexec/PlistBuddy -c "Add :RunwayAppGroupID string $RUNWAY_APP_GROUP_ID" "$CONTENTS/Info.plist"
+  fi
+fi
+
 if command -v codesign >/dev/null 2>&1; then
-  ENTITLEMENTS="$(mktemp)"
-  trap 'rm -f "$ENTITLEMENTS"' EXIT
-  cat >"$ENTITLEMENTS" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>com.apple.security.cs.disable-library-validation</key>
-  <true/>
-</dict>
-</plist>
-PLIST
+  APP_ENTITLEMENTS="$(mktemp)"
+  WIDGET_ENTITLEMENTS="$(mktemp)"
+  trap 'rm -f "$APP_ENTITLEMENTS" "$WIDGET_ENTITLEMENTS"' EXIT
+  plutil -create xml1 "$APP_ENTITLEMENTS"
+  /usr/libexec/PlistBuddy \
+    -c "Add :com.apple.security.cs.disable-library-validation bool true" \
+    "$APP_ENTITLEMENTS"
+  if [[ "$INCLUDE_WIDGET" == "1" ]]; then
+    plutil -create xml1 "$WIDGET_ENTITLEMENTS"
+    /usr/libexec/PlistBuddy \
+      -c "Add :com.apple.security.app-sandbox bool true" \
+      "$WIDGET_ENTITLEMENTS"
+    if [[ "$RUNWAY_WIDGET_STORAGE_MODE" == "app-group" ]]; then
+      /usr/libexec/PlistBuddy \
+        -c "Add :com.apple.security.application-groups array" \
+        -c "Add :com.apple.security.application-groups:0 string $RUNWAY_APP_GROUP_ID" \
+        "$APP_ENTITLEMENTS"
+      /usr/libexec/PlistBuddy \
+        -c "Add :com.apple.security.application-groups array" \
+        -c "Add :com.apple.security.application-groups:0 string $RUNWAY_APP_GROUP_ID" \
+        "$WIDGET_ENTITLEMENTS"
+    else
+      /usr/libexec/PlistBuddy \
+        -c "Add :com.apple.security.temporary-exception.files.home-relative-path.read-only array" \
+        -c "Add :com.apple.security.temporary-exception.files.home-relative-path.read-only:0 string /.codex-runway/widget-snapshot.json" \
+        "$WIDGET_ENTITLEMENTS"
+    fi
+  fi
   if [[ -d "$FRAMEWORKS/Sparkle.framework" ]]; then
     codesign --force --options runtime --sign - "$FRAMEWORKS/Sparkle.framework" >/dev/null
   fi
-  codesign --force --deep --options runtime --entitlements "$ENTITLEMENTS" --sign - "$APP" >/dev/null
+  if [[ "$INCLUDE_WIDGET" == "1" ]]; then
+    codesign \
+      --force \
+      --options runtime \
+      --entitlements "$WIDGET_ENTITLEMENTS" \
+      --sign - \
+      "$PLUGINS/CodexRunwayWidget.appex" >/dev/null
+  fi
+  codesign \
+    --force \
+    --options runtime \
+    --entitlements "$APP_ENTITLEMENTS" \
+    --sign - \
+    "$APP" >/dev/null
 fi
 
 mkdir -p "$DIST"

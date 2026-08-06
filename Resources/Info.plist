@@ -14,6 +14,17 @@
   <string>Codex Runway</string>
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>Codex Runway Widget</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>codex-runway</string>
+      </array>
+    </dict>
+  </array>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

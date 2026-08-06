@@ -1,0 +1,440 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0C5E02FAC674D30EA561F3E7 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 91E4166797E8012DDC8D3340 /* InfoPlist.strings */; };
+		424E95D7D05922D2FB487894 /* RunwayWidgetIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584361D34A68FF7B3AA95795 /* RunwayWidgetIntent.swift */; };
+		43354419B6594C517D476421 /* CodexRunwayCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9E942C55E98A684290A9D5EB /* CodexRunwayCore */; };
+		4B985645D5E857B94BC8FDA3 /* RunwayWidgetTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75436C8BC8F525CBBD6D1128 /* RunwayWidgetTimeline.swift */; };
+		58ECBB735DF87168F9841432 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FAC2D79BF2F92E5714B9424B /* SwiftUI.framework */; };
+		5AE9B1C78DBF92FEA1005623 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 77414181F54186AE1D348E02 /* Localizable.strings */; };
+		5AEC35014557B2FB7852DA1E /* RunwayWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7063B6106FDE3DD673188EB6 /* RunwayWidgets.swift */; };
+		634AAFBABD2A5EA77853A2DE /* RunwayWidgetComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 170C98E16E75DF1BEF33FAFD /* RunwayWidgetComponents.swift */; };
+		7553CDA587D5AEA50CC407AE /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5C3011052B0C2A6F8DA3C644 /* WidgetKit.framework */; };
+		FD6211635B6AFA822261530E /* RunwayWidgetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40F3EB404AEA91840F669462 /* RunwayWidgetViews.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0A2809594C726FEF7BDF4646 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		170C98E16E75DF1BEF33FAFD /* RunwayWidgetComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunwayWidgetComponents.swift; sourceTree = "<group>"; };
+		1E93666B9BF0243EB31734B8 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		2CCA40575DB37014EBCB4AD5 /* CodexRunwayWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CodexRunwayWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		40F3EB404AEA91840F669462 /* RunwayWidgetViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunwayWidgetViews.swift; sourceTree = "<group>"; };
+		584361D34A68FF7B3AA95795 /* RunwayWidgetIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunwayWidgetIntent.swift; sourceTree = "<group>"; };
+		5C3011052B0C2A6F8DA3C644 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		5EBA3519E21392348B249C18 /* codex-runway */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "codex-runway"; path = ..; sourceTree = SOURCE_ROOT; };
+		7063B6106FDE3DD673188EB6 /* RunwayWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunwayWidgets.swift; sourceTree = "<group>"; };
+		71AC8E26F9A6ABEE4FB2B87E /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		75436C8BC8F525CBBD6D1128 /* RunwayWidgetTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunwayWidgetTimeline.swift; sourceTree = "<group>"; };
+		FAC2D79BF2F92E5714B9424B /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		FC027BE6FC4EDA134480B5A8 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		DBB25C3592726FD0A3859111 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				43354419B6594C517D476421 /* CodexRunwayCore in Frameworks */,
+				58ECBB735DF87168F9841432 /* SwiftUI.framework in Frameworks */,
+				7553CDA587D5AEA50CC407AE /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		064019DBEA6F90AFB5771500 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				FAC2D79BF2F92E5714B9424B /* SwiftUI.framework */,
+				5C3011052B0C2A6F8DA3C644 /* WidgetKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		48ACFBB93DB6E791D3DCB4BE = {
+			isa = PBXGroup;
+			children = (
+				9090A6D0F726C0720F30096D /* CodexRunwayWidget */,
+				C9AA5E5EBE4B41720777943B /* Packages */,
+				064019DBEA6F90AFB5771500 /* Frameworks */,
+				FBC6447C0315F3CA5C645544 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		5F4D5637D24F039A5AE38CA1 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				91E4166797E8012DDC8D3340 /* InfoPlist.strings */,
+				77414181F54186AE1D348E02 /* Localizable.strings */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		9090A6D0F726C0720F30096D /* CodexRunwayWidget */ = {
+			isa = PBXGroup;
+			children = (
+				170C98E16E75DF1BEF33FAFD /* RunwayWidgetComponents.swift */,
+				584361D34A68FF7B3AA95795 /* RunwayWidgetIntent.swift */,
+				7063B6106FDE3DD673188EB6 /* RunwayWidgets.swift */,
+				75436C8BC8F525CBBD6D1128 /* RunwayWidgetTimeline.swift */,
+				40F3EB404AEA91840F669462 /* RunwayWidgetViews.swift */,
+				5F4D5637D24F039A5AE38CA1 /* Resources */,
+			);
+			name = CodexRunwayWidget;
+			path = ../Sources/CodexRunwayWidget;
+			sourceTree = "<group>";
+		};
+		C9AA5E5EBE4B41720777943B /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				5EBA3519E21392348B249C18 /* codex-runway */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		FBC6447C0315F3CA5C645544 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2CCA40575DB37014EBCB4AD5 /* CodexRunwayWidget.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A91ABC467C06256F00614734 /* CodexRunwayWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ED9CD13039A5C3287870691B /* Build configuration list for PBXNativeTarget "CodexRunwayWidget" */;
+			buildPhases = (
+				132093B25484EF6152634AC8 /* Sources */,
+				4B6503EC06D1196EB864A56F /* Resources */,
+				DBB25C3592726FD0A3859111 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CodexRunwayWidget;
+			packageProductDependencies = (
+				9E942C55E98A684290A9D5EB /* CodexRunwayCore */,
+			);
+			productName = CodexRunwayWidget;
+			productReference = 2CCA40575DB37014EBCB4AD5 /* CodexRunwayWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A235CE99E0FC22F21863374D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					A91ABC467C06256F00614734 = {
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 763DF4B12DA2C2867F83FF3C /* Build configuration list for PBXProject "CodexRunwayWidget" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+				"zh-Hans",
+			);
+			mainGroup = 48ACFBB93DB6E791D3DCB4BE;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				68611524D5A3546A0127E2B2 /* XCLocalSwiftPackageReference ".." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = FBC6447C0315F3CA5C645544 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A91ABC467C06256F00614734 /* CodexRunwayWidget */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		4B6503EC06D1196EB864A56F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0C5E02FAC674D30EA561F3E7 /* InfoPlist.strings in Resources */,
+				5AE9B1C78DBF92FEA1005623 /* Localizable.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		132093B25484EF6152634AC8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				634AAFBABD2A5EA77853A2DE /* RunwayWidgetComponents.swift in Sources */,
+				424E95D7D05922D2FB487894 /* RunwayWidgetIntent.swift in Sources */,
+				4B985645D5E857B94BC8FDA3 /* RunwayWidgetTimeline.swift in Sources */,
+				FD6211635B6AFA822261530E /* RunwayWidgetViews.swift in Sources */,
+				5AEC35014557B2FB7852DA1E /* RunwayWidgets.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		77414181F54186AE1D348E02 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				1E93666B9BF0243EB31734B8 /* en */,
+				71AC8E26F9A6ABEE4FB2B87E /* zh-Hans */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+		91E4166797E8012DDC8D3340 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				0A2809594C726FEF7BDF4646 /* en */,
+				FC027BE6FC4EDA134480B5A8 /* zh-Hans */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		118A1074A2CD389E1C0283EB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_ENTITLEMENTS = CodexRunwayWidget.entitlements;
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 40;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_DEBUG_DYLIB = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.0.40;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(RUNWAY_WIDGET_BUNDLE_ID)";
+				PRODUCT_NAME = CodexRunwayWidget;
+				RUNWAY_APP_GROUP_ID = "group.com.github.codex-runway";
+				RUNWAY_WIDGET_BUNDLE_ID = "com.github.codex-runway.widget";
+				RUNWAY_WIDGET_DISPLAY_NAME = "Codex Runway";
+				RUNWAY_WIDGET_STORAGE_MODE = "app-group";
+				SDKROOT = macosx;
+				SKIP_INSTALL = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		BC8C1B0DC412E34F84D90E21 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		C98FC194AE270FB91C3BDC2A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_ENTITLEMENTS = CodexRunwayWidget.entitlements;
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 40;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_DEBUG_DYLIB = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.0.40;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(RUNWAY_WIDGET_BUNDLE_ID)";
+				PRODUCT_NAME = CodexRunwayWidget;
+				RUNWAY_APP_GROUP_ID = "group.com.github.codex-runway";
+				RUNWAY_WIDGET_BUNDLE_ID = "com.github.codex-runway.widget";
+				RUNWAY_WIDGET_DISPLAY_NAME = "Codex Runway";
+				RUNWAY_WIDGET_STORAGE_MODE = "app-group";
+				SDKROOT = macosx;
+				SKIP_INSTALL = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		D10D98183B890FF6FDC402AA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		763DF4B12DA2C2867F83FF3C /* Build configuration list for PBXProject "CodexRunwayWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D10D98183B890FF6FDC402AA /* Debug */,
+				BC8C1B0DC412E34F84D90E21 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		ED9CD13039A5C3287870691B /* Build configuration list for PBXNativeTarget "CodexRunwayWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				118A1074A2CD389E1C0283EB /* Debug */,
+				C98FC194AE270FB91C3BDC2A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		68611524D5A3546A0127E2B2 /* XCLocalSwiftPackageReference ".." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		9E942C55E98A684290A9D5EB /* CodexRunwayCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CodexRunwayCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A235CE99E0FC22F21863374D /* Project object */;
+}

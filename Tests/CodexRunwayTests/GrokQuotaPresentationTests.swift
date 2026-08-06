@@ -60,6 +60,8 @@ struct GrokQuotaPresentationTests {
             l10n: L10n(language: .english))
 
         #expect(presentation.meters.count == 4)
+        #expect(presentation.meters.first?.source == .standard)
+        #expect(presentation.meters.dropFirst().allSatisfy { $0.source == .modelSpecific })
         #expect(presentation.meters[1].title == "Grok Build")
         #expect(presentation.meters[1].usedPercent == 42)
         #expect(presentation.productLines.count == 3)

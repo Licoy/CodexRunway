@@ -65,7 +65,11 @@ struct GrokQuotaPresentation: Sendable, Equatable {
                 usedPercent: productUsed,
                 windowMinutes: snapshot.period.map(windowMinutes),
                 resetsAt: snapshot.period?.resetsAt)
-            meters.append(QuotaMeter(title: title, window: productWindow, now: snapshot.updatedAt))
+            meters.append(QuotaMeter(
+                title: title,
+                window: productWindow,
+                now: snapshot.updatedAt,
+                source: .modelSpecific))
             productLines.append(
                 Line(title: title, value: "\(productUsed)% \(l10n.text(.used))"))
         }

@@ -26,4 +26,13 @@ jobs:
       - name: Package ${{ matrix.arch }}
         env:
           EXPECTED_MACOS_SDK_MAJOR: "26"
+          INCLUDE_WIDGET: "1"
+          RUNWAY_BUNDLE_ID: com.github.codex-runway.dev
+          RUNWAY_APP_GROUP_ID: group.com.github.codex-runway.dev
         run: ARCH=${{ matrix.arch }} bash Scripts/package-app.sh
+      - name: Verify embedded widget ${{ matrix.arch }}
+        run: |
+          plutil -lint dist/CodexRunway.app/Contents/Info.plist
+          plutil -lint dist/CodexRunway.app/Contents/PlugIns/CodexRunwayWidget.appex/Contents/Info.plist
+          lipo -archs dist/CodexRunway.app/Contents/PlugIns/CodexRunwayWidget.appex/Contents/MacOS/CodexRunwayWidget | grep -q '${{ matrix.arch }}'
+          codesign --verify --deep --strict dist/CodexRunway.app

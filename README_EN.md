@@ -31,6 +31,7 @@ Codex Runway is a native macOS menu bar app for checking Codex and Grok quota. I
 - Repair the local session index.
 - Support light, dark, system appearance, Chinese, and English.
 - Support built-in update checks.
+- Offer experimental macOS 14+ desktop widgets for quota overview, token trend, a key metric, and reset-today status.
 
 ## Screenshots
 
@@ -86,6 +87,22 @@ xattr -dr com.apple.quarantine /Applications/CodexRunway.app
 
 Then open the app again.
 
+## Desktop Widgets (Experimental)
+
+Desktop widgets require macOS 14 or later. They are currently available only in local experimental builds and are not included in public releases. Each widget can independently select Codex, Grok, or both in Edit Widget; Reset Today is Codex-only.
+
+`swift run CodexRunway` uses separate `swift-dev` identifiers and does not replace an existing installation. You can also package a widget-enabled app manually with `.dev` identifiers:
+
+```bash
+INCLUDE_WIDGET=1 \
+RUNWAY_BUNDLE_ID=com.github.codex-runway.dev \
+RUNWAY_APP_GROUP_ID=group.com.github.codex-runway.dev \
+RUNWAY_WIDGET_STORAGE_MODE=local \
+bash Scripts/package-app.sh
+```
+
+The app is written to `dist/CodexRunway.app`. Local ad-hoc builds default to a read-only versioned derived snapshot at `~/.codex-runway/widget-snapshot.json` with `0600` permissions. A formally signed build with a registered App Group can instead set `RUNWAY_WIDGET_STORAGE_MODE=app-group`. The snapshot contains no email, account ID, token, auth JSON, or raw external event text. Public distribution still requires Developer ID signing, App Group registration, and notarization.
+
 ## Requirements
 
 - macOS 12+
@@ -105,6 +122,8 @@ Then open the app again.
 ```bash
 swift run CodexRunway
 ```
+
+On macOS 14+, this command automatically builds and registers a separate `Codex Runway Dev` app and Widget extension, then launches it. The development app lives at `.build/codex-runway-widget-dev/CodexRunway-dev.app` and can be added directly from the system widget gallery. Quit any other running Codex Runway instance first. Set `CODEX_RUNWAY_DISABLE_DEV_APP=1` only when you want the raw unpackaged command-line process without widgets.
 
 Self-check:
 
@@ -130,6 +149,7 @@ The self-check reads local state only and makes no network request. It prints re
 - Session repair only touches `~/.codex/session_index.jsonl`, creates a backup before writing, and never deletes session files.
 - “Reset today?” only downloads the public status feed. It sends no Codex account, token, or local session content.
 - Update checks request only version information. Codex account and session data are not uploaded.
+- Widget snapshot storage contains only non-secret derived quota, balance, cost, daily-token, and reset-status data. The main app is the sole writer; widgets are read-only.
 
 ## Data sources
 

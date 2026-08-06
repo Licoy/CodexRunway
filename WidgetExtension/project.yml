@@ -1,0 +1,40 @@
+name: CodexRunwayWidget
+options:
+  bundleIdPrefix: com.github.codex-runway
+  deploymentTarget:
+    macOS: "14.0"
+packages:
+  CodexRunwayPackage:
+    path: ..
+targets:
+  CodexRunwayWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: ../Sources/CodexRunwayWidget
+    dependencies:
+      - package: CodexRunwayPackage
+        product: CodexRunwayCore
+      - sdk: SwiftUI.framework
+      - sdk: WidgetKit.framework
+    settings:
+      base:
+        APPLICATION_EXTENSION_API_ONLY: YES
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGN_ENTITLEMENTS: CodexRunwayWidget.entitlements
+        CODE_SIGN_STYLE: Manual
+        CURRENT_PROJECT_VERSION: 40
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_DEBUG_DYLIB: NO
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Info.plist
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        MARKETING_VERSION: 0.0.40
+        PRODUCT_BUNDLE_IDENTIFIER: $(RUNWAY_WIDGET_BUNDLE_ID)
+        PRODUCT_NAME: CodexRunwayWidget
+        RUNWAY_APP_GROUP_ID: group.com.github.codex-runway
+        RUNWAY_WIDGET_DISPLAY_NAME: Codex Runway
+        RUNWAY_WIDGET_STORAGE_MODE: app-group
+        RUNWAY_WIDGET_BUNDLE_ID: com.github.codex-runway.widget
+        SKIP_INSTALL: NO
+        SWIFT_VERSION: "6.0"

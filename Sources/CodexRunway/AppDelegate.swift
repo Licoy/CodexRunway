@@ -1,8 +1,10 @@
 import AppKit
+import CodexRunwayCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: StatusController?
+    private var pendingWidgetLinks: [RunwayWidgetDeepLink] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // LSUIElement apps have no default Edit menu, so ⌘V / ⌘C fail in SwiftUI text fields
@@ -10,6 +12,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installMainMenu()
         controller = StatusController()
         controller?.start()
+        for link in pendingWidgetLinks {
+            controller?.openWidget(link)
+        }
+        pendingWidgetLinks.removeAll()
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            guard let link = RunwayWidgetDeepLink(url: url) else { continue }
+            if let controller {
+                controller.openWidget(link)
+            } else {
+                pendingWidgetLinks.append(link)
+            }
+        }
     }
 
     private func installMainMenu() {

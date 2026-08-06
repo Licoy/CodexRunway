@@ -92,6 +92,16 @@ struct RunwayModelRefreshTests {
         #expect(model.tokenHeatmapLocalTokens == ["2026-07-26": 364])
         #expect(model.tokenHeatmapAllDevicesTokens.isEmpty)
 
+        // Metadata can outlive an empty official daily series. Widgets must still
+        // render the local series instead of labelling an empty chart as all devices.
+        model.tokenHeatmapOfficialStatsAsOf = "2026-07-27"
+        model.tokenHeatmapOfficialGeneratedAt = Date(timeIntervalSince1970: 1_785_139_420)
+        let codexWidget = try #require(model.makeWidgetSnapshot().provider(.codex))
+        #expect(codexWidget.tokenSource == .thisMac)
+        #expect(codexWidget.dailyTokens == [
+            RunwayWidgetDailyTokens(date: "2026-07-26", tokens: 364),
+        ])
+
         model.refreshTokenHeatmap(policy: .force)
         try await waitForTokenHeatmapRefresh(in: model)
         #expect(model.tokenHeatmapAllDevicesTokens == ["2026-07-26": 159])

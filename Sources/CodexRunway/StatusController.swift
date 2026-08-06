@@ -1,5 +1,6 @@
 import AppKit
 import CodexRunwayCore
+import Combine
 import SwiftUI
 
 @MainActor
@@ -23,6 +24,8 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     private var lastQuotaResetRefresh: Date?
     private var refreshSchedule = RefreshSchedule()
     private var timer: Timer?
+    private var widgetCoordinator: RunwayWidgetCoordinator?
+    private var widgetSnapshotCancellable: AnyCancellable?
 
     func start() {
         let button = statusItem.button
@@ -34,6 +37,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         model.onFullRefreshCompleted = { [weak self] in
             self?.fullRefreshCompleted()
         }
+        configureWidgets()
         settings.onChange = { [weak self] in
             self?.applyAppearance()
             self?.model.relabel()
@@ -41,6 +45,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
             self?.refreshIntervalChanged()
             self?.rebuildHostedViews()
             self?.updateStatusBarView()
+            self?.publishWidgetSnapshot(force: true)
         }
         updaterService.applyPreferences()
         applyAppearance()
@@ -115,6 +120,32 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
 
     private func fullRefreshCompleted(at completion: Date = Date()) {
         refreshSchedule.refreshCompleted(at: completion, interval: refreshInterval)
+        widgetCoordinator?.refreshConfigurations()
+        publishWidgetSnapshot(force: true)
+    }
+
+    private func configureWidgets() {
+        guard #available(macOS 14.0, *), let coordinator = RunwayWidgetCoordinator() else { return }
+        widgetCoordinator = coordinator
+        model.widgetRequirements = coordinator.initialRequirements
+        coordinator.onRequirementsChanged = { [weak self] requirements in
+            guard let self, self.model.widgetRequirements != requirements else { return }
+            self.model.widgetRequirements = requirements
+            if !requirements.isEmpty {
+                self.beginFullRefresh(policy: .ifChanged)
+            }
+        }
+        widgetSnapshotCancellable = model.objectWillChange
+            .debounce(for: .milliseconds(350), scheduler: RunLoop.main)
+            .sink { [weak self] in
+                DispatchQueue.main.async { self?.publishWidgetSnapshot(force: false) }
+            }
+        coordinator.refreshConfigurations()
+        publishWidgetSnapshot(force: true)
+    }
+
+    private func publishWidgetSnapshot(force: Bool) {
+        widgetCoordinator?.publish(model.makeWidgetSnapshot(), force: force)
     }
 
     private func refreshIntervalChanged(now: Date = Date()) {
@@ -446,6 +477,39 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         }
         startDetailsWindowCloseMonitors()
         refreshVisiblePopoverSections()
+    }
+
+    func openWidget(_ link: RunwayWidgetDeepLink) {
+        switch link.provider {
+        case .codex:
+            model.selectProvider(.codex)
+        case .grok:
+            model.selectProvider(.grok)
+        case .both:
+            break
+        }
+        showDetailsWindow()
+        switch link.section {
+        case .overview:
+            beginFullRefresh(policy: .ifChanged)
+        case .quota:
+            model.refreshQuota()
+        case .tokens:
+            if model.selectedProvider == .grok {
+                model.refreshGrokLocalUsage()
+            } else {
+                model.refreshTokenHeatmap(policy: .ifChanged)
+            }
+        case .cost:
+            if model.selectedProvider == .grok {
+                model.refreshGrokLocalUsage()
+            } else {
+                model.refreshCost(policy: .ifChanged)
+            }
+        case .resetToday:
+            model.selectProvider(.codex)
+            model.refreshRateLimitResetToday(force: true)
+        }
     }
 
     private func startDetailsWindowCloseMonitors() {

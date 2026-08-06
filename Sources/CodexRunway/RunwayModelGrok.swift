@@ -78,12 +78,20 @@ extension RunwayModel {
 
     /// True when the status bar (or panel) needs a fresh Grok quota snapshot.
     var needsGrokStatusBarData: Bool {
-        settings.preferences.statusBarProviderScope == .both || selectedProvider == .grok
+        settings.preferences.statusBarProviderScope == .both
+            || selectedProvider == .grok
+            || widgetRequirements.contains(.providerQuota)
+            || widgetRequirements.contains(.tokenTrend)
+            || widgetRequirements.contains(.cost)
     }
 
     /// True when the status bar (or panel) needs a fresh Codex quota snapshot.
     var needsCodexStatusBarData: Bool {
-        settings.preferences.statusBarProviderScope == .both || selectedProvider == .codex
+        settings.preferences.statusBarProviderScope == .both
+            || selectedProvider == .codex
+            || widgetRequirements.contains(.providerQuota)
+            || widgetRequirements.contains(.tokenTrend)
+            || widgetRequirements.contains(.cost)
     }
 
     var selectedQuotaText: String {
@@ -137,7 +145,10 @@ extension RunwayModel {
                 {
                     refreshGrok(.current)
                 }
-                if selectedProvider == .grok {
+                if selectedProvider == .grok
+                    || widgetRequirements.contains(.tokenTrend)
+                    || widgetRequirements.contains(.cost)
+                {
                     refreshGrokLocalUsage()
                 }
             } catch {
@@ -166,7 +177,10 @@ extension RunwayModel {
     }
 
     func refreshGrokLocalUsage() {
-        guard selectedProvider == .grok else { return }
+        guard selectedProvider == .grok
+            || widgetRequirements.contains(.tokenTrend)
+            || widgetRequirements.contains(.cost)
+        else { return }
         grokLocalUsageGeneration += 1
         let generation = grokLocalUsageGeneration
         grokPanelState.isRefreshingLocalUsage = true
@@ -326,7 +340,10 @@ extension RunwayModel {
                 grokPanelState.availability = grokAvailability(for: error)
             }
             finishGrokRefresh(generation: generation)
-            if selectedProvider == .grok {
+            if selectedProvider == .grok
+                || widgetRequirements.contains(.tokenTrend)
+                || widgetRequirements.contains(.cost)
+            {
                 refreshGrokLocalUsage()
             }
         }

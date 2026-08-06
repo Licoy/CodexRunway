@@ -6,7 +6,7 @@ public enum LanguagePreference: String, CaseIterable, Codable, Sendable {
     case simplifiedChinese
 }
 
-public enum ResolvedLanguage: String, Sendable, Equatable {
+public enum ResolvedLanguage: String, Codable, Sendable, Equatable {
     case english
     case simplifiedChinese
 }

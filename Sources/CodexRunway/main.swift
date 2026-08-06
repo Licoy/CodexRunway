@@ -71,6 +71,15 @@ if let renderIndex = CommandLine.arguments.firstIndex(where: { $0.hasPrefix("--r
     }
 }
 
+do {
+    if try RunwayDevAppBootstrap.relaunchIfNeeded() {
+        exit(0)
+    }
+} catch {
+    fputs("development app bootstrap failed: \(error.localizedDescription)\n", stderr)
+    exit(1)
+}
+
 guard let instanceGuard = try? SingleInstanceGuard.acquire() else {
     exit(0)
 }

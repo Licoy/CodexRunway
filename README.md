@@ -31,6 +31,7 @@ Codex Runway 是一个原生 macOS 状态栏应用，帮你在菜单栏查看 Co
 - 修复本机会话索引。
 - 支持浅色、深色、跟随系统和中英文界面。
 - 支持内置更新检测。
+- 提供 macOS 14+ 实验性桌面组件：额度总览、Token 趋势、关键指标和今日重置。
 
 ## 截图
 
@@ -106,6 +107,8 @@ xattr -dr com.apple.quarantine /Applications/CodexRunway.app
 swift run CodexRunway
 ```
 
+在 macOS 14+，该命令会自动构建并注册独立的 `Codex Runway Dev` 应用和 Widget 扩展，然后启动它；开发应用位于 `.build/codex-runway-widget-dev/CodexRunway-dev.app`，可直接从系统组件库添加。启动前请先退出其他正在运行的 Codex Runway 实例。若只需运行未打包的命令行进程，可设置 `CODEX_RUNWAY_DISABLE_DEV_APP=1`。
+
 自检命令：
 
 ```bash
@@ -113,6 +116,22 @@ swift run CodexRunway --self-check
 ```
 
 自检只读取本地状态，不请求网络；它会输出脱敏的 Codex 诊断，以及 Grok CLI 版本、凭据状态和账号身份。任何 token 或 API Key 都不会打印。
+
+## 桌面组件（实验）
+
+桌面组件要求 macOS 14+，当前仅用于本地实验构建，尚未包含在公开 Release 中。每个组件可在系统的“编辑组件”中独立选择 Codex、Grok 或两者；“今日重置”仅支持 Codex。
+
+`swift run CodexRunway` 使用独立的 `swift-dev` 标识，不会覆盖现有安装。也可使用 `.dev` 标识手动生成带组件的应用：
+
+```bash
+INCLUDE_WIDGET=1 \
+RUNWAY_BUNDLE_ID=com.github.codex-runway.dev \
+RUNWAY_APP_GROUP_ID=group.com.github.codex-runway.dev \
+RUNWAY_WIDGET_STORAGE_MODE=local \
+bash Scripts/package-app.sh
+```
+
+生成的应用位于 `dist/CodexRunway.app`。本地 ad-hoc 构建默认从 `~/.codex-runway/widget-snapshot.json` 只读权限为 `0600` 的版本化派生快照；已注册 App Group 的正式签名构建可改用 `RUNWAY_WIDGET_STORAGE_MODE=app-group`。快照不含邮箱、账号 ID、token、认证 JSON 或外部事件原文。正式分发仍需要后续配置 Developer ID、App Group 注册与公证。
 
 ## 隐私
 
@@ -130,6 +149,7 @@ swift run CodexRunway --self-check
 - 会话修复只处理 `~/.codex/session_index.jsonl`，写入前会创建备份，不删除会话文件。
 - 「今日是否重置」只下载公开状态源，不附带 Codex 账号、token 或本机会话内容。
 - 更新检测只访问版本信息，不上传 Codex 账号或会话数据。
+- 桌面组件快照存储仅保存额度、余额、派生成本、Token 日序列和重置状态等非密钥数据；主应用是唯一写入者，组件只读。
 
 ## 数据来源
 

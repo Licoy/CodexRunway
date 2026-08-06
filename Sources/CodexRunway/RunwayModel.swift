@@ -250,6 +250,7 @@ final class RunwayModel: ObservableObject {
     var grokLocalUsageGeneration = 0
     var grokLocalUsageWork: Task<Void, Never>?
     var onFullRefreshCompleted: (() -> Void)?
+    var widgetRequirements: RunwayWidgetRequirements = []
 
     init(
         settings: RunwaySettings,
@@ -623,9 +624,21 @@ final class RunwayModel: ObservableObject {
 
     func refresh(policy: UsageCostRefreshPolicy = .force) {
         if selectedProvider == .grok {
-            refreshGrok(.current, completesFullRefresh: true)
-            // Dual status bar still needs Codex quota even when the panel is Grok.
-            if needsCodexStatusBarData, !isRefreshingAll {
+            let needsFullCodexWidgetRefresh = widgetRequirements.contains(.tokenTrend)
+                || widgetRequirements.contains(.cost)
+            refreshGrok(.current, completesFullRefresh: !needsFullCodexWidgetRefresh)
+            if needsFullCodexWidgetRefresh, !isRefreshingAll, refreshingSections.isEmpty {
+                let refreshID = UUID()
+                activeFullRefreshID = refreshID
+                isRefreshingAll = true
+                let work = Task { await refreshNow(policy: policy) }
+                fullRefreshWork = work
+                Task {
+                    await work.value
+                    finishFullRefresh(id: refreshID)
+                }
+            } else if needsCodexStatusBarData, !isRefreshingAll {
+                // Dual status bar and quota-only widgets still need Codex quota.
                 Task { await refreshQuotaNow() }
             }
             return
@@ -672,7 +685,7 @@ final class RunwayModel: ObservableObject {
     }
 
     func refreshRateLimitResetToday(force: Bool = true) {
-        guard settings.preferences.showsRateLimitResetToday else { return }
+        guard needsRateLimitResetTodayData else { return }
         guard !isRefreshing(.rateLimitResetToday) else { return }
         Task { await refreshRateLimitResetTodayNow(force: force) }
     }
@@ -691,7 +704,7 @@ final class RunwayModel: ObservableObject {
     }
 
     func refreshTokenHeatmap(policy: UsageCostRefreshPolicy = .force) {
-        guard settings.preferences.showsTokenUsageHeatmap else { return }
+        guard settings.preferences.showsTokenUsageHeatmap || widgetRequirements.contains(.tokenTrend) else { return }
         guard !isRefreshingAll,
               !refreshingSections.contains(.tokenHeatmap),
               shouldRefreshTokenHeatmap(policy: policy)
@@ -729,7 +742,7 @@ final class RunwayModel: ObservableObject {
                 costSubtitle = nextSubtitle
             }
         }
-        if selectedProvider == .codex {
+        if selectedProvider == .codex || widgetRequirements.contains(.resetToday) {
             refreshRateLimitResetTodayDisplayIfNeeded(now: now)
             refreshRateLimitResetTodayIfDue(now: now)
         }
@@ -919,6 +932,102 @@ final class RunwayModel: ObservableObject {
         Task.detached { try? exporter.save(snapshot) }
     }
 
+    func makeWidgetSnapshot(now: Date = Date()) -> RunwayWidgetSnapshot {
+        let providers = [makeCodexWidgetProvider(), makeGrokWidgetProvider()]
+        return RunwayWidgetSnapshot(
+            generatedAt: now,
+            language: l10n.language,
+            providers: providers,
+            resetToday: makeWidgetResetToday(now: now))
+    }
+
+    private var needsRateLimitResetTodayData: Bool {
+        settings.preferences.showsRateLimitResetToday || widgetRequirements.contains(.resetToday)
+    }
+
+    private func makeCodexWidgetProvider() -> RunwayWidgetProviderSnapshot {
+        let hasAllDevicesTokens = !tokenHeatmapAllDevicesTokens.isEmpty
+        let tokenSource: RunwayWidgetTokenSource = hasAllDevicesTokens ? .allDevices : .thisMac
+        let tokens = hasAllDevicesTokens ? tokenHeatmapAllDevicesTokens : tokenHeatmapLocalTokens
+        return RunwayWidgetProviderSnapshot(
+            provider: .codex,
+            availability: latestQuota == nil
+                ? (accountDisplay.isAuthenticated ? .unavailable : .notLoggedIn)
+                : .available,
+            plan: latestQuota?.plan,
+            updatedAt: latestQuota?.updatedAt,
+            quota: quotaMeters.map { widgetQuota($0) },
+            balanceUSD: latestQuota?.creditsBalance.map { Decimal($0) },
+            apiEquivalentCostUSD: costDetail?.estimatedUSD,
+            tokenSource: tokenSource,
+            dailyTokens: widgetDailyTokens(tokens),
+            resetCredits: resetCreditSummary.map {
+                RunwayWidgetResetCredits(
+                    availableCount: $0.availableCount,
+                    expiringCount: $0.expiringCount)
+            })
+    }
+
+    private func makeGrokWidgetProvider() -> RunwayWidgetProviderSnapshot {
+        let rawQuota = grokAccountState.accounts
+            .first(where: { $0.id == grokAccountState.currentAccountID })?
+            .cachedQuota
+        let availability: RunwayWidgetAvailability
+        switch grokPanelState.availability {
+        case .ready: availability = .available
+        case .notLoggedIn, .reauthenticationRequired: availability = .notLoggedIn
+        case .cliUnavailable, .cliTooOld: availability = .cliUnavailable
+        case .loading, .billingParseFailed, .failed: availability = .unavailable
+        }
+        let meters = grokPanelState.quota?.meters ?? []
+        let visibleMeters = settings.preferences.showsModelSpecificQuotaUsage
+            ? meters
+            : meters.filter { $0.source == .standard }
+        return RunwayWidgetProviderSnapshot(
+            provider: .grok,
+            availability: availability,
+            plan: grokPanelState.quota?.plan,
+            updatedAt: grokPanelState.quota?.updatedAt,
+            quota: visibleMeters.map { widgetQuota($0) },
+            balanceUSD: rawQuota?.prepaidBalanceCents.map { Decimal($0) / 100 },
+            apiEquivalentCostUSD: grokCostDetail?.estimatedUSD,
+            tokenSource: .thisMac,
+            dailyTokens: widgetDailyTokens(grokTokenHeatmapLocalTokens),
+            resetCredits: nil)
+    }
+
+    private func widgetQuota(
+        _ meter: QuotaMeter,
+        source: RunwayWidgetQuotaSource? = nil
+    ) -> RunwayWidgetQuota {
+        RunwayWidgetQuota(
+            title: meter.title,
+            windowMinutes: meter.windowMinutes,
+            source: source ?? (meter.source == .standard ? .standard : .modelSpecific),
+            usedPercent: meter.usedPercent,
+            remainingPercent: meter.remainingPercent,
+            resetsAt: meter.resetsAt)
+    }
+
+    private func widgetDailyTokens(_ tokens: [String: Int]) -> [RunwayWidgetDailyTokens] {
+        tokens.map { RunwayWidgetDailyTokens(date: $0.key, tokens: $0.value) }
+    }
+
+    private func makeWidgetResetToday(now: Date) -> RunwayWidgetResetTodaySnapshot? {
+        guard let snapshot = rateLimitResetToday else { return nil }
+        let state: RunwayWidgetResetTodaySnapshot.State
+        switch snapshot.resolvedState(now: now) {
+        case .yes: state = .yes
+        case .no: state = .no
+        case .unknown: state = .unknown
+        }
+        return RunwayWidgetResetTodaySnapshot(
+            state: state,
+            nextScheduledAt: snapshot.nextScheduledReset(now: now)?.effectiveAt,
+            lastSuccessfulCheckAt: snapshot.lastSuccessfulCheckAt,
+            fetchedAt: snapshot.fetchedAt)
+    }
+
     private func withRefresh(_ sections: Set<RunwayRefreshSection>, operation: () async -> Void) async {
         guard refreshingSections.isDisjoint(with: sections) else { return }
         refreshingSections.formUnion(sections)
@@ -945,10 +1054,10 @@ final class RunwayModel: ObservableObject {
             let quotaResult = await quotaResultTask
             if case .success(let quotaSnapshot) = quotaResult {
                 let needsCost =
-                    settings.preferences.showsCostSummary
+                    (settings.preferences.showsCostSummary || widgetRequirements.contains(.cost))
                     && shouldRefreshCost(policy: policy, quota: quotaSnapshot)
                 let needsHeatmap =
-                    settings.preferences.showsTokenUsageHeatmap
+                    (settings.preferences.showsTokenUsageHeatmap || widgetRequirements.contains(.tokenTrend))
                     && shouldRefreshTokenHeatmap(policy: policy)
                 if needsCost || needsHeatmap {
                     var sections = Set<RunwayRefreshSection>()
@@ -1125,7 +1234,7 @@ final class RunwayModel: ObservableObject {
     }
 
     private func refreshRateLimitResetTodayIfDue(now: Date) {
-        guard settings.preferences.showsRateLimitResetToday else { return }
+        guard needsRateLimitResetTodayData else { return }
         guard !isRefreshing(.rateLimitResetToday) else { return }
         let interval = TimeInterval(settings.preferences.rateLimitResetTodayRefreshIntervalSeconds)
         if let last = lastRateLimitResetTodayFetch, now.timeIntervalSince(last) < interval {
@@ -1184,7 +1293,7 @@ final class RunwayModel: ObservableObject {
     }
 
     private func refreshRateLimitResetTodayNow(force: Bool) async {
-        guard settings.preferences.showsRateLimitResetToday else { return }
+        guard needsRateLimitResetTodayData else { return }
         if !force,
            let last = lastRateLimitResetTodayFetch
         {

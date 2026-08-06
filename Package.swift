@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "CodexRunway",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v12),
     ],
@@ -21,6 +22,10 @@ let package = Package(
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
             ]),
+        .target(
+            name: "CodexRunwayWidget",
+            dependencies: ["CodexRunwayCore"],
+            resources: [.process("Resources")]),
         .executableTarget(
             name: "CodexRunway",
             dependencies: [
