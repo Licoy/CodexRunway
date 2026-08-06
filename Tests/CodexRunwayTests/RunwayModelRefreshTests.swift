@@ -224,24 +224,34 @@ struct RunwayModelRefreshTests {
 
     @Test("full refresh starts independent popover sections without waiting for API cost")
     func fullRefreshStartsIndependentSectionsWithoutWaitingForAPICost() async throws {
+        // Gate-based ordering (not sleep races): hold cost and reset so we can
+        // prove independent sections start while cost is still in flight, and that
+        // cost finishes without waiting for reset credits.
         let recorder = RefreshEventRecorder()
+        let costHold = AsyncGate()
+        let resetHold = AsyncGate()
+        defer {
+            costHold.release()
+            resetHold.release()
+        }
         let settings = RunwaySettings(store: PreferencesStore(defaults: scopedDefaults()))
         settings.updateShowsCostSummary(true)
         settings.updateShowsSessionRepairSummary(true)
         settings.updateShowsRecentSessions(true)
+        // Keep this test focused on cost/reset/session scheduling, not heatmap IO.
+        settings.updateShowsTokenUsageHeatmap(false)
 
         let quota = Self.quotaSnapshot()
         let services = RunwayModelServices(
             loadValidAuth: { _, _ in Self.auth() },
             fetchQuota: { _ in
                 await recorder.record("quota-start")
-                try await Task.sleep(for: .milliseconds(20))
                 await recorder.record("quota-finish")
                 return quota
             },
             fetchResetCredits: { _ in
                 await recorder.record("reset-start")
-                try await Task.sleep(for: .milliseconds(220))
+                await resetHold.wait()
                 await recorder.record("reset-finish")
                 return ResetCreditsSnapshot(availableCount: 0, credits: [], updatedAt: Date())
             },
@@ -250,7 +260,7 @@ struct RunwayModelRefreshTests {
             },
             scanAPIEquivalent: { queries, now, _, _ in
                 await recorder.record("cost-start")
-                try await Task.sleep(for: .milliseconds(160))
+                await costHold.wait()
                 await recorder.record("cost-finish")
                 return Self.costSummaries(for: queries, calculatedAt: now)
             },
@@ -277,19 +287,33 @@ struct RunwayModelRefreshTests {
         let model = makeModel(settings: settings, services: services)
 
         model.refresh()
-        try await recorder.waitFor("cost-finish")
-        try await recorder.waitFor("reset-finish")
 
-        let events = await recorder.events
-        let repairStart = try #require(events.firstIndex(of: "repair-start"))
-        let recentStart = try #require(events.firstIndex(of: "recent-start"))
-        let costStart = try #require(events.firstIndex(of: "cost-start"))
-        let costFinish = try #require(events.firstIndex(of: "cost-finish"))
-        let resetFinish = try #require(events.firstIndex(of: "reset-finish"))
+        try await recorder.waitFor("repair-start")
+        try await recorder.waitFor("recent-start")
+        try await recorder.waitFor("cost-start")
+        try await recorder.waitFor("reset-start")
+
+        // While cost is still held, independent popover sections must already have started.
+        var events = await recorder.events
+        #expect(events.contains("repair-start"))
+        #expect(events.contains("recent-start"))
+        #expect(events.contains("cost-start"))
+        #expect(!events.contains("cost-finish"))
+        #expect(!events.contains("reset-finish"))
         #expect(events.filter { $0 == "quota-start" }.count == 1)
-        #expect(repairStart < costFinish)
-        #expect(recentStart < costFinish)
-        #expect(costStart < resetFinish)
+
+        costHold.release()
+        try await recorder.waitFor("cost-finish")
+
+        // Cost finished while reset credits are still held — must not serialize behind reset.
+        events = await recorder.events
+        #expect(events.contains("cost-finish"))
+        #expect(!events.contains("reset-finish"))
+
+        resetHold.release()
+        try await recorder.waitFor("reset-finish")
+        events = await recorder.events
+        #expect(events.contains("reset-finish"))
     }
 
     @Test("default API cost summary scans today's range")
@@ -907,6 +931,39 @@ private actor RefreshEventRecorder {
             try await Task.sleep(for: .milliseconds(20))
         }
         Issue.record("Timed out waiting for \(event); events: \(events)")
+    }
+}
+
+/// Synchronous-release gate for deterministic concurrency tests (safe in `defer`).
+private final class AsyncGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        // Register under the lock only inside the sync continuation setup so this
+        // stays valid under Swift 6's "no locks across async" rule.
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            if isOpen {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                waiters.append(continuation)
+                lock.unlock()
+            }
+        }
+    }
+
+    func release() {
+        lock.lock()
+        isOpen = true
+        let pending = waiters
+        waiters.removeAll()
+        lock.unlock()
+        for waiter in pending {
+            waiter.resume()
+        }
     }
 }
 
