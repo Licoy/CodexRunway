@@ -118,6 +118,12 @@ struct GrokAccountsSettingsContent: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
+                        if let resetsAt = quota.period?.resetsAt {
+                            NextResetCountdownLabel(
+                                resetsAt: resetsAt,
+                                l10n: l10n,
+                                font: .caption)
+                        }
                     }
                 }
                 Spacer()

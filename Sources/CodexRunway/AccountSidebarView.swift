@@ -93,13 +93,16 @@ struct AccountsDetailView: View {
 }
 
 /// Quiet toolbar action: icon + label, transparent at rest, neutral pill on hover.
-private struct ToolbarGhostButton: View {
+struct ToolbarGhostButton: View {
     var title: String
     var systemImage: String
     var isLoading: Bool = false
+    var isDisabled: Bool = false
     var action: () -> Void
 
     @State private var isHovered = false
+
+    private var inactive: Bool { isLoading || isDisabled }
 
     var body: some View {
         Button(action: action) {
@@ -114,27 +117,27 @@ private struct ToolbarGhostButton: View {
                 Text(title)
                     .font(.callout.weight(.medium))
             }
-            .foregroundStyle(isHovered && !isLoading ? Color.primary : Color.secondary)
+            .foregroundStyle(isHovered && !inactive ? Color.primary : Color.secondary)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
             .background(
-                isHovered && !isLoading ? RunwaySurface.hoverNeutral : Color.clear,
+                isHovered && !inactive ? RunwaySurface.hoverNeutral : Color.clear,
                 in: RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
             .padding(.leading, -9)
             .animation(.easeOut(duration: 0.12), value: isHovered)
         }
         .buttonStyle(.plain)
-        .disabled(isLoading)
+        .disabled(inactive)
         .help(title)
         .accessibilityLabel(title)
-        .pointingHandCursor(enabled: !isLoading)
+        .pointingHandCursor(enabled: !inactive)
         .onHover { isHovered = $0 }
     }
 }
 
 /// Accent CTA matching the Calculate-button chassis.
-private struct ToolbarAccentButton: View {
+struct ToolbarAccentButton: View {
     var title: String
     var systemImage: String
     var action: () -> Void
@@ -143,26 +146,159 @@ private struct ToolbarAccentButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: systemImage)
-                    .font(.caption.weight(.semibold))
-                Text(title)
-                    .font(.callout.weight(.semibold))
-            }
-            .foregroundStyle(Color.white)
-            .padding(.horizontal, 11)
-            .frame(minHeight: 26)
-            .background(
-                isHovered ? Color.accentColor.opacity(0.88) : Color.accentColor,
-                in: RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
-            .animation(.easeOut(duration: 0.12), value: isHovered)
+            toolbarAccentLabel(title: title, systemImage: systemImage, isHovered: isHovered)
         }
         .buttonStyle(.plain)
         .help(title)
         .accessibilityLabel(title)
         .pointingHandCursor()
         .onHover { isHovered = $0 }
+    }
+}
+
+/// Accent menu trigger — same chassis as `ToolbarAccentButton`, for multi-action “Add”.
+struct ToolbarAccentMenu<Content: View>: View {
+    var title: String
+    var systemImage: String
+    var isDisabled: Bool = false
+    @ViewBuilder var content: () -> Content
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Menu {
+            content()
+        } label: {
+            toolbarAccentLabel(title: title, systemImage: systemImage, isHovered: isHovered && !isDisabled)
+        }
+        .menuStyle(.borderlessButton)
+        .disabled(isDisabled)
+        .help(title)
+        .accessibilityLabel(title)
+        .pointingHandCursor(enabled: !isDisabled)
+        .onHover { isHovered = $0 }
+    }
+}
+
+@ViewBuilder
+private func toolbarAccentLabel(title: String, systemImage: String, isHovered: Bool) -> some View {
+    HStack(spacing: 5) {
+        Image(systemName: systemImage)
+            .font(.caption.weight(.semibold))
+        Text(title)
+            .font(.callout.weight(.semibold))
+    }
+    .foregroundStyle(Color.white)
+    .padding(.horizontal, 11)
+    .frame(minHeight: 26)
+    .background(
+        isHovered ? Color.accentColor.opacity(0.88) : Color.accentColor,
+        in: RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+    .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+    .animation(.easeOut(duration: 0.12), value: isHovered)
+}
+
+/// Shared multi-account card chrome: current green wash, hover fill, hairline stroke.
+struct AccountManagedCardChrome: ViewModifier {
+    var isCurrent: Bool
+
+    @State private var isHovered = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                let shape = RoundedRectangle(cornerRadius: RunwaySurface.radiusCard, style: .continuous)
+                if isCurrent {
+                    shape.fill(Color(nsColor: .systemGreen).opacity(colorScheme == .light ? 0.10 : 0.12))
+                } else {
+                    shape.fill(isHovered ? RunwaySurface.hoverNeutral : RunwaySurface.raised)
+                }
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: RunwaySurface.radiusCard, style: .continuous)
+                    .strokeBorder(cardStroke, lineWidth: 1))
+            .onHover { isHovered = $0 }
+    }
+
+    private var cardStroke: Color {
+        if isCurrent {
+            return Color(nsColor: .systemGreen).opacity(colorScheme == .light ? 0.28 : 0.35)
+        }
+        return colorScheme == .dark ? RunwaySurface.hairline : Color.clear
+    }
+}
+
+extension View {
+    func accountManagedCardChrome(isCurrent: Bool) -> some View {
+        modifier(AccountManagedCardChrome(isCurrent: isCurrent))
+    }
+}
+
+/// Compact quota meter row used by Codex / Grok multi-account cards.
+struct AccountMiniMeterRow: View {
+    var title: String
+    var remaining: Int
+    var used: Int
+    /// When set, shown instead of the default “N% left” trailing label.
+    var trailingValue: String? = nil
+    var resetsAt: Date?
+    var l10n: L10n
+    var isCurrent: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                Text(trailingValue ?? "\(remaining)% \(l10n.text(.left))")
+                    .font(.caption2.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(
+                        trailingValue == nil
+                            ? RunwayProgressBar.textColor(for: QuotaMeter.health(forUsedPercent: used))
+                            : Color.secondary)
+            }
+            GeometryReader { proxy in
+                let fill = max(3, proxy.size.width * CGFloat(remaining) / 100)
+                ZStack(alignment: .leading) {
+                    Capsule().fill(meterTrack)
+                    Capsule()
+                        .fill(barColor)
+                        .frame(width: fill)
+                }
+            }
+            .frame(height: 5)
+            if trailingValue != nil {
+                Text("\(remaining)% \(l10n.text(.left))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if let resetsAt {
+                NextResetCountdownLabel(resetsAt: resetsAt, l10n: l10n)
+            }
+        }
+    }
+
+    private var barColor: Color {
+        switch QuotaMeter.health(forUsedPercent: used) {
+        case .green: return Color(nsColor: .systemGreen)
+        case .yellow: return Color(nsColor: .systemOrange)
+        case .red: return Color(nsColor: .systemRed)
+        }
+    }
+
+    private var meterTrack: Color {
+        if isCurrent {
+            return Color(nsColor: .systemGreen).opacity(0.12)
+        }
+        return RunwaySurface.sunken
     }
 }
 
@@ -175,9 +311,6 @@ private struct AccountDetailCard: View {
     var onSelect: () -> Void
     var onRefresh: () -> Void
 
-    @State private var isHovered = false
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             headerRow
@@ -188,21 +321,7 @@ private struct AccountDetailCard: View {
             }
             quotaBlock
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 11)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            let shape = RoundedRectangle(cornerRadius: RunwaySurface.radiusCard, style: .continuous)
-            if isActive {
-                shape.fill(Color(nsColor: .systemGreen).opacity(colorScheme == .light ? 0.10 : 0.12))
-            } else {
-                shape.fill(isHovered ? RunwaySurface.hoverNeutral : RunwaySurface.raised)
-            }
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: RunwaySurface.radiusCard, style: .continuous)
-                .strokeBorder(cardStroke, lineWidth: 1))
-        .onHover { isHovered = $0 }
+        .accountManagedCardChrome(isCurrent: isActive)
     }
 
     private var headerRow: some View {
@@ -258,11 +377,13 @@ private struct AccountDetailCard: View {
             // Titles follow the same windowMinutes / named-window rules as the main popover.
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(quota.meterRows()) { row in
-                    miniMeter(
+                    AccountMiniMeterRow(
                         title: row.title(l10n: l10n),
                         remaining: row.remainingPercent,
                         used: row.usedPercent,
-                        resetsAt: row.resetsAt)
+                        resetsAt: row.resetsAt,
+                        l10n: l10n,
+                        isCurrent: isActive)
                 }
             }
         } else if account.authMode == .apiKey {
@@ -276,65 +397,11 @@ private struct AccountDetailCard: View {
                 .foregroundStyle(.secondary)
         }
     }
-
-    private func miniMeter(title: String, remaining: Int, used: Int, resetsAt: Date?) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer()
-                Text("\(remaining)% \(l10n.text(.left))")
-                    .font(.caption2.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(RunwayProgressBar.textColor(for: QuotaMeter.health(forUsedPercent: used)))
-            }
-            GeometryReader { proxy in
-                let fill = max(3, proxy.size.width * CGFloat(remaining) / 100)
-                ZStack(alignment: .leading) {
-                    Capsule().fill(meterTrack)
-                    Capsule()
-                        .fill(barColor(used: used))
-                        .frame(width: fill)
-                }
-            }
-            .frame(height: 5)
-            if let resetsAt {
-                TimelineView(.periodic(from: .now, by: 30)) { context in
-                    Text("\(l10n.text(.nextResetIn))\(DurationFormatter.localized(resetsAt.timeIntervalSince(context.date), language: l10n.language))")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    private func barColor(used: Int) -> Color {
-        switch QuotaMeter.health(forUsedPercent: used) {
-        case .green: return Color(nsColor: .systemGreen)
-        case .yellow: return Color(nsColor: .systemOrange)
-        case .red: return Color(nsColor: .systemRed)
-        }
-    }
-
-    private var cardStroke: Color {
-        if isActive {
-            return Color(nsColor: .systemGreen).opacity(colorScheme == .light ? 0.28 : 0.35)
-        }
-        return colorScheme == .dark ? RunwaySurface.hairline : Color.clear
-    }
-
-    private var meterTrack: Color {
-        if isActive {
-            return Color(nsColor: .systemGreen).opacity(0.12)
-        }
-        return RunwaySurface.sunken
-    }
 }
 
 /// Icon button with the same hover treatment as the main popover header actions.
-private struct AccountIconActionButton: View {
+/// Shared by Codex and Grok multi-account cards.
+struct AccountIconActionButton: View {
     enum Tone {
         case normal
         case current
@@ -396,6 +463,23 @@ private struct AccountIconActionButton: View {
         }
         if isDisabled || isLoading { return Color.clear }
         return isHovered ? RunwaySurface.hoverAccent : Color.clear
+    }
+}
+
+/// Live “next reset in …” countdown used by multi-account cards and settings rows.
+struct NextResetCountdownLabel: View {
+    var resetsAt: Date
+    var l10n: L10n
+    var font: Font = .caption2
+    /// How often the relative duration re-renders (seconds).
+    var refreshInterval: TimeInterval = 30
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: refreshInterval)) { context in
+            Text("\(l10n.text(.nextResetIn))\(DurationFormatter.localized(resetsAt.timeIntervalSince(context.date), language: l10n.language))")
+                .font(font)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

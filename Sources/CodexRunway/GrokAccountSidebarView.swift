@@ -30,7 +30,7 @@ struct GrokAccountsDetailView: View {
                                 RunwaySurface.fill,
                                 in: RoundedRectangle(cornerRadius: RunwaySurface.cornerRadius))
                     } else {
-                        ForEach(Array(orderedAccounts.enumerated()), id: \.element.id) { index, account in
+                        ForEach(orderedAccounts) { account in
                             let isCurrent = account.id == model.grokAccountState.currentAccountID
                             GrokAccountDetailCard(
                                 account: account,
@@ -38,10 +38,7 @@ struct GrokAccountsDetailView: View {
                                 l10n: l10n,
                                 isBusy: model.isGrokAccountOperationInProgress,
                                 isRefreshing: model.isRefreshingGrokAccount(id: account.id),
-                                capabilities: GrokAccountDetailCapabilities.make(
-                                    index: index,
-                                    count: orderedAccounts.count,
-                                    isCurrent: isCurrent),
+                                capabilities: capabilities(for: account, isCurrent: isCurrent),
                                 aliasDraft: editingAliasID == account.id ? $aliasDraft : nil,
                                 onSwitch: { accountPendingSwitch = account },
                                 onRefresh: { model.refreshGrokAccountQuota(id: account.id) },
@@ -63,16 +60,19 @@ struct GrokAccountsDetailView: View {
                         Text(message)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .padding(.top, 2)
                     }
                     if let error = model.grokLastError {
                         Text(error)
                             .font(.caption)
                             .foregroundStyle(.red)
                             .textSelection(.enabled)
+                            .padding(.top, 2)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .sheet(isPresented: $showPasteSheet) {
@@ -130,24 +130,27 @@ struct GrokAccountsDetailView: View {
 
     private var toolbar: some View {
         HStack(spacing: 8) {
-            Button {
+            ToolbarGhostButton(
+                title: l10n.text(.grokAccountsRefreshAll),
+                systemImage: "arrow.clockwise",
+                isLoading: model.isRefreshingGrok)
+            {
                 model.refreshAllGrokAccountQuotas()
-            } label: {
-                if model.isRefreshingGrok {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Label(l10n.text(.grokAccountsRefreshAll), systemImage: "arrow.clockwise")
+            }
+            if model.isGrokOAuthLoginInProgress {
+                ToolbarGhostButton(
+                    title: l10n.text(.cancel),
+                    systemImage: "xmark")
+                {
+                    model.cancelGrokOAuthLogin()
                 }
             }
-            .buttonStyle(.borderless)
-            .disabled(model.isRefreshingGrok)
-
-            if model.isGrokOAuthLoginInProgress {
-                Button(l10n.text(.cancel)) { model.cancelGrokOAuthLogin() }
-                    .buttonStyle(.borderless)
-            }
             Spacer()
-            Menu {
+            ToolbarAccentMenu(
+                title: l10n.text(.accountsAdd),
+                systemImage: "plus",
+                isDisabled: model.isGrokAccountOperationInProgress)
+            {
                 Button(l10n.text(.grokAccountsAddOAuth)) { model.startGrokOAuthLogin() }
                 Button(l10n.text(.grokAccountsAddPaste)) {
                     pasteText = ""
@@ -155,13 +158,8 @@ struct GrokAccountsDetailView: View {
                     showPasteSheet = true
                 }
                 Button(l10n.text(.grokAccountsImportOfficial)) { model.importOfficialGrokAccount() }
-            } label: {
-                Label(l10n.text(.accountsAdd), systemImage: "plus")
             }
-            .menuStyle(.borderlessButton)
-            .disabled(model.isGrokAccountOperationInProgress)
         }
-        .font(.callout)
     }
 
     private var grokPasteImportSheet: some View {
@@ -237,11 +235,29 @@ struct GrokAccountsDetailView: View {
         .frame(minHeight: pasteSheetError == nil ? 360 : 400)
     }
 
+    /// Current account first (same pin as Codex sidebar), then sortIndex / name.
     private var orderedAccounts: [GrokManagedAccount] {
-        model.grokAccountState.accounts.sorted {
+        let currentID = model.grokAccountState.currentAccountID
+        return model.grokAccountState.accounts.sorted {
+            let lCurrent = $0.id == currentID
+            let rCurrent = $1.id == currentID
+            if lCurrent != rCurrent { return lCurrent && !rCurrent }
             if $0.sortIndex != $1.sortIndex { return $0.sortIndex < $1.sortIndex }
             return $0.resolvedDisplayName.localizedCaseInsensitiveCompare($1.resolvedDisplayName) == .orderedAscending
         }
+    }
+
+    /// Move up/down capabilities use sortIndex order (not the current-first display order).
+    private func capabilities(for account: GrokManagedAccount, isCurrent: Bool) -> GrokAccountDetailCapabilities {
+        let sortOrdered = model.grokAccountState.accounts.sorted {
+            if $0.sortIndex != $1.sortIndex { return $0.sortIndex < $1.sortIndex }
+            return $0.resolvedDisplayName.localizedCaseInsensitiveCompare($1.resolvedDisplayName) == .orderedAscending
+        }
+        let index = sortOrdered.firstIndex(where: { $0.id == account.id }) ?? 0
+        return GrokAccountDetailCapabilities.make(
+            index: index,
+            count: sortOrdered.count,
+            isCurrent: isCurrent)
     }
 }
 
@@ -263,47 +279,8 @@ private struct GrokAccountDetailCard: View {
     var onDelete: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(alignment: .center, spacing: 8) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(account.resolvedDisplayName)
-                        .font(.callout.weight(.semibold))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    HStack(spacing: 6) {
-                        if isCurrent { CurrentAccountTag(l10n: l10n) }
-                        if account.cachedQuota?.plan != nil {
-                            GrokSubscriptionTierTag(plan: account.cachedQuota?.plan, l10n: l10n)
-                        }
-                        if let email = account.email, email != account.resolvedDisplayName {
-                            Text(email)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                }
-                Spacer(minLength: 6)
-                Button {
-                    onSwitch()
-                } label: {
-                    Image(systemName: isCurrent ? "checkmark.circle.fill" : "checkmark.circle")
-                }
-                .buttonStyle(.borderless)
-                .help(isCurrent ? l10n.text(.grokAccountsCurrent) : l10n.text(.grokAccountsMakeCurrent))
-                .disabled(isCurrent || isBusy || isRefreshing)
-
-                Button(action: onRefresh) {
-                    if isRefreshing {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                }
-                .buttonStyle(.borderless)
-                .help(l10n.text(.refresh))
-                .disabled(isBusy || isRefreshing)
-            }
+        VStack(alignment: .leading, spacing: 10) {
+            headerRow
             if let aliasDraft {
                 HStack(spacing: 6) {
                     TextField(l10n.text(.alias), text: aliasDraft)
@@ -316,78 +293,116 @@ private struct GrokAccountDetailCard: View {
                 }
             }
             if account.requiresReauth {
-                Text(l10n.text(.grokReauthenticationRequired))
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                statusLine(l10n.text(.grokReauthenticationRequired), color: Color(nsColor: .systemRed))
             } else if let error = account.lastError {
-                Text(GrokAccountLastErrorPresentation.text(for: error, l10n: l10n))
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .lineLimit(2)
+                statusLine(
+                    GrokAccountLastErrorPresentation.text(for: error, l10n: l10n),
+                    color: Color(nsColor: .systemOrange))
             }
-            if let snapshot = account.cachedQuota {
-                let quota = GrokQuotaPresentation.make(snapshot: snapshot, l10n: l10n)
-                if let meter = quota.meters.first {
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack {
-                            Text(meter.title)
-                                .font(.caption2.weight(.medium))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            if let includedUSD = quota.includedUSDAllowance {
-                                Text(includedUSD)
-                                    .font(.caption2.monospacedDigit().weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Text("\(meter.remainingPercent)% \(l10n.text(.left))")
-                                    .font(.caption2.monospacedDigit().weight(.semibold))
-                            }
-                        }
-                        RunwayProgressBar(meter: meter)
-                            .frame(height: RunwayProgressBar.barHeight)
-                        if quota.includedUSDAllowance != nil {
-                            Text("\(meter.remainingPercent)% \(l10n.text(.left))")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
+            quotaBlock
+            managementRow
+        }
+        .accountManagedCardChrome(isCurrent: isCurrent)
+    }
+
+    private var headerRow: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(account.resolvedDisplayName)
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                HStack(spacing: 6) {
+                    if isCurrent {
+                        CurrentAccountTag(l10n: l10n)
+                    }
+                    if account.cachedQuota?.plan != nil {
+                        GrokSubscriptionTierTag(plan: account.cachedQuota?.plan, l10n: l10n)
+                    }
+                    if let email = account.email, email != account.resolvedDisplayName {
+                        Text(email)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                 }
-            } else {
-                Text(l10n.text(.grokNoQuotaData))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
-            HStack(spacing: 6) {
-                Spacer()
-                Button(action: onEditAlias) {
-                    Image(systemName: "pencil")
-                }
-                .help(l10n.text(.alias))
-                Button(action: onMoveUp) {
-                    Image(systemName: "arrow.up")
-                }
-                .help(l10n.text(.accountsMoveUp))
-                .disabled(!capabilities.canMoveUp)
-                Button(action: onMoveDown) {
-                    Image(systemName: "arrow.down")
-                }
-                .help(l10n.text(.accountsMoveDown))
-                .disabled(!capabilities.canMoveDown)
-                Button(role: .destructive, action: onDelete) {
-                    Image(systemName: "trash")
-                }
-                .help(capabilities.canDelete
-                    ? l10n.text(.grokAccountsRemove)
-                    : l10n.text(.grokCurrentAccountCannotDelete))
-                .disabled(!capabilities.canDelete)
+            Spacer(minLength: 6)
+            HStack(spacing: 2) {
+                AccountIconActionButton(
+                    title: isCurrent
+                        ? l10n.text(.grokAccountsCurrent)
+                        : l10n.text(.grokAccountsMakeCurrent),
+                    systemImage: isCurrent ? "checkmark.circle.fill" : "checkmark.circle",
+                    isDisabled: isCurrent || isBusy || isRefreshing,
+                    tone: isCurrent ? .current : .normal,
+                    action: onSwitch)
+                AccountIconActionButton(
+                    title: l10n.text(.refresh),
+                    systemImage: "arrow.clockwise",
+                    isDisabled: isRefreshing,
+                    isLoading: isRefreshing,
+                    tone: .normal,
+                    action: onRefresh)
             }
-            .buttonStyle(.borderless)
-            .controlSize(.small)
-            .disabled(isBusy || isRefreshing)
         }
-        .padding(11)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .runwayCard(isCurrent ? .raised : .sunken)
+    }
+
+    private func statusLine(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(color)
+            .lineLimit(2)
+    }
+
+    @ViewBuilder
+    private var quotaBlock: some View {
+        if let snapshot = account.cachedQuota {
+            let quota = GrokQuotaPresentation.make(snapshot: snapshot, l10n: l10n)
+            if let meter = quota.meters.first {
+                AccountMiniMeterRow(
+                    title: meter.title,
+                    remaining: meter.remainingPercent,
+                    used: meter.usedPercent,
+                    trailingValue: quota.includedUSDAllowance,
+                    resetsAt: meter.resetsAt,
+                    l10n: l10n,
+                    isCurrent: isCurrent)
+            }
+        } else {
+            Text(l10n.text(.grokNoQuotaData))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var managementRow: some View {
+        HStack(spacing: 2) {
+            Spacer()
+            AccountIconActionButton(
+                title: l10n.text(.alias),
+                systemImage: "pencil",
+                isDisabled: isBusy || isRefreshing,
+                action: onEditAlias)
+            AccountIconActionButton(
+                title: l10n.text(.accountsMoveUp),
+                systemImage: "arrow.up",
+                isDisabled: !capabilities.canMoveUp || isBusy || isRefreshing,
+                action: onMoveUp)
+            AccountIconActionButton(
+                title: l10n.text(.accountsMoveDown),
+                systemImage: "arrow.down",
+                isDisabled: !capabilities.canMoveDown || isBusy || isRefreshing,
+                action: onMoveDown)
+            AccountIconActionButton(
+                title: capabilities.canDelete
+                    ? l10n.text(.grokAccountsRemove)
+                    : l10n.text(.grokCurrentAccountCannotDelete),
+                systemImage: "trash",
+                isDisabled: !capabilities.canDelete || isBusy || isRefreshing,
+                action: onDelete)
+        }
     }
 }
 

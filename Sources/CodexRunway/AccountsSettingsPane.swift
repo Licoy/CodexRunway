@@ -232,6 +232,12 @@ struct AccountsSettingsPane: View {
                         Text("\(quota.primaryRemainingPercent)% · \(l10n.text(.lastUpdated)) \(quota.updatedAt.formatted(date: .omitted, time: .shortened))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        if let resetsAt = quota.primaryResetsAt {
+                            NextResetCountdownLabel(
+                                resetsAt: resetsAt,
+                                l10n: l10n,
+                                font: .caption)
+                        }
                     }
                 }
                 Spacer()
