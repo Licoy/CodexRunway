@@ -35,8 +35,12 @@ jobs:
       - name: Package ${{ matrix.arch }}
         env:
           EXPECTED_MACOS_SDK_MAJOR: "26"
+          INCLUDE_WIDGET: "1"
+          RUNWAY_WIDGET_STORAGE_MODE: local
           SPARKLE_PUBLIC_KEY: ${{ secrets.SPARKLE_PUBLIC_KEY }}
         run: ARCH=${{ matrix.arch }} bash Scripts/package-app.sh
+      - name: Verify embedded widget ${{ matrix.arch }}
+        run: bash Scripts/verify-packaged-app.sh dist/CodexRunway.app ${{ matrix.arch }} local
       - name: Generate appcast ${{ matrix.arch }}
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
@@ -82,6 +86,7 @@ jobs:
           cat >> release-notes.md <<'EOF'
 
           These builds are ad-hoc signed and not notarized. Prefer the .dmg download for manual install; if macOS blocks the app, use right-click Open or Privacy & Security > Open Anyway.
+          Desktop widgets are included and require macOS 14 or later.
           EOF
       - uses: actions/upload-artifact@v7
         with:

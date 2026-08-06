@@ -31,7 +31,7 @@ Codex Runway is a native macOS menu bar app for checking Codex and Grok quota. I
 - Repair the local session index.
 - Support light, dark, system appearance, Chinese, and English.
 - Support built-in update checks.
-- Offer experimental macOS 14+ desktop widgets for quota overview, token trend, a key metric, and reset-today status.
+- Offer macOS 14+ desktop widgets for quota overview, token trend, a key metric, and reset-today status.
 
 ## Screenshots
 
@@ -87,9 +87,9 @@ xattr -dr com.apple.quarantine /Applications/CodexRunway.app
 
 Then open the app again.
 
-## Desktop Widgets (Experimental)
+## Desktop Widgets
 
-Desktop widgets require macOS 14 or later. They are currently available only in local experimental builds and are not included in public releases. Each widget can independently select Codex, Grok, or both in Edit Widget; Reset Today is Codex-only.
+Desktop widgets require macOS 14 or later. Starting with a release that contains this fix, public releases and local development builds both include the Widget extension. Each widget can independently select Codex, Grok, or both in Edit Widget; Reset Today is Codex-only. After upgrading, macOS registers the production widget from the app's `Contents/PlugIns` directory.
 
 `swift run CodexRunway` uses separate `swift-dev` identifiers and does not replace an existing installation. You can also package a widget-enabled app manually with `.dev` identifiers:
 
@@ -101,7 +101,7 @@ RUNWAY_WIDGET_STORAGE_MODE=local \
 bash Scripts/package-app.sh
 ```
 
-The app is written to `dist/CodexRunway.app`. Local ad-hoc builds default to a read-only versioned derived snapshot at `~/.codex-runway/widget-snapshot.json` with `0600` permissions. A formally signed build with a registered App Group can instead set `RUNWAY_WIDGET_STORAGE_MODE=app-group`. The snapshot contains no email, account ID, token, auth JSON, or raw external event text. Public distribution still requires Developer ID signing, App Group registration, and notarization.
+The app is written to `dist/CodexRunway.app`. Public releases containing this fix and local ad-hoc builds use the read-only versioned derived snapshot at `~/.codex-runway/widget-snapshot.json` with `0600` permissions. A Developer ID build with a registered App Group can instead set `RUNWAY_WIDGET_STORAGE_MODE=app-group`. The snapshot contains no email, account ID, token, auth JSON, or raw external event text. Developer ID signing, App Group registration, and notarization remain available as future distribution work.
 
 ## Requirements
 

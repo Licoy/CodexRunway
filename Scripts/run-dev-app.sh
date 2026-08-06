@@ -18,6 +18,7 @@ BUNDLE_ID="com.github.codex-runway.swift-dev"
 WIDGET_ID="com.github.codex-runway.widget.swift-dev"
 PREVIOUS_DEV_WIDGET_ID="com.github.codex-runway.widget.dev"
 BUILD_NUMBER="40.$(date +%H%M).$(date +%S)"
+MARKETING_VERSION="$(plutil -extract CFBundleShortVersionString raw "$ROOT/Resources/Info.plist")"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 terminate_dev_processes() {
@@ -67,6 +68,7 @@ xcodebuild \
   RUNWAY_APP_GROUP_ID="group.com.github.codex-runway.swift-dev" \
   RUNWAY_WIDGET_DISPLAY_NAME="Codex Runway Dev" \
   RUNWAY_WIDGET_STORAGE_MODE=local \
+  MARKETING_VERSION="$MARKETING_VERSION" \
   CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
   ENABLE_APP_SANDBOX=NO \
   CODE_SIGN_ENTITLEMENTS= \
