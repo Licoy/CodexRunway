@@ -189,6 +189,14 @@ public struct GrokQuotaSnapshot: Codable, Sendable, Equatable {
             // Period is best-effort: unknown types / bad dates must not discard usage %.
             period = config.currentPeriod?.bestEffortQuotaPeriod()
             source = .current
+        } else if let periodFromCurrent = config.currentPeriod?.bestEffortQuotaPeriod() {
+            // After a weekly/monthly credits reset the API often returns the new
+            // `currentPeriod` but omits `creditUsagePercent` (and productUsage)
+            // until the first billable request. Treat that as 0% used — do not
+            // fall through to monthly USD cents (a different window).
+            percent = 0
+            period = periodFromCurrent
+            source = .current
         } else if let limit = config.monthlyLimit?.val,
                   limit > 0,
                   let used = config.used?.val

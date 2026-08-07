@@ -197,6 +197,71 @@ struct GrokBillingClientTests {
         }
     }
 
+    @Test("post-reset credits without percent stay weekly zero and still merge USD cents")
+    func postResetCreditsZeroUsedMergesUSDWithoutMonthlyPercent() async throws {
+        // After weekly reset the credits shape has currentPeriod but omits
+        // creditUsagePercent. Cents still carry monthly USD used/limit for a
+        // different window — percent must not become used/limit.
+        MockBillingURLProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            let query = request.url?.query ?? ""
+            let body: Data
+            if path.hasSuffix("/billing"), query.contains("format=credits") {
+                body = Data(#"""
+                {
+                  "config": {
+                    "currentPeriod": {
+                      "type": "USAGE_PERIOD_TYPE_WEEKLY",
+                      "start": "2026-08-06T16:46:56.082611+00:00",
+                      "end": "2026-08-13T16:46:56.082611+00:00"
+                    },
+                    "prepaidBalance": {"val": 0},
+                    "isUnifiedBillingUser": true
+                  }
+                }
+                """#.utf8)
+            } else if path.hasSuffix("/billing") {
+                body = Data(#"""
+                {
+                  "config": {
+                    "monthlyLimit": {"val": 15000},
+                    "used": {"val": 2362},
+                    "billingPeriodStart": "2026-08-01T00:00:00+00:00",
+                    "billingPeriodEnd": "2026-09-01T00:00:00+00:00"
+                  }
+                }
+                """#.utf8)
+            } else if path.hasSuffix("/settings") {
+                body = Data(#"{"subscription_tier_display":"SuperGrok"}"#.utf8)
+            } else {
+                body = Data(#"{}"#.utf8)
+            }
+            return (
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"])!,
+                body)
+        }
+        defer { MockBillingURLProtocol.handler = nil }
+
+        let client = GrokBillingClient(
+            session: MockBillingURLProtocol.session(),
+            clientVersionProvider: { "0.2.114" })
+        let snapshot = try await client.fetch(accessToken: "token-for-tests")
+
+        #expect(snapshot.includedUsagePercent == 0)
+        #expect(snapshot.period?.kind == .weekly)
+        #expect(snapshot.source == .current)
+        #expect(snapshot.includedLimitCents == 15_000)
+        #expect(snapshot.includedUsedCents == 2_362)
+        #expect(snapshot.includedRemainingCents == 12_638)
+        #expect(snapshot.plan == "SuperGrok")
+        // Must not be the monthly cents fallback (~15.75% used → ~84% left).
+        #expect(snapshot.includedUsagePercent != Double(2_362) / Double(15_000) * 100)
+    }
+
     @Test("falls back to cents billing when credits payload is empty")
     func fallsBackToCentsWhenCreditsEmpty() async throws {
         MockBillingURLProtocol.handler = { request in

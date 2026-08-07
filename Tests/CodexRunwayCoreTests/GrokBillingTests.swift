@@ -53,6 +53,63 @@ struct GrokBillingTests {
         #expect(snapshot.updatedAt == now)
     }
 
+    @Test("post-reset credits with period but no percent decode as 0% used")
+    func postResetCreditsWithoutPercentAreZeroUsed() throws {
+        // Live shape after weekly reset before first billable request: currentPeriod
+        // is present, creditUsagePercent / productUsage / monthlyLimit are omitted.
+        let data = Data(#"""
+        {
+          "config": {
+            "currentPeriod": {
+              "type": "USAGE_PERIOD_TYPE_WEEKLY",
+              "start": "2026-08-06T16:46:56.082611+00:00",
+              "end": "2026-08-13T16:46:56.082611+00:00"
+            },
+            "onDemandCap": {"val": 0},
+            "onDemandUsed": {"val": 0},
+            "isUnifiedBillingUser": true,
+            "prepaidBalance": {"val": 0},
+            "billingPeriodStart": "2026-08-06T16:46:56.082611+00:00",
+            "billingPeriodEnd": "2026-08-13T16:46:56.082611+00:00"
+          }
+        }
+        """#.utf8)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let snapshot = try GrokQuotaSnapshot.decodeBillingResponse(from: data, now: now)
+
+        #expect(snapshot.includedUsagePercent == 0)
+        #expect(snapshot.period?.kind == .weekly)
+        #expect(snapshot.period?.startsAt != nil)
+        #expect(snapshot.period?.resetsAt != nil)
+        #expect(snapshot.productUsage.isEmpty)
+        #expect(snapshot.isUnifiedBillingUser == true)
+        #expect(snapshot.prepaidBalanceCents == 0)
+        #expect(snapshot.source == .current)
+        #expect(snapshot.updatedAt == now)
+    }
+
+    @Test("explicit zero creditUsagePercent stays current source")
+    func explicitZeroCreditUsagePercent() throws {
+        let data = Data(#"""
+        {
+          "config": {
+            "creditUsagePercent": 0,
+            "currentPeriod": {
+              "type": "USAGE_PERIOD_TYPE_WEEKLY",
+              "start": "2026-08-06T16:46:56Z",
+              "end": "2026-08-13T16:46:56Z"
+            }
+          }
+        }
+        """#.utf8)
+
+        let snapshot = try GrokQuotaSnapshot.decodeBillingResponse(from: data)
+        #expect(snapshot.includedUsagePercent == 0)
+        #expect(snapshot.period?.kind == .weekly)
+        #expect(snapshot.source == .current)
+    }
+
     @Test("falls back to deprecated fields inside the config wrapper")
     func decodesDeprecatedWrapper() throws {
         let data = Data(#"""
