@@ -61,6 +61,7 @@ struct RateLimitResetTodayTests {
         #expect(upcoming30.count == 1)
         #expect(upcoming30[0].kind == .rateLimitResetUpcoming)
         #expect(upcoming30[0].threshold == 30)
+        #expect(upcoming30[0].endDate == nil)
 
         // 12:25 - 11:35 = 50 minutes → 1-hour threshold.
         let hourOut = try resetStatusDate("2026-07-29T11:35:00Z")
@@ -70,6 +71,7 @@ struct RateLimitResetTodayTests {
             now: hourOut)
         #expect(upcoming60.count == 1)
         #expect(upcoming60[0].threshold == 60)
+        #expect(upcoming60[0].endDate == nil)
     }
 
     @Test("primary evidence and next schedule prefer actionable events")
@@ -208,7 +210,7 @@ struct RateLimitResetTodayTests {
         #expect(currentLosAngelesDay.state == .yes)
     }
 
-    @Test("same-day scheduled reset counts as yes before and after effective time")
+    @Test("exact scheduled reset counts as yes only while it is still pending")
     func scheduledResetUsesLocalDay() throws {
         let now = try resetStatusDate("2026-07-28T12:00:00Z")
         let pending = try ResetStatusFeedFixture(
@@ -230,8 +232,86 @@ struct RateLimitResetTodayTests {
         #expect(pending.state == .yes)
         #expect(pending.hasAlreadyEffectiveResetToday(now: now) == false)
         #expect(pending.nextScheduledReset(now: now)?.event.source.postID != nil)
-        #expect(effective.state == .yes)
-        #expect(effective.hasAlreadyEffectiveResetToday(now: now) == true)
+        #expect(effective.state == .no)
+        #expect(effective.hasAlreadyEffectiveResetToday(now: now) == false)
+        #expect(effective.nextScheduledReset(now: now) == nil)
+    }
+
+    @Test("date-only Tibo schedule expands to a local full-day window")
+    func dateOnlyScheduleExpandsToLocalWindow() throws {
+        let now = try resetStatusDate("2026-08-09T14:17:20Z")
+        var singapore = Calendar(identifier: .gregorian)
+        singapore.timeZone = try #require(TimeZone(identifier: "Asia/Singapore"))
+        let snapshot = try ResetStatusFeedFixture(
+            event: .init(
+                kind: "reset_scheduled",
+                announcedAt: "2026-08-08T20:34:50Z",
+                effectiveAt: "2026-08-10T07:00:00Z"),
+            now: now)
+            .checked(at: "2026-08-09T14:17:20Z")
+            .using(singapore)
+            .decode()
+
+        let next = try #require(snapshot.nextScheduledReset(now: now))
+        let expectedStart = try resetStatusDate("2026-08-10T07:00:00Z")
+        let expectedEnd = try resetStatusDate("2026-08-11T06:59:00Z")
+        #expect(next.isRange)
+        #expect(next.effectiveAt == expectedStart)
+        #expect(next.effectiveUntil == expectedEnd)
+        let reminderNow = try resetStatusDate("2026-08-10T06:20:00Z")
+        let alerts = RunwayAlertDecider.rateLimitResetTodayAlerts(
+            previous: snapshot,
+            current: snapshot,
+            now: reminderNow,
+            calendar: singapore)
+        #expect(alerts.count == 1)
+        #expect(alerts[0].date == expectedStart)
+        #expect(alerts[0].endDate == expectedEnd)
+        let window = RateLimitResetScheduleWindow(
+            startAt: next.effectiveAt,
+            endAt: next.effectiveUntil,
+            isRange: next.isRange)
+        #expect(
+            ResetLabelFormatter.scheduledLabel(
+                for: window,
+                language: .simplifiedChinese,
+                calendar: singapore)
+                == "2026/8/10 15:00~2026/8/11 14:59")
+        #expect(
+            ResetLabelFormatter.scheduledCountdown(
+                for: window,
+                now: now,
+                language: .simplifiedChinese)
+                == "16小时42分钟40秒~40小时41分钟40秒")
+    }
+
+    @Test("date-only window remains scheduled on its second local date")
+    func dateOnlyWindowRemainsScheduledOnSecondLocalDate() throws {
+        let now = try resetStatusDate("2026-08-11T02:00:20Z")
+        var singapore = Calendar(identifier: .gregorian)
+        singapore.timeZone = try #require(TimeZone(identifier: "Asia/Singapore"))
+        let snapshot = try ResetStatusFeedFixture(
+            event: .init(
+                kind: "reset_scheduled",
+                announcedAt: "2026-08-08T20:34:50Z",
+                effectiveAt: "2026-08-10T07:00:00Z"),
+            now: now)
+            .checked(at: "2026-08-11T02:00:20Z")
+            .using(singapore)
+            .decode()
+
+        #expect(snapshot.resolvedState(now: now, calendar: singapore) == .yes)
+        let next = try #require(snapshot.nextScheduledReset(onLocalDayOf: now, calendar: singapore))
+        let window = RateLimitResetScheduleWindow(
+            startAt: next.effectiveAt,
+            endAt: next.effectiveUntil,
+            isRange: next.isRange)
+        #expect(
+            ResetLabelFormatter.scheduledCountdown(
+                for: window,
+                now: now,
+                language: .simplifiedChinese)
+                == "现在~4小时58分钟40秒")
     }
 
     @Test("next same-day schedule outranks already-effective reset for primary evidence")

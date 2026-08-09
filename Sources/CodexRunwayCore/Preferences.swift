@@ -253,6 +253,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case rateLimitResetTodayAlertsDescription
     case rateLimitResetUpcomingAlertBody1h
     case rateLimitResetUpcomingAlertBody30m
+    case rateLimitResetUpcomingRangeAlertBody
+    case rateLimitResetUpcomingRangeAlertTitle
     case rateLimitResetUpcomingAlertTitle
     case quit
     case rawAnalyticsCredits

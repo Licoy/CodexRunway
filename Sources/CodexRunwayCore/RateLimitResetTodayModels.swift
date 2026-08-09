@@ -89,6 +89,18 @@ public struct RateLimitResetTodayEvent: Decodable, Sendable, Equatable {
     }
 }
 
+public struct RateLimitResetScheduleWindow: Sendable, Equatable {
+    public var startAt: Date
+    public var endAt: Date
+    public var isRange: Bool
+
+    public init(startAt: Date, endAt: Date, isRange: Bool) {
+        self.startAt = startAt
+        self.endAt = endAt
+        self.isRange = isRange
+    }
+}
+
 public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
     public static let staleAfter: TimeInterval = 30 * 3_600
 
@@ -189,6 +201,7 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> Bool
     {
         events.contains { event in
+            guard event.kind == .resetCompleted else { return false }
             guard let occurredAt = event.resetOccurrenceAt, occurredAt <= now else {
                 return false
             }
@@ -289,8 +302,10 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         .max()
     }
 
-    /// Next future `reset_scheduled` effective time, if any.
-    public func nextScheduledReset(now: Date = Date()) -> (effectiveAt: Date, event: RateLimitResetTodayEvent)? {
+    /// Next pending `reset_scheduled` window, if any.
+    public func nextScheduledReset(now: Date = Date())
+        -> (effectiveAt: Date, effectiveUntil: Date, isRange: Bool, event: RateLimitResetTodayEvent)?
+    {
         nextScheduledReset(after: now, matchingLocalDayOf: nil, calendar: nil)
     }
 
@@ -298,29 +313,55 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
     public func nextScheduledReset(
         onLocalDayOf now: Date,
         calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar)
-        -> (effectiveAt: Date, event: RateLimitResetTodayEvent)?
+        -> (effectiveAt: Date, effectiveUntil: Date, isRange: Bool, event: RateLimitResetTodayEvent)?
     {
         nextScheduledReset(after: now, matchingLocalDayOf: now, calendar: calendar)
+    }
+
+    public func scheduledResetWindow(for event: RateLimitResetTodayEvent) -> RateLimitResetScheduleWindow? {
+        guard event.kind == .resetScheduled, let startAt = event.effectiveAt else { return nil }
+        var sourceCalendar = Calendar(identifier: .gregorian)
+        sourceCalendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        let components = sourceCalendar.dateComponents([.hour, .minute, .second], from: startAt)
+        let isDateOnly = components.hour == 0 && components.minute == 0 && components.second == 0
+        guard isDateOnly else {
+            return RateLimitResetScheduleWindow(startAt: startAt, endAt: startAt, isRange: false)
+        }
+        let endAt = sourceCalendar.date(byAdding: .day, value: 1, to: startAt)!
+            .addingTimeInterval(-60)
+        return RateLimitResetScheduleWindow(startAt: startAt, endAt: endAt, isRange: true)
     }
 
     private func nextScheduledReset(
         after now: Date,
         matchingLocalDayOf day: Date?,
-        calendar: Calendar?) -> (effectiveAt: Date, event: RateLimitResetTodayEvent)?
+        calendar: Calendar?)
+        -> (effectiveAt: Date, effectiveUntil: Date, isRange: Bool, event: RateLimitResetTodayEvent)?
     {
-        var best: (effectiveAt: Date, event: RateLimitResetTodayEvent)?
+        var best: (
+            effectiveAt: Date,
+            effectiveUntil: Date,
+            isRange: Bool,
+            event: RateLimitResetTodayEvent)?
         for event in events {
-            guard event.kind == .resetScheduled, let when = event.effectiveAt, when > now else {
+            guard let window = scheduledResetWindow(for: event), window.endAt > now else { continue }
+            if let day, let calendar, !intersectsLocalDay(window, day: day, calendar: calendar) {
                 continue
             }
-            if let day, let calendar, !calendar.isDate(when, inSameDayAs: day) {
-                continue
-            }
-            if best == nil || when < best!.effectiveAt {
-                best = (when, event)
+            if best == nil || window.startAt < best!.effectiveAt {
+                best = (window.startAt, window.endAt, window.isRange, event)
             }
         }
         return best
+    }
+
+    private func intersectsLocalDay(
+        _ window: RateLimitResetScheduleWindow,
+        day: Date,
+        calendar: Calendar) -> Bool
+    {
+        guard let dayInterval = calendar.dateInterval(of: .day, for: day) else { return false }
+        return window.endAt >= dayInterval.start && window.startAt < dayInterval.end
     }
 
     public func scopeSummary(
@@ -372,6 +413,7 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
     public enum DevMockKind: String, Sendable, Equatable {
         case yes
         case no
+        case scheduled
         case unknown
 
         public static func parse(_ raw: String) -> DevMockKind? {
@@ -380,6 +422,8 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
                 return .yes
             case "no", "n", "0", "false":
                 return .no
+            case "scheduled", "schedule":
+                return .scheduled
             case "unknown":
                 return .unknown
             default:
@@ -422,6 +466,25 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
                     rationale: "Explicit Codex quota reset announcement.",
                     text: "I have reset usage limits for Codex."),
             ]
+        } else if kind == .scheduled {
+            var sourceCalendar = Calendar(identifier: .gregorian)
+            sourceCalendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+            let today = sourceCalendar.startOfDay(for: now)
+            let effectiveAt = sourceCalendar.date(byAdding: .day, value: 1, to: today)!
+            events = [
+                RateLimitResetTodayEvent(
+                    kind: .resetScheduled,
+                    announcedAt: now,
+                    effectiveAt: effectiveAt,
+                    scope: RateLimitResetTodayScope(plans: ["all"], windows: ["weekly"]),
+                    source: RateLimitResetTodaySource(
+                        handle: "thsottiaux",
+                        postID: "2086189414292865249",
+                        url: URL(string: "https://x.com/thsottiaux/status/2086189414292865249")!),
+                    confidence: 0.92,
+                    rationale: "Explicit Codex quota reset schedule.",
+                    text: "I'll do another reset tomorrow."),
+            ]
         } else {
             events = []
         }
@@ -444,7 +507,7 @@ private extension RateLimitResetTodayEvent {
         case .resetCompleted:
             effectiveAt ?? announcedAt
         case .resetScheduled:
-            effectiveAt
+            nil
         case .bankedReset, .limitIncrease, .uncertain:
             nil
         }

@@ -1328,9 +1328,11 @@ final class RunwayModel: ObservableObject {
         lines[statusIndex] = DetailLine(title: l10n.text(.status), value: hintText)
         // Rebuild next-schedule line when local midnight changes the answer context.
         if let next = snapshot.nextScheduledReset(now: now) {
-            let nextValue = ResetLabelFormatter.shortLabel(
-                for: next.effectiveAt,
-                now: now,
+            let nextValue = ResetLabelFormatter.scheduledLabel(
+                for: RateLimitResetScheduleWindow(
+                    startAt: next.effectiveAt,
+                    endAt: next.effectiveUntil,
+                    isRange: next.isRange),
                 language: l10n.language,
                 calendar: calendar)
             if let nextIndex = lines.firstIndex(where: { $0.title == l10n.text(.rateLimitResetTodayNextScheduled) }) {
@@ -1397,9 +1399,11 @@ final class RunwayModel: ObservableObject {
             lines.append(
                 DetailLine(
                     title: l10n.text(.rateLimitResetTodayNextScheduled),
-                    value: ResetLabelFormatter.shortLabel(
-                        for: next.effectiveAt,
-                        now: now,
+                    value: ResetLabelFormatter.scheduledLabel(
+                        for: RateLimitResetScheduleWindow(
+                            startAt: next.effectiveAt,
+                            endAt: next.effectiveUntil,
+                            isRange: next.isRange),
                         language: l10n.language,
                         calendar: calendar)))
         }
@@ -1466,9 +1470,11 @@ final class RunwayModel: ObservableObject {
         case .yes:
             // Prefer the next same-day schedule when today has multiple resets.
             if let next = snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar) {
-                let when = ResetLabelFormatter.shortLabel(
-                    for: next.effectiveAt,
-                    now: now,
+                let when = ResetLabelFormatter.scheduledLabel(
+                    for: RateLimitResetScheduleWindow(
+                        startAt: next.effectiveAt,
+                        endAt: next.effectiveUntil,
+                        isRange: next.isRange),
                     language: l10n.language,
                     calendar: calendar)
                 return String(format: l10n.text(.rateLimitResetTodayYesHintScheduledWithTime), when)
@@ -1484,9 +1490,11 @@ final class RunwayModel: ObservableObject {
             return l10n.text(.rateLimitResetTodayYesHint)
         case .no:
             if let next = snapshot.nextScheduledReset(now: now) {
-                let when = ResetLabelFormatter.shortLabel(
-                    for: next.effectiveAt,
-                    now: now,
+                let when = ResetLabelFormatter.scheduledLabel(
+                    for: RateLimitResetScheduleWindow(
+                        startAt: next.effectiveAt,
+                        endAt: next.effectiveUntil,
+                        isRange: next.isRange),
                     language: l10n.language,
                     calendar: calendar)
                 return String(format: l10n.text(.rateLimitResetTodayNoHintWithNext), when)

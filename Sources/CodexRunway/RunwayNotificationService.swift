@@ -48,7 +48,7 @@ struct RunwayNotificationService {
         }
     }
 
-    private func title(for alert: RunwayAlert, l10n: L10n) -> String {
+    func title(for alert: RunwayAlert, l10n: L10n) -> String {
         switch alert.kind {
         case .quota:
             return l10n.text(.quotaAlertTitle)
@@ -57,11 +57,18 @@ struct RunwayNotificationService {
         case .rateLimitResetDetected:
             return l10n.text(.rateLimitResetDetectedAlertTitle)
         case .rateLimitResetUpcoming:
+            if alert.endDate != nil {
+                return l10n.text(.rateLimitResetUpcomingRangeAlertTitle)
+            }
             return l10n.text(.rateLimitResetUpcomingAlertTitle)
         }
     }
 
-    private func body(for alert: RunwayAlert, l10n: L10n) -> String {
+    func body(
+        for alert: RunwayAlert,
+        l10n: L10n,
+        calendar: Calendar = .autoupdatingCurrent) -> String
+    {
         switch alert.kind {
         case .quota:
             return String(
@@ -73,6 +80,19 @@ struct RunwayNotificationService {
         case .rateLimitResetDetected:
             return l10n.text(.rateLimitResetDetectedAlertBody)
         case .rateLimitResetUpcoming:
+            if let startAt = alert.date, let endAt = alert.endDate {
+                let window = RateLimitResetScheduleWindow(
+                    startAt: startAt,
+                    endAt: endAt,
+                    isRange: true)
+                let range = ResetLabelFormatter.scheduledLabel(
+                    for: window,
+                    language: l10n.language,
+                    calendar: calendar)
+                return String(
+                    format: l10n.text(.rateLimitResetUpcomingRangeAlertBody),
+                    range)
+            }
             let minutes = alert.threshold ?? 60
             if minutes <= 30 {
                 return l10n.text(.rateLimitResetUpcomingAlertBody30m)

@@ -13,6 +13,23 @@ public struct RunwayAlert: Codable, Sendable, Equatable, Identifiable {
     public var name: String
     public var threshold: Int?
     public var date: Date?
+    public var endDate: Date?
+
+    public init(
+        id: String,
+        kind: RunwayAlertKind,
+        name: String,
+        threshold: Int?,
+        date: Date?,
+        endDate: Date? = nil)
+    {
+        self.id = id
+        self.kind = kind
+        self.name = name
+        self.threshold = threshold
+        self.date = date
+        self.endDate = endDate
+    }
 }
 
 public enum RunwayAlertDecider {
@@ -103,7 +120,8 @@ public enum RunwayAlertDecider {
                     kind: .rateLimitResetUpcoming,
                     name: postID,
                     threshold: threshold,
-                    date: next.effectiveAt))
+                    date: next.effectiveAt,
+                    endDate: next.isRange ? next.effectiveUntil : nil))
             }
         }
 

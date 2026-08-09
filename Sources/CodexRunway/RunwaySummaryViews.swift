@@ -260,6 +260,8 @@ struct RecentSessionsView: View {
 
 /// Reset status card: flat raised surface, hairline-ruled zones, one 28pt hero answer.
 struct RateLimitResetTodayView: View {
+    static let countdownRefreshInterval: TimeInterval = 1
+
     var snapshot: RateLimitResetTodaySnapshot?
     var l10n: L10n
     var isRefreshing: Bool
@@ -282,8 +284,8 @@ struct RateLimitResetTodayView: View {
                     infoHelp: l10n.text(.rateLimitResetTodaySourceTitle))
             }
 
-            // 30s keeps relative reset countdowns fresh without second-level churn.
-            TimelineView(.periodic(from: .now, by: 30)) { context in
+            // The expected reset window is a live, second-level countdown.
+            TimelineView(.periodic(from: .now, by: Self.countdownRefreshInterval)) { context in
                 VStack(alignment: .leading, spacing: 0) {
                     hero(now: context.date)
                     nextScheduledSection(now: context.date)
@@ -365,15 +367,15 @@ struct RateLimitResetTodayView: View {
             )
             .font(.caption2)
             .multilineTextAlignment(.leading)
-            .lineLimit(1)
-            .truncationMode(.tail)
+            .fixedSize(horizontal: false, vertical: true)
+            .layoutPriority(1)
         } else {
             Text(heroSubtitle(now: now))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.leading)
-                .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
         }
     }
 
@@ -394,9 +396,11 @@ struct RateLimitResetTodayView: View {
         }
         // Prefer the next same-day schedule when today may have multiple resets.
         if let next = snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar) {
-            let when = ResetLabelFormatter.shortLabel(
-                for: next.effectiveAt,
-                now: now,
+            let when = ResetLabelFormatter.scheduledLabel(
+                for: RateLimitResetScheduleWindow(
+                    startAt: next.effectiveAt,
+                    endAt: next.effectiveUntil,
+                    isRange: next.isRange),
                 language: l10n.language,
                 calendar: calendar)
             return (when, Color(nsColor: .systemGreen))
@@ -438,13 +442,16 @@ struct RateLimitResetTodayView: View {
     private func nextScheduledSection(now: Date) -> some View {
         if let next = snapshot?.nextScheduledReset(now: now) {
             let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-            let absolute = ResetLabelFormatter.shortLabel(
-                for: next.effectiveAt,
-                now: now,
+            let window = RateLimitResetScheduleWindow(
+                startAt: next.effectiveAt,
+                endAt: next.effectiveUntil,
+                isRange: next.isRange)
+            let absolute = ResetLabelFormatter.scheduledLabel(
+                for: window,
                 language: l10n.language,
                 calendar: calendar)
-            let remaining = DurationFormatter.remaining(
-                until: next.effectiveAt,
+            let remaining = ResetLabelFormatter.scheduledCountdown(
+                for: window,
                 now: now,
                 language: l10n.language)
             let countdown = String(format: l10n.text(.rateLimitResetTodayUntilReset), remaining)
@@ -467,7 +474,8 @@ struct RateLimitResetTodayView: View {
                             .foregroundColor(Color(nsColor: .secondaryLabelColor))
                     )
                     .font(.caption2)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
 
                     Spacer(minLength: 0)
                 }
@@ -607,13 +615,16 @@ struct RateLimitResetTodayView: View {
             return l10n.text(.rateLimitResetTodayYesHint)
         case .no:
             if let next = snapshot.nextScheduledReset(now: now) {
-                let when = ResetLabelFormatter.shortLabel(
-                    for: next.effectiveAt,
-                    now: now,
+                let window = RateLimitResetScheduleWindow(
+                    startAt: next.effectiveAt,
+                    endAt: next.effectiveUntil,
+                    isRange: next.isRange)
+                let when = ResetLabelFormatter.scheduledLabel(
+                    for: window,
                     language: l10n.language,
                     calendar: calendar)
-                let remaining = DurationFormatter.remaining(
-                    until: next.effectiveAt,
+                let remaining = ResetLabelFormatter.scheduledCountdown(
+                    for: window,
                     now: now,
                     language: l10n.language)
                 let countdown = String(format: l10n.text(.rateLimitResetTodayUntilReset), remaining)

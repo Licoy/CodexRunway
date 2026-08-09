@@ -108,6 +108,71 @@ public enum ResetLabelFormatter {
         formatter.dateFormat = calendar.isDate(date, inSameDayAs: now) ? "HH:mm" : "M/d"
         return formatter.string(from: date)
     }
+
+    public static func scheduledLabel(
+        for window: RateLimitResetScheduleWindow,
+        language: ResolvedLanguage,
+        calendar: Calendar = .autoupdatingCurrent)
+        -> String
+    {
+        let start = fullDateTime(window.startAt, language: language, calendar: calendar)
+        guard window.isRange else { return start }
+        let end = fullDateTime(window.endAt, language: language, calendar: calendar)
+        return "\(start)~\(end)"
+    }
+
+    public static func scheduledCountdown(
+        for window: RateLimitResetScheduleWindow,
+        now: Date = Date(),
+        language: ResolvedLanguage)
+        -> String
+    {
+        let end = countdownDuration(until: window.endAt, now: now, language: language)
+        guard window.isRange else { return end }
+        let start = window.startAt > now
+            ? countdownDuration(until: window.startAt, now: now, language: language)
+            : (language == .simplifiedChinese ? "现在" : "now")
+        return "\(start)~\(end)"
+    }
+
+    private static func countdownDuration(
+        until date: Date,
+        now: Date,
+        language: ResolvedLanguage) -> String
+    {
+        let totalSeconds = max(0, Int(date.timeIntervalSince(now).rounded(.down)))
+        let hours = totalSeconds / 3_600
+        let minutes = (totalSeconds % 3_600) / 60
+        let seconds = totalSeconds % 60
+        if language == .simplifiedChinese {
+            var parts: [String] = []
+            if hours > 0 { parts.append("\(hours)小时") }
+            if minutes > 0 || hours > 0 { parts.append("\(minutes)分钟") }
+            parts.append("\(seconds)秒")
+            return parts.joined()
+        }
+        var parts: [String] = []
+        if hours > 0 { parts.append("\(hours) \(hours == 1 ? "hour" : "hours")") }
+        if minutes > 0 || hours > 0 {
+            parts.append("\(minutes) \(minutes == 1 ? "minute" : "minutes")")
+        }
+        parts.append("\(seconds) \(seconds == 1 ? "second" : "seconds")")
+        return parts.joined(separator: " ")
+    }
+
+    private static func fullDateTime(
+        _ date: Date,
+        language: ResolvedLanguage,
+        calendar: Calendar) -> String
+    {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(
+            identifier: language == .simplifiedChinese ? "zh_Hans_CN" : "en_US_POSIX")
+        formatter.dateFormat = "yyyy/M/d HH:mm"
+        return formatter.string(from: date)
+    }
 }
 
 public enum ResetCreditDateFormatter {
