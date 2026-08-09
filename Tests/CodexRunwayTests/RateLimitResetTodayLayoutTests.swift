@@ -14,14 +14,20 @@ struct RateLimitResetTodayLayoutTests {
     @Test("scheduled reset card grows instead of truncating long local ranges")
     @MainActor
     func scheduledResetCardGrowsForWrappedContent() throws {
-        let data = try RateLimitResetTodayMockRender.render(
+        let narrowData = try RateLimitResetTodayMockRender.render(
             kind: .scheduled,
             language: .simplifiedChinese,
             width: 280)
-        let image = try #require(NSBitmapImageRep(data: data))
+        let wideData = try RateLimitResetTodayMockRender.render(
+            kind: .scheduled,
+            language: .simplifiedChinese,
+            width: 358)
+        let narrowImage = try #require(NSBitmapImageRep(data: narrowData))
+        let wideImage = try #require(NSBitmapImageRep(data: wideData))
 
         // At this width both the hero summary and expected-reset row need more
-        // than two lines. The rendered card must grow instead of clipping them.
-        #expect(image.pixelsHigh >= 560)
+        // lines. Compare logical points so the assertion is independent of the
+        // runner's 1x/2x backing scale.
+        #expect(narrowImage.size.height > wideImage.size.height)
     }
 }
