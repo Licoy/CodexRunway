@@ -20,7 +20,6 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     private var localPopoverCloseMonitor: Any?
     private var globalPopoverCloseMonitor: Any?
     private var resignActiveObserver: NSObjectProtocol?
-    private var lastEventNumber: Int?
     private var lastQuotaResetRefresh: Date?
     private var refreshSchedule = RefreshSchedule()
     private var timer: Timer?
@@ -80,8 +79,8 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     }
 
     @objc private func handleStatusItemClick(_ sender: NSStatusBarButton) {
-        if NSApp.currentEvent?.modifierFlags.contains(.command) == true { return }
-        handleStatusEvent(NSApp.currentEvent, relativeTo: sender)
+        guard let activation = StatusItemActivation.current else { return }
+        handleStatusEvent(activation.mouseButton, relativeTo: sender)
     }
 
     private func installEventMonitor() {
@@ -93,7 +92,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
                 return event
             }
             if event.modifierFlags.contains(.command) { return event }
-            self.handleStatusEvent(event, relativeTo: self.statusItem.button)
+            self.handleStatusEvent(Self.mouseButton(from: event), relativeTo: self.statusItem.button)
             return nil
         }
     }
@@ -242,10 +241,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         return button.bounds.contains(point)
     }
 
-    private func handleStatusEvent(_ event: NSEvent?, relativeTo button: NSStatusBarButton?) {
-        if let event, lastEventNumber == event.eventNumber { return }
-        lastEventNumber = event?.eventNumber
-        let mouseButton = Self.mouseButton(from: event)
+    private func handleStatusEvent(_ mouseButton: StatusMouseButton, relativeTo button: NSStatusBarButton?) {
         let panelShown = isMainPanelVisible
         switch StatusInteraction.route(mouseButton: mouseButton, isPopoverShown: panelShown) {
         case .showMenu:
@@ -634,15 +630,10 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         populateMenu(menu)
         statusMenu = menu
         closeMainPanel()
-        if let event = NSApp.currentEvent {
-            NSMenu.popUpContextMenu(menu, with: event, for: button)
-        } else {
-            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 2), in: button)
-        }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 2), in: button)
     }
 
-    private static func mouseButton(from event: NSEvent?) -> StatusMouseButton {
-        guard let event else { return .left }
+    private static func mouseButton(from event: NSEvent) -> StatusMouseButton {
         if event.type == .rightMouseDown || event.type == .rightMouseUp || event.buttonNumber == 1 {
             return .right
         }
