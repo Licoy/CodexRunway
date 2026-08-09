@@ -22,6 +22,8 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     private var resignActiveObserver: NSObjectProtocol?
     private var lastQuotaResetRefresh: Date?
     private var refreshSchedule = RefreshSchedule()
+    private var widgetRefreshSchedule = RefreshSchedule()
+    private var widgetRefreshPending = false
     private var timer: Timer?
     private var widgetCoordinator: RunwayWidgetCoordinator?
     private var widgetSnapshotCancellable: AnyCancellable?
@@ -75,7 +77,9 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         // Menu-bar text is minute-granular; tolerance lets the system coalesce wakeups.
         tickTimer.tolerance = 0.2
         timer = tickTimer
-        beginFullRefresh(policy: .ifChanged)
+        beginFullRefresh(
+            policy: .ifChanged,
+            refreshWidgets: hasActiveWidgets)
     }
 
     @objc private func handleStatusItemClick(_ sender: NSStatusBarButton) {
@@ -99,28 +103,44 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
 
     private func tick() {
         let now = Date()
+        let refreshWidgets = hasActiveWidgets && widgetRefreshSchedule.isDue(at: now)
         model.tick(now: now)
         updateStatusBarView()
         if let reset = model.nextDueQuotaReset(after: lastQuotaResetRefresh, now: now), !model.isRefreshing {
             lastQuotaResetRefresh = reset
-            beginFullRefresh(policy: .ifChanged)
+            beginFullRefresh(policy: .ifChanged, refreshWidgets: refreshWidgets)
             return
         }
-        if refreshSchedule.isDue(at: now), !model.isRefreshing {
-            beginFullRefresh(policy: .ifChanged)
+        if (refreshSchedule.isDue(at: now) || refreshWidgets), !model.isRefreshing {
+            beginFullRefresh(policy: .ifChanged, refreshWidgets: refreshWidgets)
         }
     }
 
-    private func beginFullRefresh(policy: UsageCostRefreshPolicy) {
+    private func beginFullRefresh(
+        policy: UsageCostRefreshPolicy,
+        refreshWidgets: Bool = false
+    ) {
         guard !model.isRefreshing else { return }
+        if refreshWidgets {
+            widgetRefreshPending = true
+            widgetRefreshSchedule.refreshStarted()
+        }
         refreshSchedule.refreshStarted()
         model.refresh(policy: policy)
     }
 
     private func fullRefreshCompleted(at completion: Date = Date()) {
         refreshSchedule.refreshCompleted(at: completion, interval: refreshInterval)
+        let refreshWidgets = hasActiveWidgets
+            && (widgetRefreshPending || widgetRefreshSchedule.isDue(at: completion))
+        widgetRefreshPending = false
+        if refreshWidgets {
+            widgetRefreshSchedule.refreshCompleted(
+                at: completion,
+                interval: widgetRefreshInterval)
+        }
         widgetCoordinator?.refreshConfigurations()
-        publishWidgetSnapshot(force: true)
+        publishWidgetSnapshot(force: refreshWidgets)
     }
 
     private func configureWidgets() {
@@ -130,8 +150,9 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         coordinator.onRequirementsChanged = { [weak self] requirements in
             guard let self, self.model.widgetRequirements != requirements else { return }
             self.model.widgetRequirements = requirements
+            self.refreshIntervalChanged()
             if !requirements.isEmpty {
-                self.beginFullRefresh(policy: .ifChanged)
+                self.beginFullRefresh(policy: .ifChanged, refreshWidgets: true)
             }
         }
         widgetSnapshotCancellable = model.objectWillChange
@@ -144,15 +165,32 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     }
 
     private func publishWidgetSnapshot(force: Bool) {
-        widgetCoordinator?.publish(model.makeWidgetSnapshot(), force: force)
+        widgetCoordinator?.publish(
+            model.makeWidgetSnapshot(),
+            force: force,
+            minimumReloadInterval: widgetRefreshInterval)
     }
 
     private func refreshIntervalChanged(now: Date = Date()) {
         refreshSchedule.intervalChanged(to: refreshInterval, now: now)
+        guard hasActiveWidgets else {
+            widgetRefreshSchedule = RefreshSchedule()
+            widgetRefreshPending = false
+            return
+        }
+        widgetRefreshSchedule.intervalChanged(to: widgetRefreshInterval, now: now)
     }
 
     private var refreshInterval: TimeInterval {
         TimeInterval(settings.preferences.refreshIntervalSeconds)
+    }
+
+    private var widgetRefreshInterval: TimeInterval {
+        TimeInterval(settings.preferences.widgetRefreshIntervalSeconds)
+    }
+
+    private var hasActiveWidgets: Bool {
+        !model.widgetRequirements.isEmpty
     }
 
     private func applyAppearance() {
@@ -487,7 +525,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         showDetailsWindow()
         switch link.section {
         case .overview:
-            beginFullRefresh(policy: .ifChanged)
+            beginFullRefresh(policy: .ifChanged, refreshWidgets: hasActiveWidgets)
         case .quota:
             model.refreshQuota()
         case .tokens:
@@ -656,7 +694,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     }
 
     @objc func refreshFromMenu() {
-        beginFullRefresh(policy: .force)
+        beginFullRefresh(policy: .force, refreshWidgets: hasActiveWidgets)
         showPopover()
     }
 

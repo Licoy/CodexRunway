@@ -65,6 +65,12 @@ final class RunwaySettings: ObservableObject {
         update { $0.refreshIntervalSeconds = max(60, min(1_800, seconds)) }
     }
 
+    func updateWidgetRefreshInterval(_ seconds: Int) {
+        update {
+            $0.widgetRefreshIntervalSeconds = RunwayPreferences.clampWidgetRefreshInterval(seconds)
+        }
+    }
+
     func updateApiCostSummaryRange(_ range: ApiCostSummaryRange) {
         update { $0.apiCostSummaryRange = range }
     }

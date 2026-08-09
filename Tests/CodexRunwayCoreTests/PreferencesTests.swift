@@ -4,6 +4,40 @@ import Testing
 
 @Suite("Runway preferences")
 struct PreferencesTests {
+    @Test("desktop widgets default to a 60-second app-driven refresh")
+    func widgetRefreshDefaults() throws {
+        #expect(RunwayPreferences().widgetRefreshIntervalSeconds == 60)
+
+        let oldData = """
+        {
+          "language": "english",
+          "appearance": "dark",
+          "refreshIntervalSeconds": 300
+        }
+        """.data(using: .utf8)!
+
+        let oldPreferences = try JSONDecoder().decode(RunwayPreferences.self, from: oldData)
+        #expect(oldPreferences.widgetRefreshIntervalSeconds == 60)
+    }
+
+    @Test("desktop widget refresh accepts custom values within safe bounds")
+    func widgetRefreshBounds() throws {
+        let tooFrequent = """
+        { "widgetRefreshIntervalSeconds": 1 }
+        """.data(using: .utf8)!
+        let tooSlow = """
+        { "widgetRefreshIntervalSeconds": 3600 }
+        """.data(using: .utf8)!
+
+        #expect(
+            try JSONDecoder().decode(RunwayPreferences.self, from: tooFrequent)
+                .widgetRefreshIntervalSeconds == 60)
+        #expect(
+            try JSONDecoder().decode(RunwayPreferences.self, from: tooSlow)
+                .widgetRefreshIntervalSeconds == 1_800)
+        #expect(RunwayPreferences(widgetRefreshIntervalSeconds: 120).widgetRefreshIntervalSeconds == 120)
+    }
+
     @Test("system language resolves from device locale")
     func resolvesSystemLanguage() {
         #expect(L10n.resolve(.system, localeIdentifier: "zh-Hans-CN") == .simplifiedChinese)
@@ -59,6 +93,7 @@ struct PreferencesTests {
             statusBarBatteryDetailStyle: .remainingPercent,
             statusBarProviderScope: .both,
             refreshIntervalSeconds: 120,
+            widgetRefreshIntervalSeconds: 300,
             apiCostSummaryRange: .thisMonth,
             showsCostSummary: false,
             showsRecentSessions: true,
@@ -78,6 +113,7 @@ struct PreferencesTests {
         #expect(store.load().statusBarBatteryDetailStyle == .remainingPercent)
         #expect(store.load().statusBarProviderScope == .both)
         #expect(store.load().refreshIntervalSeconds == 120)
+        #expect(store.load().widgetRefreshIntervalSeconds == 300)
         #expect(store.load().apiCostSummaryRange == .thisMonth)
         #expect(store.load().showsCostSummary == false)
         #expect(store.load().showsRecentSessions)

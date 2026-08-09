@@ -440,6 +440,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case widgetMetricTitle
     case widgetNoData
     case widgetOverviewTitle
+    case widgetRefreshInterval
+    case widgetRefreshIntervalDescription
     case widgetRemaining
     case widgetResetCredits
     case widgetResetTodayTitle

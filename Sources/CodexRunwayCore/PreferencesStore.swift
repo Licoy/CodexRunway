@@ -72,6 +72,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     public var statusBarBatteryDetailStyle: StatusBarBatteryDetailStyle
     public var statusBarProviderScope: StatusBarProviderScope
     public var refreshIntervalSeconds: Int
+    public var widgetRefreshIntervalSeconds: Int
     public var apiCostSummaryRange: ApiCostSummaryRange
     public var showsCostSummary: Bool
     public var showsRecentSessions: Bool
@@ -87,6 +88,8 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     public var rateLimitResetTodayAlertsEnabled: Bool
     public var exportsStatusJSON: Bool
 
+    public static let widgetRefreshIntervalOptions: [Int] = [60, 300, 600, 900, 1_800]
+    public static let defaultWidgetRefreshIntervalSeconds = 60
     public static let rateLimitResetTodayRefreshIntervalOptions: [Int] = [900, 1_800, 3_600, 7_200, 21_600]
     public static let defaultRateLimitResetTodayRefreshIntervalSeconds = 3_600
 
@@ -100,6 +103,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         statusBarBatteryDetailStyle: StatusBarBatteryDetailStyle = .countdown,
         statusBarProviderScope: StatusBarProviderScope = .selected,
         refreshIntervalSeconds: Int = 300,
+        widgetRefreshIntervalSeconds: Int = RunwayPreferences.defaultWidgetRefreshIntervalSeconds,
         apiCostSummaryRange: ApiCostSummaryRange = .today,
         showsCostSummary: Bool = true,
         showsRecentSessions: Bool = false,
@@ -124,6 +128,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         self.statusBarBatteryDetailStyle = statusBarBatteryDetailStyle
         self.statusBarProviderScope = statusBarProviderScope
         self.refreshIntervalSeconds = refreshIntervalSeconds
+        self.widgetRefreshIntervalSeconds = Self.clampWidgetRefreshInterval(widgetRefreshIntervalSeconds)
         self.apiCostSummaryRange = apiCostSummaryRange
         self.showsCostSummary = showsCostSummary
         self.showsRecentSessions = showsRecentSessions
@@ -145,6 +150,10 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         max(900, min(21_600, seconds))
     }
 
+    public static func clampWidgetRefreshInterval(_ seconds: Int) -> Int {
+        max(60, min(1_800, seconds))
+    }
+
     enum CodingKeys: String, CodingKey {
         case selectedProvider
         case language
@@ -155,6 +164,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         case statusBarBatteryDetailStyle
         case statusBarProviderScope
         case refreshIntervalSeconds
+        case widgetRefreshIntervalSeconds
         case apiCostSummaryRange
         case showsCostSummary
         case showsRecentSessions
@@ -182,6 +192,9 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         statusBarBatteryDetailStyle = try container.decodeIfPresent(StatusBarBatteryDetailStyle.self, forKey: .statusBarBatteryDetailStyle) ?? .countdown
         statusBarProviderScope = try container.decodeIfPresent(StatusBarProviderScope.self, forKey: .statusBarProviderScope) ?? .selected
         refreshIntervalSeconds = try container.decodeIfPresent(Int.self, forKey: .refreshIntervalSeconds) ?? 300
+        widgetRefreshIntervalSeconds = Self.clampWidgetRefreshInterval(
+            try container.decodeIfPresent(Int.self, forKey: .widgetRefreshIntervalSeconds)
+                ?? Self.defaultWidgetRefreshIntervalSeconds)
         apiCostSummaryRange = try container.decodeIfPresent(ApiCostSummaryRange.self, forKey: .apiCostSummaryRange) ?? .today
         showsCostSummary = try container.decodeIfPresent(Bool.self, forKey: .showsCostSummary) ?? true
         showsRecentSessions = try container.decodeIfPresent(Bool.self, forKey: .showsRecentSessions) ?? false

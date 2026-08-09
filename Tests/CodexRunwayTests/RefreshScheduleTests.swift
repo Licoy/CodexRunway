@@ -4,6 +4,23 @@ import Testing
 
 @Suite("Refresh schedule")
 struct RefreshScheduleTests {
+    @Test("widget cadence remains independent of intervening main refreshes")
+    func widgetCadenceIsIndependent() {
+        let initialCompletion = Date(timeIntervalSince1970: 1_000)
+        var mainSchedule = RefreshSchedule()
+        var widgetSchedule = RefreshSchedule()
+        mainSchedule.refreshCompleted(at: initialCompletion, interval: 300)
+        widgetSchedule.refreshCompleted(at: initialCompletion, interval: 600)
+
+        let mainCompletion = initialCompletion.addingTimeInterval(310)
+        #expect(mainSchedule.isDue(at: mainCompletion))
+        mainSchedule.refreshStarted()
+        mainSchedule.refreshCompleted(at: mainCompletion, interval: 300)
+
+        #expect(!widgetSchedule.isDue(at: initialCompletion.addingTimeInterval(599)))
+        #expect(widgetSchedule.isDue(at: initialCompletion.addingTimeInterval(600)))
+    }
+
     @Test("automatic refresh is scheduled from completion instead of start")
     func automaticRefreshIsScheduledFromCompletion() {
         let startedAt = Date(timeIntervalSince1970: 1_000)

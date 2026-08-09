@@ -92,6 +92,19 @@ struct ControlPanelView: View {
                     }
                     .pickerStyle(.menu)
                 }
+                if #available(macOS 14.0, *) {
+                    PickerRow(
+                        title: l10n.text(.widgetRefreshInterval),
+                        subtitle: l10n.text(.widgetRefreshIntervalDescription))
+                    {
+                        Picker(l10n.text(.widgetRefreshInterval), selection: widgetRefreshBinding) {
+                            ForEach(RunwayPreferences.widgetRefreshIntervalOptions, id: \.self) { seconds in
+                                Text(widgetRefreshIntervalLabel(seconds)).tag(seconds)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+                }
                 PickerRow(title: l10n.text(.codexFolder), subtitle: "~/.codex") {
                     Button(l10n.text(.codexFolder), action: openCodexFolder)
                         .buttonStyle(.borderedProminent)
@@ -306,6 +319,19 @@ struct ControlPanelView: View {
 
     private var refreshBinding: Binding<Int> {
         Binding(get: { settings.preferences.refreshIntervalSeconds }, set: { settings.updateRefreshInterval($0) })
+    }
+
+    private var widgetRefreshBinding: Binding<Int> {
+        Binding(
+            get: { settings.preferences.widgetRefreshIntervalSeconds },
+            set: { settings.updateWidgetRefreshInterval($0) })
+    }
+
+    private func widgetRefreshIntervalLabel(_ seconds: Int) -> String {
+        if seconds == 60 {
+            return "60 \(l10n.text(.seconds))"
+        }
+        return "\(seconds / 60) \(l10n.text(.minutes))"
     }
 
     private var statusBarStyleBinding: Binding<StatusBarDisplayStyle> {
