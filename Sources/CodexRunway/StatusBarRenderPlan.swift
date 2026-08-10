@@ -16,13 +16,16 @@ struct StatusBarRenderPlan: Equatable {
         meters: [QuotaMeter])
         -> StatusBarRenderPlan
     {
-        let visibleMeters = style == .battery
-            ? batteryMeters(scope: batteryScope, meters: meters)
-            : meters
+        let visibleMeters = switch style {
+        case .battery:
+            batteryMeters(scope: batteryScope, meters: meters)
+        case .text, .countdown, .meters, .rings:
+            meters
+        }
         let rowsPerColumn = switch style {
         case .battery, .meters:
             visibleMeters.count > 1 ? 2 : 1
-        case .countdown, .rings:
+        case .text, .countdown, .rings:
             1
         }
         return StatusBarRenderPlan(meters: visibleMeters, rowsPerColumn: rowsPerColumn)

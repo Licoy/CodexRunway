@@ -58,10 +58,11 @@ struct StatusBarRenderPlanTests {
                 batteryScope: .both,
                 meters: meters)
 
-            #expect(plan.meters == meters)
             if style == .meters || style == .battery {
+                #expect(plan.meters == meters)
                 #expect(plan.columns == [[fiveHour, weekly], [modelSpecific]])
             } else {
+                #expect(plan.meters == meters)
                 #expect(plan.columns == [[fiveHour], [weekly], [modelSpecific]])
             }
         }
@@ -192,6 +193,33 @@ struct StatusBarRenderPlanTests {
             try writeSnapshotIfRequested(compact.data, name: "\(style.rawValue)-weekly-only")
             try writeSnapshotIfRequested(expanded.data, name: "\(style.rawValue)-with-model-specific")
         }
+    }
+
+    @Test("text style displays the same percentages as quota rings")
+    func textStyleUsesRingPercentages() {
+        let fiveHour = meter(title: "5小时", usedPercent: 20, windowMinutes: 300)
+        let weekly = meter(title: "每周", usedPercent: 11, windowMinutes: 10_080)
+        let configuration = StatusBarContentState.Configuration(
+            preferences: preferences(style: .text),
+            language: .simplifiedChinese)
+        let displayMinute = Int(Date().timeIntervalSince1970 / 60)
+        let layout = StatusBarContentLayout(state: StatusBarContentState(
+            configuration: configuration,
+            content: StatusBarContentState.Content(
+                text: "6天23小时",
+                meters: [fiveHour, weekly],
+                displayMinute: displayMinute)))
+        let noQuotaLayout = StatusBarContentLayout(state: StatusBarContentState(
+            configuration: configuration,
+            content: StatusBarContentState.Content(
+                text: "6天23小时",
+                meters: [],
+                displayMinute: displayMinute)))
+
+        #expect(layout.ringText(for: fiveHour) == "80")
+        #expect(layout.textCaptions == ["80%", "89%"])
+        #expect(noQuotaLayout.textCaptions == ["--"])
+        #expect(layout.preferredWidth > noQuotaLayout.preferredWidth)
     }
 
     @Test("battery scopes and detail settings render variable quota counts")

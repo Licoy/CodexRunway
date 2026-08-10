@@ -22,6 +22,7 @@ public enum StatusBarDisplayStyle: String, CaseIterable, Codable, Sendable {
     case battery
     case meters
     case rings
+    case text
 }
 
 public enum StatusBarMetersDetailStyle: String, CaseIterable, Codable, Sendable {
