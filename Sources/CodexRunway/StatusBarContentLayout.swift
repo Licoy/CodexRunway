@@ -65,6 +65,8 @@ struct StatusBarContentLayout {
 
     var preferredWidth: CGFloat {
         switch style {
+        case .text:
+            return totalWidth(textColumnWidths, gap: 4)
         case .countdown:
             guard renderPlan.meters.count > 1 else {
                 return min(180, max(42, textWidth(text, font: countdownFont) + 14))
@@ -84,6 +86,10 @@ struct StatusBarContentLayout {
     }
 
     var countdownFont: NSFont {
+        .systemFont(ofSize: 14, weight: .semibold)
+    }
+
+    var textFont: NSFont {
         .systemFont(ofSize: 14, weight: .semibold)
     }
 
@@ -111,6 +117,17 @@ struct StatusBarContentLayout {
         renderPlan.meters.map {
             min(112, max(42, textWidth(countdownCaption(for: $0), font: countdownItemFont) + 10))
         }
+    }
+
+    var textCaptions: [String] {
+        let meters = renderPlan.meters
+        return meters.isEmpty
+            ? [ringText(for: nil)]
+            : meters.map { "\(ringText(for: $0))%" }
+    }
+
+    var textColumnWidths: [CGFloat] {
+        textCaptions.map { max(24, textWidth($0, font: textFont) + 8) }
     }
 
     var batteryColumnWidths: [CGFloat] {
@@ -151,6 +168,10 @@ struct StatusBarContentLayout {
             return "\(meterDetail(for: meter)) \(meter.title)"
         }
         return "\(meter.title) \(meterDetail(for: meter))"
+    }
+
+    func ringText(for meter: QuotaMeter?) -> String {
+        meter.map { "\($0.remainingPercent)" } ?? "--"
     }
 
     func batteryDetail(for meter: QuotaMeter) -> String {

@@ -386,6 +386,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case statusBarProviderScopeSelected
     case statusBarRings
     case statusBarStyle
+    case statusBarText
     case statusUsed
     case statusWait
     case statusUnknown

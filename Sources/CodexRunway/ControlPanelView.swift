@@ -491,6 +491,7 @@ private extension StatusBarDisplayStyle {
         case .battery: l10n.text(.statusBarBattery)
         case .meters: l10n.text(.statusBarMeters)
         case .rings: l10n.text(.statusBarRings)
+        case .text: l10n.text(.statusBarText)
         }
     }
 }

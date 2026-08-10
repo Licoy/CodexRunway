@@ -76,6 +76,11 @@ struct PreferencesTests {
         #expect(L10n.missingTranslations(for: .simplifiedChinese).isEmpty)
     }
 
+    @Test("progress text is the final status-bar style option")
+    func statusBarStyleOrdering() {
+        #expect(StatusBarDisplayStyle.allCases.last == .text)
+    }
+
     @Test("preferences persist to user defaults")
     func preferencesPersist() {
         let suiteName = "CodexRunwayPreferencesTests-\(UUID().uuidString)"

@@ -62,6 +62,8 @@ final class StatusBarContentView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         switch state.configuration.style {
+        case .text:
+            drawText()
         case .countdown:
             drawCountdown()
         case .battery:
@@ -129,6 +131,14 @@ final class StatusBarContentView: NSView {
     }
 
     // MARK: - Countdown / meters / rings
+
+    private func drawText() {
+        let captions = layout.textCaptions
+        let frames = layout.columnFrames(widths: layout.textColumnWidths, gap: 4, in: bounds)
+        for (caption, frame) in zip(captions, frames) {
+            drawCentered(caption, font: layout.textFont, rect: frame, color: .labelColor)
+        }
+    }
 
     private func drawCountdown() {
         guard renderPlan.meters.count > 1 else {
@@ -213,11 +223,7 @@ final class StatusBarContentView: NSView {
             meterColor(meter).setStroke()
             arc.stroke()
         }
-        drawCentered(ringText(for: meter), font: layout.ringFont, rect: rect, color: .labelColor)
-    }
-
-    private func ringText(for meter: QuotaMeter?) -> String {
-        meter.map { "\($0.remainingPercent)" } ?? "--"
+        drawCentered(layout.ringText(for: meter), font: layout.ringFont, rect: rect, color: .labelColor)
     }
 
     // MARK: - Battery
