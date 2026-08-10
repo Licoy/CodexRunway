@@ -149,11 +149,16 @@ final class RunwayWidgetCoordinator {
     func publish(
         _ snapshot: RunwayWidgetSnapshot,
         force: Bool = false,
+        reloadTimelines: Bool = true,
         minimumReloadInterval: TimeInterval = 0
     ) -> Task<Void, Never> {
         Task { @MainActor [publisher] in
             do {
                 guard try await publisher.publish(snapshot, force: force) else { return }
+                guard reloadTimelines else {
+                    recordReload(at: snapshot.generatedAt)
+                    return
+                }
                 if force {
                     reloader.reloadAllTimelines()
                     recordReload(at: snapshot.generatedAt)

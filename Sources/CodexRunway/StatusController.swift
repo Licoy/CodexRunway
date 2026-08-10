@@ -3,8 +3,21 @@ import CodexRunwayCore
 import Combine
 import SwiftUI
 
+struct RunwayWidgetReloadGate {
+    private(set) var allowsReload: Bool
+
+    init(initiallyAllowed: Bool) {
+        allowsReload = initiallyAllowed
+    }
+
+    mutating func open() {
+        allowsReload = true
+    }
+}
+
 @MainActor
 final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
+    private var widgetReloadGate: RunwayWidgetReloadGate
     let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     let statusBarView = StatusBarContentView(frame: .zero)
     private let popover = NSPopover()
@@ -27,6 +40,12 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     private var timer: Timer?
     private var widgetCoordinator: RunwayWidgetCoordinator?
     private var widgetSnapshotCancellable: AnyCancellable?
+
+    init(initialWidgetReloadAllowed: Bool = true) {
+        self.widgetReloadGate = RunwayWidgetReloadGate(
+            initiallyAllowed: initialWidgetReloadAllowed)
+        super.init()
+    }
 
     func start() {
         let button = statusItem.button
@@ -140,7 +159,16 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
                 interval: widgetRefreshInterval)
         }
         widgetCoordinator?.refreshConfigurations()
-        publishWidgetSnapshot(force: refreshWidgets)
+        let reloadTimelines = widgetReloadGate.allowsReload
+        let publication = publishWidgetSnapshot(
+            force: refreshWidgets,
+            reloadTimelines: reloadTimelines)
+        if !reloadTimelines, let publication {
+            Task { @MainActor [weak self] in
+                await publication.value
+                self?.widgetReloadGate.open()
+            }
+        }
     }
 
     private func configureWidgets() {
@@ -159,15 +187,20 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
             .debounce(for: .milliseconds(350), scheduler: RunLoop.main)
             .sink { [weak self] in
                 DispatchQueue.main.async { self?.publishWidgetSnapshot(force: false) }
-            }
+        }
         coordinator.refreshConfigurations()
         publishWidgetSnapshot(force: true)
     }
 
-    private func publishWidgetSnapshot(force: Bool) {
+    @discardableResult
+    private func publishWidgetSnapshot(
+        force: Bool,
+        reloadTimelines: Bool? = nil
+    ) -> Task<Void, Never>? {
         widgetCoordinator?.publish(
             model.makeWidgetSnapshot(),
             force: force,
+            reloadTimelines: reloadTimelines ?? widgetReloadGate.allowsReload,
             minimumReloadInterval: widgetRefreshInterval)
     }
 

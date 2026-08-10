@@ -10,12 +10,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // LSUIElement apps have no default Edit menu, so ⌘V / ⌘C fail in SwiftUI text fields
         // until we install a minimal main menu that wires standard edit selectors.
         installMainMenu()
-        controller = StatusController()
+        guard let target = RunwayWidgetProcessRestarter
+            .bundledWidgetTarget(in: .main)
+        else {
+            let isPackagedApplication = Bundle.main.bundleURL.pathExtension == "app"
+            if isPackagedApplication {
+                NSLog("Codex Runway could not identify the bundled widget extension.")
+            }
+            finishLaunching(initialWidgetReloadAllowed: !isPackagedApplication)
+            return
+        }
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                RunwayWidgetProcessRestarter
+                    .terminateLiveWidgetProcesses(target: target)
+            }.value
+            finishLaunching(initialWidgetReloadAllowed: reportWidgetRestart(result))
+        }
+    }
+
+    private func finishLaunching(initialWidgetReloadAllowed: Bool) {
+        controller = StatusController(
+            initialWidgetReloadAllowed: initialWidgetReloadAllowed)
         controller?.start()
         for link in pendingWidgetLinks {
             controller?.openWidget(link)
         }
         pendingWidgetLinks.removeAll()
+    }
+
+    private func reportWidgetRestart(
+        _ result: RunwayWidgetProcessTerminationResult
+    ) -> Bool {
+        if let message = result.loadFailureMessage {
+            NSLog("Codex Runway could not inspect widget processes: %@", message)
+        }
+        for failure in result.failures {
+            NSLog(
+                "Codex Runway could not restart widget process %d: %@",
+                failure.processIdentifier,
+                failure.message)
+        }
+        if !result.terminatedProcessIdentifiers.isEmpty {
+            NSLog(
+                "Codex Runway restarted %d widget process(es) before timeline reload.",
+                result.terminatedProcessIdentifiers.count)
+        }
+        return result.canReloadTimelines
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {

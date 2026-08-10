@@ -108,6 +108,78 @@ struct RunwayWidgetCoordinatorTests {
         #expect(reloadSpy.reloadedKinds.isEmpty)
     }
 
+    @Test("a forced publish can write snapshots without reloading timelines")
+    func forcedPublishCanSkipTimelineReload() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let compatibilityFixture = try makeFixture()
+        defer { compatibilityFixture.cleanup() }
+        let reloadSpy = WidgetReloadSpy()
+        let coordinator = makeCoordinator(
+            store: fixture.store,
+            reloadSpy: reloadSpy,
+            activeKinds: [],
+            compatibilityStore: compatibilityFixture.store)
+        let snapshot = makeSnapshot(generatedAt: Date(timeIntervalSince1970: 1_100))
+
+        await coordinator.publish(
+            snapshot,
+            force: true,
+            reloadTimelines: false).value
+
+        #expect(try fixture.store.load() == snapshot)
+        #expect(try compatibilityFixture.store.load() == snapshot)
+        #expect(reloadSpy.reloadAllCount == 0)
+        #expect(reloadSpy.reloadedKinds.isEmpty)
+    }
+
+    @Test("failed cleanup suppresses startup and first-refresh reloads before cadence resumes")
+    func failedCleanupDefersReloadUntilLaterCadence() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let reloadSpy = WidgetReloadSpy()
+        let coordinator = makeCoordinator(store: fixture.store, reloadSpy: reloadSpy)
+        var gate = RunwayWidgetReloadGate(initiallyAllowed: false)
+        let startup = makeSnapshot(generatedAt: Date(timeIntervalSince1970: 1_000))
+        await coordinator.publish(
+            startup,
+            force: true,
+            reloadTimelines: gate.allowsReload,
+            minimumReloadInterval: 60).value
+        let firstRefresh = makeSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 1_010),
+            remainingPercent: 70)
+        await coordinator.publish(
+            firstRefresh,
+            force: true,
+            reloadTimelines: gate.allowsReload,
+            minimumReloadInterval: 60).value
+
+        gate.open()
+        let early = makeSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 1_040),
+            remainingPercent: 60)
+        await coordinator.publish(
+            early,
+            reloadTimelines: gate.allowsReload,
+            minimumReloadInterval: 60).value
+
+        #expect(try fixture.store.load() == early)
+        #expect(reloadSpy.reloadAllCount == 0)
+        #expect(reloadSpy.reloadedKinds.isEmpty)
+
+        let due = makeSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 1_070),
+            remainingPercent: 50)
+        await coordinator.publish(
+            due,
+            reloadTimelines: gate.allowsReload,
+            minimumReloadInterval: 60).value
+
+        #expect(try fixture.store.load() == due)
+        #expect(Set(reloadSpy.reloadedKinds) == activeKinds)
+    }
+
     @Test("a late older forced publish cannot replace a newer snapshot")
     func lateOlderForcedPublishIsRejected() async throws {
         let fixture = try makeFixture()
