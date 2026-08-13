@@ -402,6 +402,23 @@ struct CostScannerTests {
         #expect(session.estimatedUSD ?? 0 > 0)
     }
 
+    @Test("session activity prices spark at the 5.3-codex rate instead of Sol")
+    func sessionActivityPricesSparkAtCodexRate() throws {
+        let root = try TemporaryDirectory()
+        let sessionDir = root.url.appending(path: "sessions/2026/06/29", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+        let sessionID = "019f17a5-436d-73b2-a93d-7af3e78cc828"
+        try """
+        {"timestamp":"2026-06-29T00:00:00Z","type":"session_meta","payload":{"id":"\(sessionID)","cwd":"/Users/me/dev/spark"}}
+        {"timestamp":"2026-06-29T00:01:00Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000000,"cached_input_tokens":0,"output_tokens":0,"reasoning_output_tokens":0}}},"turn_context":{"model":"gpt-5.3-codex-spark"}}
+        """.write(to: sessionDir.appending(path: "rollout-\(sessionID).jsonl"), atomically: true, encoding: .utf8)
+
+        let summary = try SessionActivityScanner(codexHome: root.url).scan(limit: 1)
+        let session = try #require(summary.items.first)
+
+        #expect(session.estimatedUSD == 1.75)
+    }
+
     @Test("session activity reports invalid token usage instead of dropping it")
     func sessionActivityRejectsInvalidTokenUsage() throws {
         let root = try TemporaryDirectory()

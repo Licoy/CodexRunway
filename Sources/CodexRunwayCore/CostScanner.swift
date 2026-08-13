@@ -383,6 +383,7 @@ public enum PricingTable {
         "gpt-5.4-mini": Price(inputPerMillion: 0.75, cachedInputPerMillion: 0.075, outputPerMillion: 4.5),
         "gpt-5.4-nano": Price(inputPerMillion: 0.2, cachedInputPerMillion: 0.02, outputPerMillion: 1.25),
         "gpt-5.3-codex": Price(inputPerMillion: 1.75, cachedInputPerMillion: 0.175, outputPerMillion: 14),
+        "gpt-5.3-codex-spark": Price(inputPerMillion: 1.75, cachedInputPerMillion: 0.175, outputPerMillion: 14),
         "gpt-5.2-codex": Price(inputPerMillion: 1.75, cachedInputPerMillion: 0.175, outputPerMillion: 14),
         "gpt-5.2": Price(inputPerMillion: 1.75, cachedInputPerMillion: 0.175, outputPerMillion: 14),
         "gpt-5.1": Price(inputPerMillion: 1.25, cachedInputPerMillion: 0.125, outputPerMillion: 10),

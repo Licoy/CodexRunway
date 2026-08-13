@@ -21,6 +21,7 @@ struct GrokAccountUIPresentationTests {
             .quota,
             .externalLoginWarning,
         ])
+        #expect(state.externalLoginChanged)
     }
 
     @Test("account detail actions respect ordering and protect the current account")

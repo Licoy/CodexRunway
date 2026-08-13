@@ -51,6 +51,14 @@ struct RunwayPopoverView: View {
         }
     }
 
+    private var showsTierBadgeGallery: Bool {
+        model.selectedProvider == .codex && RunwayDevFlags.showsTierBadgeGallery
+    }
+
+    private var showsGrokExternalLoginWarning: Bool {
+        model.selectedProvider == .grok && model.grokPanelState.externalLoginChanged
+    }
+
     init(
         model: RunwayModel,
         settings: RunwaySettings,
@@ -134,15 +142,21 @@ struct RunwayPopoverView: View {
     private var mainContent: some View {
         PolishedScrollView(verticalPadding: 4) {
             VStack(alignment: .leading, spacing: 0) {
-                if model.selectedProvider == .codex, RunwayDevFlags.showsTierBadgeGallery {
+                if showsTierBadgeGallery {
                     sectionBlock(isFirst: true) {
                         DevTierBadgeGallery(l10n: l10n)
+                    }
+                }
+                if showsGrokExternalLoginWarning {
+                    sectionBlock(isFirst: !showsTierBadgeGallery) {
+                        GrokDashboardView.externalLoginWarning(l10n: l10n)
                     }
                 }
                 ForEach(Array(displayedSections.enumerated()), id: \.element) { index, section in
                     sectionBlock(
                         isFirst: index == 0
-                            && !(model.selectedProvider == .codex && RunwayDevFlags.showsTierBadgeGallery))
+                            && !showsTierBadgeGallery
+                            && !showsGrokExternalLoginWarning)
                     {
                         sectionContent(section)
                     }

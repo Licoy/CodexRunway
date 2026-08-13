@@ -96,24 +96,22 @@ struct GrokDashboardView: View {
     @State private var showsBillingDetails = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            sectionBlock(isFirst: true) {
-                quotaSection
-            }
-            if Self.contentSections(for: state).contains(.externalLoginWarning) {
-                sectionBlock {
-                    externalLoginWarning
+        quotaSection
+            .sheet(isPresented: $showsBillingDetails) {
+                if let quota = state.quota {
+                    GrokBillingDetailsSheet(
+                        quota: quota,
+                        l10n: l10n,
+                        onDismiss: { showsBillingDetails = false })
                 }
             }
-        }
-        .sheet(isPresented: $showsBillingDetails) {
-            if let quota = state.quota {
-                GrokBillingDetailsSheet(
-                    quota: quota,
-                    l10n: l10n,
-                    onDismiss: { showsBillingDetails = false })
-            }
-        }
+    }
+
+    static func externalLoginWarning(l10n: L10n) -> some View {
+        Label(l10n.text(.grokExternalLoginChanged), systemImage: "exclamationmark.triangle")
+            .font(.caption)
+            .foregroundStyle(Color(nsColor: .systemOrange))
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var quotaSection: some View {
@@ -163,27 +161,6 @@ struct GrokDashboardView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .runwayCard(.sunken)
-    }
-
-    private var externalLoginWarning: some View {
-        Label(l10n.text(.grokExternalLoginChanged), systemImage: "exclamationmark.triangle")
-            .font(.caption)
-            .foregroundStyle(Color(nsColor: .systemOrange))
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func sectionBlock<Content: View>(
-        isFirst: Bool = false,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if !isFirst {
-                RunwayHairline()
-            }
-            content()
-                .padding(.top, isFirst ? 8 : 16)
-                .padding(.bottom, 16)
-        }
     }
 
     private var emptyStateTitle: String {

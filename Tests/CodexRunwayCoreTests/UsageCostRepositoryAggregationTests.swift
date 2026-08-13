@@ -297,4 +297,22 @@ struct UsageCostRepositoryAggregationTests {
         #expect(summary.projectRows[0].estimatedUSD == 5.2)
         #expect(summary.estimatedUSD == 5.2)
     }
+
+    @Test("spark usage keeps the window priced instead of falling back to tokens-only")
+    func sparkAndSolWindowStaysPriced() async throws {
+        let fixture = try RepositoryFixture()
+        let contents = """
+        {"timestamp":"2026-06-29T00:00:00Z","type":"session_meta","payload":{"cwd":"/Users/me/dev/codex-runway"}}
+        \(tokenLine(timestamp: "2026-06-29T01:00:00Z", input: 1_000_000, output: 0, model: "gpt-5.6-sol"))
+        \(tokenLine(timestamp: "2026-06-29T02:00:00Z", input: 1_000_000, output: 0, model: "gpt-5.3-codex-spark"))
+        """
+        try fixture.write(contents, basename: "rollout-spark-models.jsonl")
+
+        let summary = try #require(try await fixture.repository().summaries(
+            for: [fullWindowQuery()], calculatedAt: fixedNow, policy: .ifChanged)["full"])
+
+        #expect(summary.confidence == .priced)
+        #expect(summary.estimatedUSD == 6.75)
+        #expect(summary.modelRows.first { $0.name == "gpt-5.3-codex-spark" }?.estimatedUSD == 1.75)
+    }
 }

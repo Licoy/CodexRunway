@@ -123,7 +123,7 @@ public actor UsageCostRepository {
             databaseURL: databaseURL,
             parserVersion: UsageCostRepositoryWorker.currentParserVersion,
             calendar: .autoupdatingCurrent)
-        pricingProvider = OpenAIPricingCatalogProvider()
+        pricingProvider = nil
         fixedPriceBook = .current
         beforeFlight = nil
     }

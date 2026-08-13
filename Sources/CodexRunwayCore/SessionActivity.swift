@@ -226,9 +226,14 @@ public struct SessionActivityScanner: Sendable {
 
     private func estimatedCost(_ byModel: [String: ApiEquivalentTotals]) -> Decimal? {
         guard !byModel.isEmpty else { return nil }
-        return byModel.reduce(Decimal(0)) { result, item in
-            result + (PricingTable.cost(model: item.key, totals: item.value) ?? PricingTable.equivalentCost(totals: item.value))
+        var result = Decimal(0)
+        for item in byModel {
+            guard let cost = PricingTable.cost(model: item.key, totals: item.value) else {
+                return nil
+            }
+            result += cost
         }
+        return result
     }
 }
 

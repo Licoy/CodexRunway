@@ -194,6 +194,7 @@ struct ControlPanelView: View {
                             moveDownTitle: l10n.text(.accountsMoveDown),
                             isEnabled: moduleVisibilityBinding(module),
                             hasConfiguration: module.hasConfiguration,
+                            showsConfigurationWhenHidden: module.showsConfigurationWhenHidden,
                             canMoveUp: index > 0,
                             canMoveDown: index + 1 < settings.preferences.mainPanelModuleOrder.count,
                             onMoveUp: { settings.moveMainPanelModule(module, by: -1) },
@@ -706,6 +707,10 @@ private extension MainPanelModule {
             false
         }
     }
+
+    var showsConfigurationWhenHidden: Bool {
+        self == .quota
+    }
 }
 
 struct PreferencesPane<Content: View>: View {
@@ -785,6 +790,7 @@ private struct MainPanelModuleCard<Configuration: View>: View {
     var moveDownTitle: String
     @Binding var isEnabled: Bool
     var hasConfiguration: Bool
+    var showsConfigurationWhenHidden: Bool
     var canMoveUp: Bool
     var canMoveDown: Bool
     var onMoveUp: () -> Void
@@ -842,11 +848,13 @@ private struct MainPanelModuleCard<Configuration: View>: View {
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .help(isEnabled ? visibleTitle : hiddenTitle)
+                        .accessibilityLabel(isEnabled ? visibleTitle : hiddenTitle)
+                        .accessibilityValue(isEnabled ? visibleTitle : hiddenTitle)
                 }
             }
             .padding(11)
 
-            if isEnabled, hasConfiguration {
+            if hasConfiguration, isEnabled || showsConfigurationWhenHidden {
                 Divider()
                     .opacity(0.7)
                 configuration

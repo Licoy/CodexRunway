@@ -83,6 +83,9 @@ struct OpenAIPricingCatalogTests {
         #expect(PricingTable.price(for: "gpt-5.6-sol-2026-08-13")?.inputPerMillion == 5)
         #expect(PricingTable.price(for: "gpt-5.6-solstice") == nil)
         #expect(PricingTable.price(for: "gpt-5.5-pro")?.inputPerMillion == 30)
+        #expect(PricingTable.price(for: "gpt-5.3-codex-spark")?.inputPerMillion == 1.75)
+        #expect(PricingTable.price(for: "gpt-5.3-codex-spark")?.cachedInputPerMillion == 0.175)
+        #expect(PricingTable.price(for: "gpt-5.3-codex-spark")?.outputPerMillion == 14)
     }
 
     private static let markdown = """
