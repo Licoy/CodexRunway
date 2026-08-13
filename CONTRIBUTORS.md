@@ -1,6 +1,6 @@
 # 贡献者
 
-[返回 README](README.md) | [English](ENGLISH.md)
+[README](README.md) | [简体中文](README_ZH.md)
 
 感谢所有为 Codex Runway 提交代码、测试、反馈、文档和设计建议的人。
 
@@ -115,7 +115,7 @@ docs(readme): 完善中英文使用说明
 
 ## 文档规则
 
-- `README.md` 默认为中文。
-- `ENGLISH.md` 是英文说明，不替代中文首页。
+- `README.md` 默认为英文。
+- `README_ZH.md` 是简体中文说明，不替代英文首页。
 - 文档不要包含外部参考应用名称、链接或代码片段。
 - 文档应清楚说明隐私边界、打包方式、在线更新和系统要求。
