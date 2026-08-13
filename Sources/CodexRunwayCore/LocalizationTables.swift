@@ -261,6 +261,9 @@ extension L10n {
         .rateLimitResetTodayEvidenceLimitIncrease: "A quota limit increase was announced; this is not a reset.",
         .rateLimitResetTodayEvidenceResetCompleted: "An explicit Codex quota reset was announced.",
         .rateLimitResetTodayEvidenceResetScheduled: "An explicit Codex quota reset was scheduled.",
+        .rateLimitResetTodayEvidenceResetPreview:
+            "A high-probability Codex quota reset was inferred from context.",
+        .rateLimitResetTodayEvidenceManualCompletion: "Confirmed without an X completion post.",
         .rateLimitResetTodayEvidenceUncertain: "Not a clear reset signal.",
         .rateLimitResetTodayLastCheck: "Last check",
         .rateLimitResetTodayLastFetched: "Last refreshed",
@@ -715,6 +718,8 @@ extension L10n {
         .rateLimitResetTodayEvidenceLimitIncrease: "公告涉及提高配额，不代表发生重置。",
         .rateLimitResetTodayEvidenceResetCompleted: "发现明确的 Codex 配额重置公告。",
         .rateLimitResetTodayEvidenceResetScheduled: "发现明确的 Codex 配额重置安排。",
+        .rateLimitResetTodayEvidenceResetPreview: "根据上下文推断出高概率的 Codex 配额重置预告。",
+        .rateLimitResetTodayEvidenceManualCompletion: "已确认发生重置，但没有对应的 X 完成帖。",
         .rateLimitResetTodayEvidenceUncertain: "不是明确的重置信号。",
         .rateLimitResetTodayLastCheck: "最近检查",
         .rateLimitResetTodayLastFetched: "最后刷新",

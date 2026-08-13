@@ -51,41 +51,147 @@ extension RateLimitResetTodaySnapshot {
             throw invalidPayload("The reset-status feed contains too many events.")
         }
         for event in response.events {
-            guard event.confidence.isFinite, 0...1 ~= event.confidence else {
-                throw invalidPayload("Event confidence must be between zero and one.")
+            try validate(event)
+        }
+        if let timeline = response.resetTimeline {
+            try validate(timeline)
+        }
+    }
+
+    private static func validate(_ timeline: RateLimitResetTimeline) throws {
+        if let next = timeline.nextSchedule {
+            try validate(next)
+            guard next.kind == .resetScheduled else {
+                throw invalidPayload("nextSchedule must be a scheduled reset.")
             }
-            let sourcePath = event.source.url.pathComponents.filter { $0 != "/" }
-            guard event.source.handle == "thsottiaux",
-                  !event.source.postID.isEmpty,
-                  event.source.postID.count <= 30,
-                  event.source.postID.allSatisfy(\.isNumber),
-                  event.source.url.scheme?.lowercased() == "https",
-                  event.source.url.host?.lowercased() == "x.com",
-                  sourcePath.count == 3,
-                  sourcePath[0].caseInsensitiveCompare(event.source.handle) == .orderedSame,
-                  sourcePath[1] == "status",
-                  sourcePath[2] == event.source.postID
-            else {
-                throw invalidPayload("Event source must identify a valid @thsottiaux X post.")
+        }
+        if let postID = timeline.recentNonCompletedPostId {
+            try validatePostID(postID, label: "recentNonCompletedPostId")
+        }
+        var fulfilledIDs = Set<String>()
+        for entry in timeline.fulfilledSchedules {
+            try validate(entry.schedule)
+            guard entry.schedule.kind == .resetScheduled else {
+                throw invalidPayload("A fulfilled schedule must contain a scheduled event.")
             }
-            guard !event.text.isEmpty else {
-                throw invalidPayload("Event text must be a non-empty original post body.")
+            try validatePostID(entry.completionPostID, label: "completionPostId")
+            guard entry.visibleUntil >= entry.completedAt else {
+                throw invalidPayload("Fulfilled schedule visibility cannot end before completion.")
             }
-            guard event.kind.acceptedRationales.contains(event.rationale) else {
-                throw invalidPayload("Event rationale must be the derived explanation for its kind.")
+            try validate(entry.window)
+            let scheduleID = entry.schedule.source.postID
+            guard fulfilledIDs.insert(scheduleID).inserted else {
+                throw invalidPayload("Fulfilled schedules must have unique post IDs.")
             }
-            switch event.kind {
-            case .resetCompleted:
-                break
-            case .resetScheduled:
-                guard event.effectiveAt != nil else {
-                    throw invalidPayload("A scheduled reset must include its effective time.")
-                }
-            case .bankedReset, .limitIncrease, .uncertain:
-                guard event.effectiveAt == nil else {
-                    throw invalidPayload("This event kind cannot include an effective time.")
-                }
+        }
+        var manualIDs = Set<String>()
+        for item in timeline.manualCompletions {
+            try validate(item)
+            guard manualIDs.insert(item.id).inserted else {
+                throw invalidPayload("Manual completions must have unique IDs.")
             }
+        }
+        var suppressed = Set<String>()
+        for postID in timeline.suppressedPostIds {
+            try validatePostID(postID, label: "suppressedPostIds")
+            guard suppressed.insert(postID).inserted else {
+                throw invalidPayload("Suppressed post IDs must be unique.")
+            }
+        }
+    }
+
+    private static func validate(_ item: RateLimitResetManualCompletion) throws {
+        guard item.id.hasPrefix("manual:") else {
+            throw invalidPayload("Manual completion IDs must start with manual:.")
+        }
+        guard item.visibleUntil >= item.completedAt else {
+            throw invalidPayload("Manual completion visibility cannot end before completion.")
+        }
+        guard item.fulfillmentOrigin == "manual" else {
+            throw invalidPayload("Manual completions must use fulfillmentOrigin manual.")
+        }
+        try validatePostID(item.representativePostID, label: "representativePostId")
+        guard !item.schedulePostIDs.isEmpty,
+              Set(item.schedulePostIDs).count == item.schedulePostIDs.count
+        else {
+            throw invalidPayload("Manual completion schedule post IDs must be unique and non-empty.")
+        }
+        for postID in item.schedulePostIDs {
+            try validatePostID(postID, label: "schedulePostIds")
+        }
+        guard item.schedulePostIDs.contains(item.representativePostID) else {
+            throw invalidPayload("Manual completion representative must be one of its schedules.")
+        }
+        guard item.schedules.map(\.source.postID) == item.schedulePostIDs else {
+            throw invalidPayload("Manual completion schedules must match schedulePostIds.")
+        }
+        for event in item.schedules {
+            try validate(event)
+            guard event.kind == .resetScheduled else {
+                throw invalidPayload("Manual completion schedules must be scheduled events.")
+            }
+        }
+    }
+
+    private static func validate(_ window: RateLimitResetPublishedWindow) throws {
+        switch window.precision {
+        case .datetime:
+            guard window.endAt == window.startAt else {
+                throw invalidPayload("A datetime reset window must be a single instant.")
+            }
+        case .date:
+            guard window.endAt > window.startAt else {
+                throw invalidPayload("A date reset window must span a calendar day.")
+            }
+        }
+    }
+
+    private static func validate(_ event: RateLimitResetTodayEvent) throws {
+        guard event.confidence.isFinite, 0...1 ~= event.confidence else {
+            throw invalidPayload("Event confidence must be between zero and one.")
+        }
+        let sourcePath = event.source.url.pathComponents.filter { $0 != "/" }
+        guard event.source.handle == "thsottiaux",
+              !event.source.postID.isEmpty,
+              event.source.postID.count <= 30,
+              event.source.postID.allSatisfy(\.isNumber),
+              event.source.url.scheme?.lowercased() == "https",
+              event.source.url.host?.lowercased() == "x.com",
+              sourcePath.count == 3,
+              sourcePath[0].caseInsensitiveCompare(event.source.handle) == .orderedSame,
+              sourcePath[1] == "status",
+              sourcePath[2] == event.source.postID
+        else {
+            throw invalidPayload("Event source must identify a valid @thsottiaux X post.")
+        }
+        guard !event.text.isEmpty else {
+            throw invalidPayload("Event text must be a non-empty original post body.")
+        }
+        guard event.acceptedRationales.contains(event.rationale) else {
+            throw invalidPayload("Event rationale must be the derived explanation for its kind.")
+        }
+        switch event.kind {
+        case .resetCompleted:
+            guard event.schedulePrecision == nil, event.scheduleBasis == nil else {
+                throw invalidPayload("Schedule metadata is only allowed for scheduled events.")
+            }
+        case .resetScheduled:
+            guard event.effectiveAt != nil else {
+                throw invalidPayload("A scheduled reset must include its effective time.")
+            }
+        case .bankedReset, .limitIncrease, .uncertain:
+            guard event.effectiveAt == nil else {
+                throw invalidPayload("This event kind cannot include an effective time.")
+            }
+            guard event.schedulePrecision == nil, event.scheduleBasis == nil else {
+                throw invalidPayload("Schedule metadata is only allowed for scheduled events.")
+            }
+        }
+    }
+
+    private static func validatePostID(_ postID: String, label: String) throws {
+        guard !postID.isEmpty, postID.count <= 30, postID.allSatisfy(\.isNumber) else {
+            throw invalidPayload("\(label) must be a numeric X post ID.")
         }
     }
 
@@ -98,15 +204,19 @@ extension RateLimitResetTodaySnapshot {
     }
 }
 
-private extension RateLimitResetTodayEventKind {
+private extension RateLimitResetTodayEvent {
     /// Schema enum rationales for each kind. `uncertain` accepts the current
     /// canonical string and one legacy wording during feed transition.
     var acceptedRationales: Set<String> {
-        switch self {
+        switch kind {
         case .resetCompleted:
             ["Explicit Codex quota reset announcement."]
         case .resetScheduled:
-            ["Explicit Codex quota reset schedule."]
+            if scheduleBasis == .contextualInference {
+                ["High-probability Codex quota reset preview inferred from context."]
+            } else {
+                ["Explicit Codex quota reset schedule."]
+            }
         case .bankedReset:
             ["Banked reset announcement; not a completed reset."]
         case .limitIncrease:
@@ -127,4 +237,21 @@ struct RateLimitResetTodayResponse: Decodable {
     var lastSuccessfulCheckAt: Date?
     var monitor: RateLimitResetTodayMonitor
     var events: [RateLimitResetTodayEvent]
+    var resetTimeline: RateLimitResetTimeline?
+
+    init(
+        schemaVersion: Int,
+        generatedAt: Date,
+        lastSuccessfulCheckAt: Date?,
+        monitor: RateLimitResetTodayMonitor,
+        events: [RateLimitResetTodayEvent],
+        resetTimeline: RateLimitResetTimeline? = nil)
+    {
+        self.schemaVersion = schemaVersion
+        self.generatedAt = generatedAt
+        self.lastSuccessfulCheckAt = lastSuccessfulCheckAt
+        self.monitor = monitor
+        self.events = events
+        self.resetTimeline = resetTimeline
+    }
 }

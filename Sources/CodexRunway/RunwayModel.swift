@@ -1468,8 +1468,9 @@ final class RunwayModel: ObservableObject {
         let calendar = RateLimitResetTodaySnapshot.localDayCalendar
         switch snapshot.resolvedState(now: now, calendar: calendar) {
         case .yes:
-            // Prefer the next same-day schedule when today has multiple resets.
-            if let next = snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar) {
+            if snapshot.prefersSameDayScheduleExplanation(now: now, calendar: calendar),
+               let next = snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar)
+            {
                 let when = ResetLabelFormatter.scheduledLabel(
                     for: RateLimitResetScheduleWindow(
                         startAt: next.effectiveAt,

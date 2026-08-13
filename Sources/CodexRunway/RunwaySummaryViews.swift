@@ -383,7 +383,7 @@ struct RateLimitResetTodayView: View {
     private func heroYesPrefix(now: Date) -> String {
         guard let snapshot else { return l10n.text(.rateLimitResetTodayYesHint) }
         let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-        if snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar) != nil {
+        if snapshot.prefersSameDayScheduleExplanation(now: now, calendar: calendar) {
             return l10n.text(.rateLimitResetTodayYesHintScheduled)
         }
         return l10n.text(.rateLimitResetTodayYesHint)
@@ -394,8 +394,9 @@ struct RateLimitResetTodayView: View {
         guard let snapshot, snapshot.resolvedState(now: now, calendar: calendar) == .yes else {
             return nil
         }
-        // Prefer the next same-day schedule when today may have multiple resets.
-        if let next = snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar) {
+        if snapshot.prefersSameDayScheduleExplanation(now: now, calendar: calendar),
+           let next = snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar)
+        {
             let when = ResetLabelFormatter.scheduledLabel(
                 for: RateLimitResetScheduleWindow(
                     startAt: next.effectiveAt,
@@ -607,7 +608,7 @@ struct RateLimitResetTodayView: View {
         case .yes:
             // Time detail is rendered separately in small type via heroYesTimeDetail.
             // When only a same-day schedule remains (no past reset yet), use scheduled copy.
-            if snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar) != nil,
+            if snapshot.prefersSameDayScheduleExplanation(now: now, calendar: calendar),
                snapshot.latestResetAt(now: now) == nil
             {
                 return l10n.text(.rateLimitResetTodayYesHintScheduled)
