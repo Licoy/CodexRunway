@@ -32,9 +32,16 @@ public final class SingleInstanceGuard: @unchecked Sendable, Equatable {
         throw POSIXError(code)
     }
 
-    public static func defaultLockURL() -> URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Codex Runway", isDirectory: true)
-            .appendingPathComponent("codex-runway.lock")
+    public static let lockFileName = "codex-runway.lock"
+
+    public static func defaultLockURL(
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL {
+        // Keep the lock in the app-owned ~/.codex-runway directory. Opening
+        // ~/Library/Application Support/... is kTCCServiceSystemPolicyAppData
+        // and prompts on every launch for ad-hoc signed builds.
+        homeDirectory
+            .appendingPathComponent(RunwayWidgetSnapshotStore.localDirectoryName, isDirectory: true)
+            .appendingPathComponent(lockFileName)
     }
 }

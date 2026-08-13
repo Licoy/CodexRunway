@@ -45,5 +45,27 @@ WIDGET_ARCHS="$(lipo -archs "$WIDGET/Contents/MacOS/CodexRunwayWidget")"
 }
 
 codesign --verify --deep --strict "$APP"
+
+HOST_REQUIREMENT="$(codesign -d -r- "$APP" 2>&1)"
+WIDGET_REQUIREMENT="$(codesign -d -r- "$WIDGET" 2>&1)"
+printf '%s\n' "$HOST_REQUIREMENT" | grep -Fq "designated => identifier \"$HOST_ID\"" || {
+  printf 'Host designated requirement is not identifier-stable:\n%s\n' "$HOST_REQUIREMENT" >&2
+  exit 1
+}
+printf '%s\n' "$WIDGET_REQUIREMENT" | grep -Fq "designated => identifier \"$WIDGET_ID\"" || {
+  printf 'Widget designated requirement is not identifier-stable:\n%s\n' "$WIDGET_REQUIREMENT" >&2
+  exit 1
+}
+if printf '%s\n' "$HOST_REQUIREMENT" "$WIDGET_REQUIREMENT" | grep -Eq '^# designated => cdhash'; then
+  printf 'Packaged signature still uses a per-build cdhash requirement.\n' >&2
+  exit 1
+fi
+
+USAGE="$(plutil -extract NSAppDataUsageDescription raw "$APP/Contents/Info.plist" 2>/dev/null || true)"
+[[ -n "$USAGE" ]] || {
+  printf 'Missing NSAppDataUsageDescription in %s\n' "$APP" >&2
+  exit 1
+}
+
 printf 'Verified widget %s v%s (%s, %s) in %s\n' \
   "$WIDGET_ID" "$WIDGET_VERSION" "$EXPECTED_ARCH" "$STORAGE_MODE" "$APP"

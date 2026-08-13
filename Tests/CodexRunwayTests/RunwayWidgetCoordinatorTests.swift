@@ -6,6 +6,16 @@ import Testing
 @Suite("Runway widget coordinator")
 @MainActor
 struct RunwayWidgetCoordinatorTests {
+    @Test("host launch storage never probes App Group containers")
+    func hostLaunchStorageNeverProbesAppGroup() throws {
+        let resolved = try RunwayWidgetLaunchStorage.resolve(
+            mode: .localDevelopment,
+            appGroupID: "group.com.github.codex-runway",
+            homeDirectory: URL(fileURLWithPath: "/tmp/runway-coordinator-home", isDirectory: true))
+        #expect(resolved.compatibilityStore == nil)
+        #expect(!resolved.store.fileURL.pathComponents.contains("Group Containers"))
+    }
+
     @Test("local startup stays conservative until an empty configuration query clears widget work")
     func emptyLocalConfigurationClearsWidgetWork() async throws {
         let fixture = try makeFixture()

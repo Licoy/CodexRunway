@@ -311,4 +311,21 @@ struct PreferencesTests {
         #expect(try SingleInstanceGuard.acquire(lockURL: lock) == nil)
         _ = first
     }
+
+    @Test("instance lock lives in the app-owned runway directory")
+    func defaultLockURLUsesRunwayDirectory() {
+        let shipped = SingleInstanceGuard.defaultLockURL()
+        #expect(shipped.lastPathComponent == SingleInstanceGuard.lockFileName)
+        #expect(shipped.deletingLastPathComponent().lastPathComponent
+            == RunwayWidgetSnapshotStore.localDirectoryName)
+        #expect(!shipped.pathComponents.contains("Application Support"))
+        #expect(!shipped.pathComponents.contains("Group Containers"))
+        #expect(!shipped.pathComponents.contains("Containers"))
+
+        let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
+        let isolated = SingleInstanceGuard.defaultLockURL(homeDirectory: home)
+        #expect(isolated.path.hasPrefix(home.path))
+        #expect(Array(isolated.pathComponents.suffix(2))
+            == [RunwayWidgetSnapshotStore.localDirectoryName, SingleInstanceGuard.lockFileName])
+    }
 }

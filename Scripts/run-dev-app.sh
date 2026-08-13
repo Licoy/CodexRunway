@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=codesign-helpers.sh
+source "$ROOT/Scripts/codesign-helpers.sh"
 SOURCE_EXECUTABLE="${1:?usage: run-dev-app.sh <swift-run-executable> [arguments ...]}"
 shift
 ARCH="$(uname -m)"
@@ -53,8 +55,10 @@ terminate_dev_processes CodexRunwayWidget "$WIDGET_ID"
 terminate_dev_processes CodexRunwayWidget "$PREVIOUS_DEV_WIDGET_ID"
 sleep 0.2
 
-LOCK="$HOME/Library/Application Support/Codex Runway/codex-runway.lock"
-if [[ -e "$LOCK" ]] && lsof -t "$LOCK" >/dev/null 2>&1; then
+LOCK="$HOME/.codex-runway/codex-runway.lock"
+LEGACY_LOCK="$HOME/Library/Application Support/Codex Runway/codex-runway.lock"
+if { [[ -e "$LOCK" ]] && lsof -t "$LOCK" >/dev/null 2>&1; } || \
+   { [[ -e "$LEGACY_LOCK" ]] && lsof -t "$LEGACY_LOCK" >/dev/null 2>&1; }; then
   printf 'Codex Runway is already running. Quit the installed app before swift run.\n' >&2
   exit 1
 fi
@@ -92,6 +96,10 @@ cp "$ROOT/Resources/Info.plist" "$CONTENTS/Info.plist"
 cp "$ROOT/Resources/AppIcon.svg" "$RESOURCES/AppIcon.svg"
 cp "$ROOT/Resources/AppIcon.png" "$RESOURCES/AppIcon.png"
 cp "$ROOT/Resources/AppIcon.icns" "$RESOURCES/AppIcon.icns"
+for lproj in "$ROOT/Resources"/*.lproj; do
+  [[ -d "$lproj" ]] || continue
+  /usr/bin/ditto "$lproj" "$RESOURCES/$(basename "$lproj")"
+done
 
 BIN_DIR="$(cd "$(dirname "$SOURCE_EXECUTABLE")" && pwd)"
 if [[ -d "$BIN_DIR/Sparkle.framework" ]]; then
@@ -117,18 +125,14 @@ plutil -create xml1 "$WIDGET_ENTITLEMENTS"
   -c "Add :com.apple.security.temporary-exception.files.home-relative-path.read-only array" \
   -c "Add :com.apple.security.temporary-exception.files.home-relative-path.read-only:0 string /.codex-runway/widget-snapshot.json" \
   "$WIDGET_ENTITLEMENTS"
-codesign \
-  --force \
-  --options runtime \
-  --entitlements "$WIDGET_ENTITLEMENTS" \
-  --sign - \
-  "$PLUGINS/CodexRunwayWidget.appex" >/dev/null
-codesign \
-  --force \
-  --options runtime \
-  --entitlements "$APP_ENTITLEMENTS" \
-  --sign - \
-  "$STAGING" >/dev/null
+runway_codesign \
+  "$PLUGINS/CodexRunwayWidget.appex" \
+  "$WIDGET_ID" \
+  "$WIDGET_ENTITLEMENTS" >/dev/null
+runway_codesign \
+  "$STAGING" \
+  "$BUNDLE_ID" \
+  "$APP_ENTITLEMENTS" >/dev/null
 codesign --verify --deep --strict "$STAGING"
 
 while IFS= read -r stale_app; do

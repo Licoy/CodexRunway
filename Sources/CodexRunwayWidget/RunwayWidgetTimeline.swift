@@ -19,9 +19,8 @@ struct RunwayWidgetEntry: TimelineEntry {
 
 private enum RunwayWidgetLoader {
     static func load(now: Date = Date()) -> RunwayWidgetLoadState {
-        let mode = (Bundle.main.object(forInfoDictionaryKey: RunwayWidgetStorageMode.infoKey) as? String)
-            .flatMap(RunwayWidgetStorageMode.init(rawValue:))
-            ?? .appGroup
+        let mode = RunwayWidgetStorageMode.mode(
+            fromInfoValue: Bundle.main.object(forInfoDictionaryKey: RunwayWidgetStorageMode.infoKey) as? String)
         let appGroupID = Bundle.main.object(
             forInfoDictionaryKey: RunwayWidgetStorageMode.appGroupInfoKey) as? String
         do {

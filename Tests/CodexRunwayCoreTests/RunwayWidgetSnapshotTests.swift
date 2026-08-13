@@ -70,6 +70,29 @@ struct RunwayWidgetSnapshotTests {
             .appendingPathComponent(RunwayWidgetSnapshotStore.fileName))
     }
 
+    @Test("missing storage mode stays on the local snapshot")
+    func missingStorageModeDefaultsToLocal() {
+        #expect(RunwayWidgetStorageMode.mode(fromInfoValue: nil) == .localDevelopment)
+        #expect(RunwayWidgetStorageMode.mode(fromInfoValue: "nope") == .localDevelopment)
+        #expect(RunwayWidgetStorageMode.mode(fromInfoValue: "local") == .localDevelopment)
+        #expect(RunwayWidgetStorageMode.mode(fromInfoValue: "app-group") == .appGroup)
+    }
+
+    @Test("local launch storage never opens an App Group container")
+    func localLaunchStorageDoesNotOpenAppGroup() throws {
+        let home = URL(fileURLWithPath: "/tmp/runway-launch-home", isDirectory: true)
+        let resolved = try RunwayWidgetLaunchStorage.resolve(
+            mode: .localDevelopment,
+            appGroupID: "group.com.github.codex-runway",
+            homeDirectory: home)
+
+        #expect(resolved.compatibilityStore == nil)
+        #expect(resolved.store.fileURL.path.hasPrefix(home.path))
+        #expect(!resolved.store.fileURL.pathComponents.contains("Group Containers"))
+        #expect(Array(resolved.store.fileURL.pathComponents.suffix(2))
+            == [RunwayWidgetSnapshotStore.localDirectoryName, RunwayWidgetSnapshotStore.fileName])
+    }
+
     @Test("standard quota windows sort by duration before model-specific windows")
     func quotaOrdering() {
         let provider = RunwayWidgetProviderSnapshot(

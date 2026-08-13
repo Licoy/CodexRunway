@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=codesign-helpers.sh
+source "$ROOT/Scripts/codesign-helpers.sh"
 ARCH="${ARCH:-$(uname -m)}"
 if [[ "${1:-}" == "--arch" ]]; then
   ARCH="${2:-}"
@@ -64,6 +66,10 @@ cp "$ROOT/Resources/Info.plist" "$CONTENTS/Info.plist"
 cp "$ROOT/Resources/AppIcon.svg" "$RESOURCES/AppIcon.svg"
 cp "$ROOT/Resources/AppIcon.png" "$RESOURCES/AppIcon.png"
 cp "$ROOT/Resources/AppIcon.icns" "$RESOURCES/AppIcon.icns"
+for lproj in "$ROOT/Resources"/*.lproj; do
+  [[ -d "$lproj" ]] || continue
+  /usr/bin/ditto "$lproj" "$RESOURCES/$(basename "$lproj")"
+done
 if [[ -n "${SPARKLE_PUBLIC_KEY:-}" ]]; then
   /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey ${SPARKLE_PUBLIC_KEY}" "$CONTENTS/Info.plist"
 fi
@@ -142,19 +148,15 @@ if command -v codesign >/dev/null 2>&1; then
     codesign --force --options runtime --sign - "$FRAMEWORKS/Sparkle.framework" >/dev/null
   fi
   if [[ "$INCLUDE_WIDGET" == "1" ]]; then
-    codesign \
-      --force \
-      --options runtime \
-      --entitlements "$WIDGET_ENTITLEMENTS" \
-      --sign - \
-      "$PLUGINS/CodexRunwayWidget.appex" >/dev/null
+    runway_codesign \
+      "$PLUGINS/CodexRunwayWidget.appex" \
+      "$RUNWAY_WIDGET_BUNDLE_ID" \
+      "$WIDGET_ENTITLEMENTS" >/dev/null
   fi
-  codesign \
-    --force \
-    --options runtime \
-    --entitlements "$APP_ENTITLEMENTS" \
-    --sign - \
-    "$APP" >/dev/null
+  runway_codesign \
+    "$APP" \
+    "$RUNWAY_BUNDLE_ID" \
+    "$APP_ENTITLEMENTS" >/dev/null
 fi
 
 mkdir -p "$DIST"

@@ -34,6 +34,13 @@ public enum RunwayWidgetStorageMode: String, Codable, Sendable {
 
     public static let infoKey = "RunwayWidgetStorageMode"
     public static let appGroupInfoKey = "RunwayAppGroupID"
+
+    /// Ad-hoc and public builds default to the local snapshot. App Group
+    /// access is opt-in because `containerURL(forSecurityApplicationGroupIdentifier:)`
+    /// prompts for `kTCCServiceSystemPolicyAppData`.
+    public static func mode(fromInfoValue value: String?) -> Self {
+        value.flatMap(Self.init(rawValue:)) ?? .localDevelopment
+    }
 }
 
 public enum RunwayWidgetFamily: String, Codable, CaseIterable, Sendable {

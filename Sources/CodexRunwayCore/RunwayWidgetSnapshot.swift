@@ -246,3 +246,27 @@ public struct RunwayWidgetSnapshotStore: Sendable {
         return snapshot
     }
 }
+
+/// Host-side snapshot locations chosen at launch.
+///
+/// Local/ad-hoc builds must not call `containerURL(forSecurityApplicationGroupIdentifier:)`.
+/// That API touches `~/Library/Group Containers` and triggers
+/// `kTCCServiceSystemPolicyAppData` on every launch.
+public struct RunwayWidgetLaunchStorage: Sendable {
+    public var store: RunwayWidgetSnapshotStore
+    public var compatibilityStore: RunwayWidgetSnapshotStore?
+
+    public static func resolve(
+        mode: RunwayWidgetStorageMode,
+        appGroupID: String? = nil,
+        homeDirectory: URL = RunwayWidgetSnapshotStore.systemUserHomeDirectory,
+        fileManager: FileManager = .default
+    ) throws -> Self {
+        let store = try RunwayWidgetSnapshotStore.make(
+            mode: mode,
+            appGroupID: appGroupID,
+            homeDirectory: homeDirectory,
+            fileManager: fileManager)
+        return Self(store: store, compatibilityStore: nil)
+    }
+}

@@ -80,25 +80,22 @@ final class RunwayWidgetCoordinator {
     private var lastReloadAt: Date?
 
     convenience init?(bundle: Bundle = .main) {
-        let mode = (bundle.object(forInfoDictionaryKey: RunwayWidgetStorageMode.infoKey) as? String)
-            .flatMap(RunwayWidgetStorageMode.init(rawValue:))
-            ?? .appGroup
+        let mode = RunwayWidgetStorageMode.mode(
+            fromInfoValue: bundle.object(forInfoDictionaryKey: RunwayWidgetStorageMode.infoKey) as? String)
         let appGroupID = bundle.object(
             forInfoDictionaryKey: RunwayWidgetStorageMode.appGroupInfoKey) as? String
         do {
-            let store = try RunwayWidgetSnapshotStore.make(
+            let storage = try RunwayWidgetLaunchStorage.resolve(
                 mode: mode,
                 appGroupID: appGroupID)
             self.init(
                 storageMode: mode,
-                store: store,
+                store: storage.store,
                 activeKinds: mode == .localDevelopment
                     ? Set(RunwayWidgetKind.allCases.map(\.rawValue))
                     : [],
                 reloader: RunwayWidgetCenterReloader(),
-                compatibilityStore: Self.compatibilityStore(
-                    for: mode,
-                    appGroupID: appGroupID),
+                compatibilityStore: storage.compatibilityStore,
                 configurationLoader: RunwayWidgetCenterConfigurationLoader())
         } catch {
             NSLog("Codex Runway widget store unavailable: %@", error.localizedDescription)
@@ -191,20 +188,6 @@ final class RunwayWidgetCoordinator {
         lastReloadAt = max(lastReloadAt ?? .distantPast, date)
     }
 
-    private static func compatibilityStore(
-        for mode: RunwayWidgetStorageMode,
-        appGroupID: String?
-    ) -> RunwayWidgetSnapshotStore? {
-        guard mode == .localDevelopment else { return nil }
-        do {
-            return try RunwayWidgetSnapshotStore.make(
-                mode: .appGroup,
-                appGroupID: appGroupID)
-        } catch {
-            NSLog("Codex Runway widget compatibility store unavailable: %@", String(describing: error))
-            return nil
-        }
-    }
 }
 
 private actor RunwayWidgetSnapshotPublisher {
