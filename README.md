@@ -36,11 +36,12 @@ Codex Runway is a native macOS menu bar app for checking Codex and Grok quota. I
 ## Screenshots
 
 <p align="center">
-  <img src="docs/images/1.png" alt="Codex Runway quota overview" width="260">
-  <img src="docs/images/2.png" alt="Codex Runway reset credits details" width="260">
-  <img src="docs/images/3.png" alt="Codex Runway API-equivalent cost" width="260">
-  <img src="docs/images/4.png" alt="Codex Runway setting page" width="260">
-  <img src="docs/images/5.png" alt="Codex Runway sessions" width="260">
+  <img src="docs/images/1.webp" alt="Codex Runway quota overview" width="260">
+  <img src="docs/images/2.webp" alt="Codex Runway reset credits details" width="260">
+  <img src="docs/images/3.webp" alt="Codex Runway API-equivalent cost" width="260">
+  <img src="docs/images/4.webp" alt="Codex Runway setting page" width="260">
+  <img src="docs/images/5.webp" alt="Codex Runway multi-account" width="260">
+  <img src="docs/images/6.webp" alt="Codex Runway Grok quota" width="260">
 </p>
 
 ## Installation
