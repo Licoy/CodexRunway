@@ -617,11 +617,14 @@ extension RunwayModel {
         // Preserve local usage while billing identity refreshes.
         let localUsage = grokPanelState.localUsage
         let isRefreshingLocalUsage = grokPanelState.isRefreshingLocalUsage
+        let resetCredits = current?.cachedQuota?.resetCredits
         grokPanelState = GrokPanelViewState(
             availability: availability,
             identityName: current?.resolvedDisplayName ?? state.officialCredentialStatus.identity?.resolvedDisplayName,
             planName: GrokSubscriptionTier.displayName(from: quota?.plan) ?? quota?.plan,
             quota: quota,
+            resetCreditSummary: resetCredits.map(GrokResetCreditsPresentation.summary),
+            resetCreditDetails: resetCredits.map { GrokResetCreditsPresentation.details($0, l10n: l10n) } ?? [],
             localUsage: localUsage,
             isRefreshingLocalUsage: isRefreshingLocalUsage,
             externalLoginChanged: externalLoginChanged)

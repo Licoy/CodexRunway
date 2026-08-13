@@ -65,19 +65,67 @@ struct GrokBillingClientTests {
         #expect(snapshot.includedLimitCents == 15_000)
         #expect(snapshot.includedUsedCents == 277)
         #expect(snapshot.includedRemainingCents == 14_723)
+        #expect(snapshot.resetCredits?.availableCount == 0)
+        #expect(snapshot.resetCredits?.tokens.isEmpty == true)
 
         let urls = await recorder.urls
         #expect(urls.contains { $0.contains("/billing?format=credits") })
         #expect(urls.contains { $0.hasSuffix("/billing") })
         #expect(urls.contains { $0.contains("/settings") })
+        #expect(urls.contains { $0.contains("GetRemainingResets") })
         #expect(await recorder.authorizations.allSatisfy { $0 == "Bearer home-access-token-for-tests" })
         let userAgents = await recorder.headerValues(GrokCLIChatProxyIdentity.userAgentHeader)
         let tokenAuth = await recorder.headerValues(GrokCLIChatProxyIdentity.tokenAuthHeader)
         let clientVersions = await recorder.headerValues(GrokCLIChatProxyIdentity.clientVersionHeader)
+        let identifiers = await recorder.headerValues(GrokCLIChatProxyIdentity.clientIdentifierHeader)
+        let modes = await recorder.headerValues(GrokCLIChatProxyIdentity.clientModeHeader)
         #expect(userAgents.allSatisfy { $0 == "xai-grok-workspace/0.2.114" })
         #expect(tokenAuth.allSatisfy { $0 == GrokCLIChatProxyIdentity.tokenAuthValue })
         #expect(clientVersions.allSatisfy { $0 == "0.2.114" })
-        #expect(userAgents.count == 3)
+        #expect(identifiers.allSatisfy { $0 == GrokCLIChatProxyIdentity.clientIdentifierValue })
+        #expect(modes.allSatisfy { $0 == GrokCLIChatProxyIdentity.clientModeValue })
+        #expect(userAgents.count == 4)
+    }
+
+    @Test("attaches official remaining-reset cards from GetRemainingResets")
+    func fetchAttachesResetCredits() async throws {
+        MockBillingURLProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            let body: Data
+            if path.contains("GetRemainingResets") {
+                body = GrokResetCreditsFixture.proto(
+                    tokenID: "restok_client",
+                    start: Date(timeIntervalSince1970: 1_786_560_540),
+                    end: Date(timeIntervalSince1970: 1_789_238_940))
+            } else if path.hasSuffix("/billing") {
+                body = Data(#"""
+                {"config":{"creditUsagePercent":10,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-08-06T00:00:00Z","end":"2026-08-13T00:00:00Z"}}}
+                """#.utf8)
+            } else if path.hasSuffix("/settings") {
+                body = Data(#"{"subscription_tier_display":"SuperGrok"}"#.utf8)
+            } else {
+                body = Data(#"{}"#.utf8)
+            }
+            return (
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/grpc-web+proto"])!,
+                body)
+        }
+        defer { MockBillingURLProtocol.handler = nil }
+
+        let now = Date(timeIntervalSince1970: 1_786_601_000)
+        let client = GrokBillingClient(
+            session: MockBillingURLProtocol.session(),
+            clientVersionProvider: { "1.0.3" })
+        let snapshot = try await client.fetch(accessToken: "token-for-tests", now: now)
+
+        #expect(snapshot.includedUsagePercent == 10)
+        #expect(snapshot.resetCredits?.availableCount == 1)
+        #expect(snapshot.resetCredits?.tokens.map(\.tokenID) == ["restok_client"])
+        #expect(snapshot.resetCredits?.tokens.first?.validityEnd == Date(timeIntervalSince1970: 1_789_238_940))
     }
 
     @Test("chat-proxy identity headers track the injected CLI version")
@@ -105,6 +153,27 @@ struct GrokBillingClientTests {
 
         #expect(await recorder.headerValues("User-Agent").allSatisfy { $0 == "xai-grok-workspace/1.4.0" })
         #expect(await recorder.headerValues("x-grok-client-version").allSatisfy { $0 == "1.4.0" })
+        #expect(await recorder.headerValues("x-grok-client-identifier").allSatisfy {
+            $0 == GrokCLIChatProxyIdentity.clientIdentifierValue
+        })
+        #expect(await recorder.headerValues("x-grok-client-mode").allSatisfy {
+            $0 == GrokCLIChatProxyIdentity.clientModeValue
+        })
+        let resetRequests = await recorder.requests.filter {
+            $0.url?.absoluteString.contains("GetRemainingResets") == true
+        }
+        #expect(resetRequests.count == 1)
+        #expect(resetRequests[0].value(forHTTPHeaderField: "User-Agent") == "xai-grok-workspace/1.4.0")
+        #expect(resetRequests[0].value(forHTTPHeaderField: "x-grok-client-version") == "1.4.0")
+        #expect(
+            resetRequests[0].value(forHTTPHeaderField: "x-grok-client-identifier")
+                == GrokCLIChatProxyIdentity.clientIdentifierValue)
+        #expect(
+            resetRequests[0].value(forHTTPHeaderField: "x-grok-client-mode")
+                == GrokCLIChatProxyIdentity.clientModeValue)
+        #expect(
+            resetRequests[0].value(forHTTPHeaderField: "X-XAI-Token-Auth")
+                == GrokCLIChatProxyIdentity.tokenAuthValue)
     }
 
     @Test("falls back to JWT tier when settings omit the plan")

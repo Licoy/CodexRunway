@@ -1,11 +1,21 @@
 import Foundation
 
-/// CLI identity headers expected by `cli-chat-proxy.grok.com`, matching official
-/// Grok Build CLI / CLIProxyAPI (`applyXAIChatHeaders`).
+/// CLI identity headers expected by official Grok HTTP (chat-proxy and sibling
+/// RPCs), matching the local Grok Build CLI (`xai-grok-http` / billing fetch).
+///
+/// Every official request — quota, settings, and remaining-reset cards — must
+/// go through ``apply(to:accessToken:clientVersion:)`` so the version and
+/// client labels stay identical to the installed `grok` binary.
 public enum GrokCLIChatProxyIdentity: Sendable {
     public static let tokenAuthHeader = "X-XAI-Token-Auth"
     public static let tokenAuthValue = "xai-grok-cli"
     public static let clientVersionHeader = "x-grok-client-version"
+    public static let clientIdentifierHeader = "x-grok-client-identifier"
+    /// Product label the official CLI sends (`GROK_CLIENT_NAME`, default `grok-shell`).
+    public static let clientIdentifierValue = "grok-shell"
+    public static let clientModeHeader = "x-grok-client-mode"
+    /// Official CLI uses `interactive` only on a text TTY; status-bar fetches are not a TTY.
+    public static let clientModeValue = "headless"
     public static let userAgentHeader = "User-Agent"
 
     /// Used only when the local CLI is missing or `--version` cannot be parsed.
@@ -14,6 +24,21 @@ public enum GrokCLIChatProxyIdentity: Sendable {
 
     public static func userAgent(clientVersion: String) -> String {
         "xai-grok-workspace/\(normalizedClientVersion(clientVersion))"
+    }
+
+    /// Apply the local Grok CLI identity to an official request.
+    public static func apply(
+        to request: inout URLRequest,
+        accessToken: String,
+        clientVersion: String)
+    {
+        let version = normalizedClientVersion(clientVersion)
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(tokenAuthValue, forHTTPHeaderField: tokenAuthHeader)
+        request.setValue(version, forHTTPHeaderField: clientVersionHeader)
+        request.setValue(clientIdentifierValue, forHTTPHeaderField: clientIdentifierHeader)
+        request.setValue(clientModeValue, forHTTPHeaderField: clientModeHeader)
+        request.setValue(userAgent(clientVersion: version), forHTTPHeaderField: userAgentHeader)
     }
 
     /// Parse CLI `--version` output into a bare client version string.

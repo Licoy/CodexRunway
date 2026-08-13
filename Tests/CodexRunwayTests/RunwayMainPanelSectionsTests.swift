@@ -19,6 +19,7 @@ struct RunwayMainPanelSectionsTests {
 
         #expect(sections == [
             .grokQuota,
+            .grokResetCredits,
             .grokTokenHeatmap,
             .grokAPICost,
             .grokRecentSessions,

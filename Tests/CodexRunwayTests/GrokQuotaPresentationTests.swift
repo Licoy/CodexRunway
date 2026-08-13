@@ -117,4 +117,40 @@ struct GrokQuotaPresentationTests {
         #expect(summary.contains("$2.77 / $150.00"))
         #expect(summary.contains("94% left"))
     }
+
+    @Test("reset-credit presentation lists official card status and expiry")
+    func resetCreditPresentation() {
+        let now = Date(timeIntervalSince1970: 1_786_601_000)
+        let expiry = now.addingTimeInterval(30 * 24 * 3_600)
+        let snapshot = GrokResetCreditsSnapshot(
+            availableCount: 1,
+            tokens: [
+                GrokResetToken(
+                    tokenID: "restok_ui",
+                    validityStart: now.addingTimeInterval(-3_600),
+                    validityEnd: expiry),
+            ],
+            updatedAt: now)
+
+        let l10n = L10n(language: .english)
+        let summary = GrokResetCreditsPresentation.summary(snapshot)
+        let details = GrokResetCreditsPresentation.details(snapshot, l10n: l10n)
+
+        #expect(summary.availableCount == 1)
+        #expect(summary.totalCount == 1)
+        #expect(summary.nextExpiryDate == expiry)
+        #expect(details.count == 1)
+        #expect(details[0].id == "restok_ui")
+        #expect(details[0].state == .available)
+        #expect(details[0].expiresAt == expiry)
+        #expect(details[0].statusText == "available")
+
+        let empty = GrokResetCreditsPresentation.summary(
+            GrokResetCreditsSnapshot(availableCount: 0, tokens: [], updatedAt: now))
+        #expect(empty.availableCount == 0)
+        #expect(empty.totalCount == 0)
+        #expect(GrokResetCreditsPresentation.details(
+            GrokResetCreditsSnapshot(availableCount: 0, tokens: [], updatedAt: now),
+            l10n: l10n).isEmpty)
+    }
 }

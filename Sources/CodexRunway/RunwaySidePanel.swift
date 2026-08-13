@@ -78,10 +78,17 @@ struct DetailPageView: View {
             }
         case .resetCredits:
             PolishedScrollView(verticalPadding: 4) {
-                ResetCreditsDetailView(
-                    summary: model.resetCreditSummary,
-                    details: model.resetCreditDetails,
-                    l10n: l10n)
+                if model.selectedProvider == .grok {
+                    ResetCreditsDetailView(
+                        summary: model.grokPanelState.resetCreditSummary,
+                        details: model.grokPanelState.resetCreditDetails,
+                        l10n: l10n)
+                } else {
+                    ResetCreditsDetailView(
+                        summary: model.resetCreditSummary,
+                        details: model.resetCreditDetails,
+                        l10n: l10n)
+                }
             }
         case .apiCost:
             ApiCostDetailView(model: model, l10n: l10n, initialRange: apiCostInitialRange)

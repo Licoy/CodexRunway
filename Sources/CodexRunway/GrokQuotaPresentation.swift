@@ -158,6 +158,44 @@ struct GrokQuotaPresentation: Sendable, Equatable {
     }
 }
 
+enum GrokResetCreditsPresentation {
+    static func summary(_ snapshot: GrokResetCreditsSnapshot) -> ResetCreditSummary {
+        ResetCreditSummary(snapshot: snapshot.asResetCreditsSnapshot())
+    }
+
+    static func details(_ snapshot: GrokResetCreditsSnapshot, l10n: L10n) -> [ResetCreditDetail] {
+        let credits = ResetCreditSummary.sortedByExpiry(snapshot.asResetCreditsSnapshot().credits)
+        return credits.enumerated().map { index, credit in
+            let remaining = max(0, credit.remainingSeconds)
+            return ResetCreditDetail(
+                id: credit.id ?? "\(index)",
+                title: "\(l10n.text(.credit)) \(index + 1)",
+                statusText: statusText(credit.status, l10n: l10n),
+                state: state(credit),
+                expiresAt: credit.expiresAt,
+                remainingDuration: remaining,
+                remainingProgress: credit.expiresAt == nil ? 1 : min(1, remaining / (30 * 24 * 3_600)))
+        }
+    }
+
+    private static func statusText(_ status: String, l10n: L10n) -> String {
+        switch status {
+        case "available":
+            return l10n.text(.statusAvailable)
+        case "used":
+            return l10n.text(.statusUsed)
+        default:
+            return l10n.text(.statusUnknown)
+        }
+    }
+
+    private static func state(_ credit: ResetCredit) -> ResetCreditState {
+        guard credit.status == "available" else { return .unavailable }
+        guard credit.expiresAt != nil else { return .available }
+        return credit.remainingSeconds <= ResetCreditSummary.expiringThreshold ? .expiring : .available
+    }
+}
+
 private extension String {
     func padFractionDigits(_ count: Int) -> String {
         let parts = split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)

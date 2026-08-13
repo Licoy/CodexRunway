@@ -59,6 +59,8 @@ public struct GrokQuotaSnapshot: Codable, Sendable, Equatable {
     /// Product breakdown from `config.productUsage` (CLI chat-proxy).
     public var productUsage: [GrokProductUsage]
     public var isUnifiedBillingUser: Bool?
+    /// Banked SuperGrok reset cards from official `GetRemainingResets`, when the RPC succeeds.
+    public var resetCredits: GrokResetCreditsSnapshot?
     public var source: GrokBillingSource
     public var updatedAt: Date
 
@@ -74,6 +76,7 @@ public struct GrokQuotaSnapshot: Codable, Sendable, Equatable {
         onDemandLimitCents: Int64?,
         productUsage: [GrokProductUsage] = [],
         isUnifiedBillingUser: Bool? = nil,
+        resetCredits: GrokResetCreditsSnapshot? = nil,
         source: GrokBillingSource,
         updatedAt: Date)
     {
@@ -88,6 +91,7 @@ public struct GrokQuotaSnapshot: Codable, Sendable, Equatable {
         self.onDemandLimitCents = onDemandLimitCents
         self.productUsage = productUsage
         self.isUnifiedBillingUser = isUnifiedBillingUser
+        self.resetCredits = resetCredits
         self.source = source
         self.updatedAt = updatedAt
     }
@@ -104,6 +108,7 @@ public struct GrokQuotaSnapshot: Codable, Sendable, Equatable {
         case onDemandLimitCents
         case productUsage
         case isUnifiedBillingUser
+        case resetCredits
         case source
         case updatedAt
     }
@@ -121,6 +126,7 @@ public struct GrokQuotaSnapshot: Codable, Sendable, Equatable {
         onDemandLimitCents = try container.decodeIfPresent(Int64.self, forKey: .onDemandLimitCents)
         productUsage = try container.decodeIfPresent([GrokProductUsage].self, forKey: .productUsage) ?? []
         isUnifiedBillingUser = try container.decodeIfPresent(Bool.self, forKey: .isUnifiedBillingUser)
+        resetCredits = try container.decodeIfPresent(GrokResetCreditsSnapshot.self, forKey: .resetCredits)
         source = try container.decode(GrokBillingSource.self, forKey: .source)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
@@ -155,6 +161,12 @@ public struct GrokQuotaSnapshot: Codable, Sendable, Equatable {
         var copy = self
         if copy.includedLimitCents == nil { copy.includedLimitCents = limitCents }
         if copy.includedUsedCents == nil { copy.includedUsedCents = usedCents }
+        return copy
+    }
+
+    public func mergingResetCredits(_ snapshot: GrokResetCreditsSnapshot?) -> Self {
+        var copy = self
+        copy.resetCredits = snapshot
         return copy
     }
 

@@ -18,6 +18,8 @@ struct GrokPanelViewState: Equatable {
     var identityName: String?
     var planName: String?
     var quota: GrokQuotaPresentation?
+    var resetCreditSummary: ResetCreditSummary?
+    var resetCreditDetails: [ResetCreditDetail] = []
     var localUsage: GrokLocalUsageSummary?
     var isRefreshingLocalUsage = false
     var externalLoginChanged = false

@@ -9,6 +9,7 @@ enum RunwayMainPanelSection: Hashable {
     case codexSessionRepair
     case codexRecentSessions
     case grokQuota
+    case grokResetCredits
     case grokBilling
     case grokTokenHeatmap
     case grokAPICost
@@ -23,7 +24,8 @@ enum RunwayMainPanelSections {
         switch provider {
         case .grok:
             // Billing details live behind the included-quota info button, not a full section.
-            var sections: Set<RunwayMainPanelSection> = [.grokQuota]
+            // Reset-credits is shown only when an official snapshot exists (see the Grok panel).
+            var sections: Set<RunwayMainPanelSection> = [.grokQuota, .grokResetCredits]
             if preferences.showsTokenUsageHeatmap {
                 sections.insert(.grokTokenHeatmap)
             }

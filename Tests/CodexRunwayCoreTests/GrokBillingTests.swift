@@ -372,6 +372,28 @@ struct GrokBillingTests {
         #expect(GrokQuotaSnapshot.decodeSettingsPlan(from: heavy) == "SuperGrok Heavy")
     }
 
+    @Test("unknown extra billing keys do not invent reset cards")
+    func extraBillingKeysDoNotInventResetCards() throws {
+        let data = Data(#"""
+        {
+          "config": {
+            "creditUsagePercent": 12,
+            "currentPeriod": {
+              "type": "USAGE_PERIOD_TYPE_WEEKLY",
+              "start": "2026-08-06T00:00:00Z",
+              "end": "2026-08-13T00:00:00Z"
+            },
+            "resetCredits": {"available_count": 9},
+            "tokens": [{"tokenId": "should-not-be-read-from-billing"}]
+          }
+        }
+        """#.utf8)
+
+        let snapshot = try GrokQuotaSnapshot.decodeBillingResponse(from: data)
+        #expect(snapshot.includedUsagePercent == 12)
+        #expect(snapshot.resetCredits == nil)
+    }
+
     @Test("merges USD allowance without clobbering credits percent snapshot")
     func mergesMoneyAllowance() throws {
         let credits = Data(#"""

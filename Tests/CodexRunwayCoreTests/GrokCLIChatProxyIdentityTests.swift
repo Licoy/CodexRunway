@@ -24,6 +24,28 @@ struct GrokCLIChatProxyIdentityTests {
                 == "xai-grok-workspace/0.2.114")
     }
 
+    @Test("apply stamps the official local-CLI identity set")
+    func applyStampsOfficialIdentity() {
+        var request = URLRequest(url: URL(string: "https://cli-chat-proxy.grok.com/v1/billing")!)
+        GrokCLIChatProxyIdentity.apply(
+            to: &request,
+            accessToken: "token-for-tests",
+            clientVersion: "grok 1.0.3")
+
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer token-for-tests")
+        #expect(
+            request.value(forHTTPHeaderField: GrokCLIChatProxyIdentity.tokenAuthHeader)
+                == GrokCLIChatProxyIdentity.tokenAuthValue)
+        #expect(request.value(forHTTPHeaderField: "x-grok-client-version") == "1.0.3")
+        #expect(
+            request.value(forHTTPHeaderField: "x-grok-client-identifier")
+                == GrokCLIChatProxyIdentity.clientIdentifierValue)
+        #expect(
+            request.value(forHTTPHeaderField: "x-grok-client-mode")
+                == GrokCLIChatProxyIdentity.clientModeValue)
+        #expect(request.value(forHTTPHeaderField: "User-Agent") == "xai-grok-workspace/1.0.3")
+    }
+
     @Test("version provider re-reads when the executable changes")
     func versionProviderTracksExecutableChanges() async throws {
         let temporary = try TemporaryIdentityDirectory()

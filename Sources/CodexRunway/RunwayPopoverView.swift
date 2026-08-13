@@ -159,6 +159,18 @@ struct RunwayPopoverView: View {
                         onRefresh: { model.refreshGrokLocalUsage() })
                 }
             }
+            if visibleSections.contains(.grokResetCredits),
+               model.grokPanelState.resetCreditSummary != nil
+            {
+                sectionBlock {
+                    ResetCreditsSummaryView(
+                        summary: model.grokPanelState.resetCreditSummary,
+                        l10n: l10n,
+                        isRefreshing: model.isRefreshingGrok,
+                        onRefresh: { model.refreshGrok(.current) },
+                        onDetailsSelect: { detailPage = .resetCredits })
+                }
+            }
             if visibleSections.contains(.grokAPICost) {
                 sectionBlock {
                     CostSummaryView(
