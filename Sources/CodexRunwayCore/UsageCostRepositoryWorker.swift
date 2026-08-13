@@ -7,7 +7,6 @@ actor UsageCostRepositoryWorker {
     private let codexHome: URL
     private let databaseURL: URL
     private let parserVersion: Int
-    private let priceBook: UsageCostPriceBook
     private let calendar: Calendar
     private var store: UsageCostIndexStore?
     private var diagnostics = UsageCostRepositoryDiagnostics()
@@ -17,13 +16,11 @@ actor UsageCostRepositoryWorker {
         codexHome: URL,
         databaseURL: URL,
         parserVersion: Int,
-        priceBook: UsageCostPriceBook,
         calendar: Calendar)
     {
         self.codexHome = codexHome
         self.databaseURL = databaseURL
         self.parserVersion = parserVersion
-        self.priceBook = priceBook
         self.calendar = calendar
     }
 
@@ -31,6 +28,7 @@ actor UsageCostRepositoryWorker {
         for queries: [ApiCostQuery],
         calculatedAt: Date,
         policy: UsageCostRefreshPolicy,
+        priceBook: UsageCostPriceBook,
         progress: CostScanProgressReporter? = nil
     ) throws -> [String: ApiEquivalentSummary] {
         try Task.checkCancellation()
@@ -43,6 +41,7 @@ actor UsageCostRepositoryWorker {
                 queries: queries,
                 calculatedAt: calculatedAt,
                 policy: policy,
+                priceBook: priceBook,
                 progress: progress)
         } catch {
             guard try shouldRebuild(after: error) else { throw error }
@@ -51,6 +50,7 @@ actor UsageCostRepositoryWorker {
                 queries: queries,
                 calculatedAt: calculatedAt,
                 policy: policy,
+                priceBook: priceBook,
                 opened: rebuilt,
                 progress: progress)
         }
@@ -64,6 +64,7 @@ actor UsageCostRepositoryWorker {
         queries: [ApiCostQuery],
         calculatedAt: Date,
         policy: UsageCostRefreshPolicy,
+        priceBook: UsageCostPriceBook,
         opened suppliedStore: (store: UsageCostIndexStore, warnings: [String])? = nil,
         progress: CostScanProgressReporter? = nil
     ) throws -> [String: ApiEquivalentSummary] {

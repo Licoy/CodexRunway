@@ -384,6 +384,56 @@ struct RunwayModelRefreshTests {
         #expect(await recorder.captureCount == 1)
     }
 
+    @Test("current cycle detail refreshes a snapshot whose elapsed end is stale")
+    func currentCycleDetailRefreshesStaleElapsedSnapshot() async throws {
+        let recorder = CostBatchRecorder()
+        let settings = RunwaySettings(store: PreferencesStore(defaults: scopedDefaults()))
+        settings.updateApiCostSummaryRange(.current)
+        let quota = Self.quotaSnapshot(secondaryReset: Date().addingTimeInterval(6 * 24 * 3_600))
+        let services = RunwayModelServices(
+            loadValidAuth: { _, _ in Self.auth() },
+            fetchQuota: { _ in quota },
+            fetchResetCredits: { _ in ResetCreditsSnapshot(availableCount: 0, credits: [], updatedAt: Date()) },
+            fetchRateLimitResetToday: {
+                RateLimitResetTodaySnapshot(state: .no, fetchedAt: Date())
+            },
+            scanAPIEquivalent: { queries, now, policy, _ in
+                await recorder.record(queries: queries, now: now, policy: policy)
+                let isFirstScan = await recorder.captureCount == 1
+                return Dictionary(uniqueKeysWithValues: queries.map { query in
+                    let window = isFirstScan
+                        ? DateInterval(
+                            start: query.window.start,
+                            end: query.window.end.addingTimeInterval(-3_600))
+                        : query.window
+                    return (query.id, Self.costSummary(window: window, calculatedAt: now))
+                })
+            },
+            fetchDailyWorkspaceUsage: { _, _, _, window, now in
+                Self.costSummary(window: window, calculatedAt: now)
+            },
+            fetchCodexProfileTokenUsage: { _ in CodexProfileTokenUsage(dailyTokens: [:]) },
+            dryRunSessions: {
+                SessionRepairReport(
+                    missingIndexIDs: [],
+                    orphanIndexIDs: [],
+                    duplicateIndexIDs: [],
+                    staleTitleIDs: [],
+                    backupPath: nil,
+                    plannedEntries: 0)
+            },
+            scanRecentSessions: { _ in SessionActivitySummary(items: []) })
+        let model = makeModel(settings: settings, services: services)
+
+        model.refreshCost()
+        _ = try await recorder.waitForBatch()
+        try await waitForCostRefresh(in: model)
+
+        _ = try await model.queryCurrentCycleCost()
+
+        #expect(await recorder.captureCount == 2)
+    }
+
     @Test("previous cycle API cost summary scans the full previous quota weekly range")
     func previousCycleAPICostSummaryScansFullPreviousQuotaWindow() async throws {
         let recorder = CostBatchRecorder()

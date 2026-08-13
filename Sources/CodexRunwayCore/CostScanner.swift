@@ -76,7 +76,7 @@ public struct UsageCostScanner: Sendable {
         calculatedAt: Date = Date()) throws -> UsageCostScanReport<ApiEquivalentSummary>
     {
         var byModel: [String: ApiEquivalentTotals] = [:]
-        var byProject: [String: ApiEquivalentTotals] = [:]
+        var byProjectModel: [String: [String: ApiEquivalentTotals]] = [:]
         var byDay: [String: ApiEquivalentTotals] = [:]
         var byDayModel: [String: [String: ApiEquivalentTotals]] = [:]
         var unknown = Set<String>()
@@ -88,7 +88,7 @@ public struct UsageCostScanner: Sendable {
                 file: file,
                 window: window,
                 byModel: &byModel,
-                byProject: &byProject,
+                byProjectModel: &byProjectModel,
                 byDay: &byDay,
                 byDayModel: &byDayModel,
                 unknown: &unknown,
@@ -97,20 +97,23 @@ public struct UsageCostScanner: Sendable {
         }
         let modelRows = byModel.keys.sorted().map { model in
             let totals = byModel[model] ?? .zero
-            let estimated = PricingTable.cost(model: model, totals: totals) ?? PricingTable.equivalentCost(totals: totals)
+            let estimated = PricingTable.cost(model: model, totals: totals)
             return ApiEquivalentBreakdownRow(name: model, totals: totals, estimatedUSD: estimated, rawCredits: 0)
         }
-        let projectRows = byProject.keys.sorted { lhs, rhs in
-            let left = byProject[lhs]?.totalTokens ?? 0
-            let right = byProject[rhs]?.totalTokens ?? 0
-            return left == right ? lhs < rhs : left > right
-        }.map { project in
-            let totals = byProject[project] ?? .zero
-            return ApiEquivalentBreakdownRow(
+        var projectRows: [ApiEquivalentBreakdownRow] = []
+        projectRows.reserveCapacity(byProjectModel.count)
+        for (project, projectModels) in byProjectModel {
+            let projectTotals = try ApiEquivalentTotals.sum(projectModels.values)
+            projectRows.append(ApiEquivalentBreakdownRow(
                 name: project,
-                totals: totals,
-                estimatedUSD: PricingTable.equivalentCost(totals: totals),
-                rawCredits: 0)
+                totals: projectTotals,
+                estimatedUSD: Self.estimatedCost(byModel: projectModels),
+                rawCredits: 0))
+        }
+        projectRows.sort { lhs, rhs in
+            lhs.totals.totalTokens == rhs.totals.totalTokens
+                ? lhs.name < rhs.name
+                : lhs.totals.totalTokens > rhs.totals.totalTokens
         }
         let dailyRows = byDay.keys.sorted().map { day in
             let totals = byDay[day] ?? .zero
@@ -121,6 +124,15 @@ public struct UsageCostScanner: Sendable {
                 rawCredits: 0)
         }
         let totals = try ApiEquivalentTotals.sum(byDay.values)
+        let estimatedUSD = Self.estimatedCost(byModel: byModel)
+        let confidence: ApiEquivalentConfidence
+        if totals.totalTokens == 0 {
+            confidence = .unavailable
+        } else if estimatedUSD == nil {
+            confidence = .tokensOnly
+        } else {
+            confidence = .priced
+        }
         var warnings = unknown.sorted().map { "unknown-model:\($0)" }
         if diagnostics.oversizedLines > 0 {
             warnings.append("oversized-jsonl-lines:\(diagnostics.oversizedLines)")
@@ -128,9 +140,9 @@ public struct UsageCostScanner: Sendable {
         return UsageCostScanReport(
             summary: ApiEquivalentSummary(
                 source: totals.totalTokens > 0 ? .localSessions : .unavailable,
-                confidence: totals.totalTokens > 0 ? .priced : .unavailable,
+                confidence: confidence,
                 window: window,
-                estimatedUSD: modelRows.compactMap(\.estimatedUSD).reduce(Decimal(0), +),
+                estimatedUSD: estimatedUSD,
                 totals: totals,
                 dailyRows: dailyRows,
                 modelRows: modelRows,
@@ -170,7 +182,7 @@ public struct UsageCostScanner: Sendable {
         file: URL,
         window: DateInterval,
         byModel: inout [String: ApiEquivalentTotals],
-        byProject: inout [String: ApiEquivalentTotals],
+        byProjectModel: inout [String: [String: ApiEquivalentTotals]],
         byDay: inout [String: ApiEquivalentTotals],
         byDayModel: inout [String: [String: ApiEquivalentTotals]],
         unknown: inout Set<String>,
@@ -193,8 +205,10 @@ public struct UsageCostScanner: Sendable {
             let totals = try ApiEquivalentTotals(validating: usage, turns: 1, threads: 0)
             let day = record.dayKey
             byModel[model, default: .zero] = try byModel[model, default: .zero].adding(totals)
-            byProject[currentProject, default: .zero] = try byProject[currentProject, default: .zero]
-                .adding(totals)
+            byProjectModel[currentProject, default: [:]][model, default: .zero] = try byProjectModel[
+                currentProject,
+                default: [:]
+            ][model, default: .zero].adding(totals)
             byDay[day, default: .zero] = try byDay[day, default: .zero].adding(totals)
             byDayModel[day, default: [:]][model, default: .zero] = try byDayModel[
                 day,
@@ -257,10 +271,15 @@ public struct UsageCostScanner: Sendable {
         return RunwayDates.parse(String(name[match]) + "T00:00:00Z")
     }
 
-    private static func estimatedCost(byModel: [String: ApiEquivalentTotals]) -> Decimal {
-        byModel.reduce(Decimal(0)) { result, item in
-            result + (PricingTable.cost(model: item.key, totals: item.value) ?? PricingTable.equivalentCost(totals: item.value))
+    private static func estimatedCost(byModel: [String: ApiEquivalentTotals]) -> Decimal? {
+        var result = Decimal(0)
+        for item in byModel {
+            guard let cost = PricingTable.cost(model: item.key, totals: item.value) else {
+                return nil
+            }
+            result += cost
         }
+        return result
     }
 }
 
@@ -286,26 +305,111 @@ extension ApiEquivalentTotals {
 }
 
 public enum PricingTable {
-    public static let version = "2026-06-29"
+    /// Bundled fallback verified against the official OpenAI pricing documentation.
+    public static let version = "openai-builtin-2026-08-13"
 
-    public struct Price: Sendable {
+    public struct Price: Codable, Equatable, Sendable {
         var inputPerMillion: Decimal
         var cachedInputPerMillion: Decimal
+        var cacheWritePerMillion: Decimal?
         var outputPerMillion: Decimal
+        var longContextInputPerMillion: Decimal?
+        var longContextCachedInputPerMillion: Decimal?
+        var longContextCacheWritePerMillion: Decimal?
+        var longContextOutputPerMillion: Decimal?
+
+        init(
+            inputPerMillion: Decimal,
+            cachedInputPerMillion: Decimal,
+            cacheWritePerMillion: Decimal? = nil,
+            outputPerMillion: Decimal,
+            longContextInputPerMillion: Decimal? = nil,
+            longContextCachedInputPerMillion: Decimal? = nil,
+            longContextCacheWritePerMillion: Decimal? = nil,
+            longContextOutputPerMillion: Decimal? = nil)
+        {
+            self.inputPerMillion = inputPerMillion
+            self.cachedInputPerMillion = cachedInputPerMillion
+            self.cacheWritePerMillion = cacheWritePerMillion
+            self.outputPerMillion = outputPerMillion
+            self.longContextInputPerMillion = longContextInputPerMillion
+            self.longContextCachedInputPerMillion = longContextCachedInputPerMillion
+            self.longContextCacheWritePerMillion = longContextCacheWritePerMillion
+            self.longContextOutputPerMillion = longContextOutputPerMillion
+        }
     }
 
+    static let builtInPrices: [String: Price] = [
+        "gpt-5.6": Price(
+            inputPerMillion: 5,
+            cachedInputPerMillion: 0.5,
+            cacheWritePerMillion: 6.25,
+            outputPerMillion: 30,
+            longContextInputPerMillion: 10,
+            longContextCachedInputPerMillion: 1,
+            longContextCacheWritePerMillion: 12.5,
+            longContextOutputPerMillion: 45),
+        "gpt-5.6-sol": Price(
+            inputPerMillion: 5,
+            cachedInputPerMillion: 0.5,
+            cacheWritePerMillion: 6.25,
+            outputPerMillion: 30,
+            longContextInputPerMillion: 10,
+            longContextCachedInputPerMillion: 1,
+            longContextCacheWritePerMillion: 12.5,
+            longContextOutputPerMillion: 45),
+        "gpt-5.6-terra": Price(
+            inputPerMillion: 2,
+            cachedInputPerMillion: 0.2,
+            cacheWritePerMillion: 2.5,
+            outputPerMillion: 12,
+            longContextInputPerMillion: 4,
+            longContextCachedInputPerMillion: 0.4,
+            longContextCacheWritePerMillion: 5,
+            longContextOutputPerMillion: 18),
+        "gpt-5.6-luna": Price(
+            inputPerMillion: 0.2,
+            cachedInputPerMillion: 0.02,
+            cacheWritePerMillion: 0.25,
+            outputPerMillion: 1.2,
+            longContextInputPerMillion: 0.4,
+            longContextCachedInputPerMillion: 0.04,
+            longContextCacheWritePerMillion: 0.5,
+            longContextOutputPerMillion: 1.8),
+        "gpt-5.5": Price(inputPerMillion: 5, cachedInputPerMillion: 0.5, outputPerMillion: 30),
+        "gpt-5.5-pro": Price(inputPerMillion: 30, cachedInputPerMillion: 30, outputPerMillion: 180),
+        "gpt-5.4": Price(inputPerMillion: 2.5, cachedInputPerMillion: 0.25, outputPerMillion: 15),
+        "gpt-5.4-pro": Price(inputPerMillion: 30, cachedInputPerMillion: 30, outputPerMillion: 180),
+        "gpt-5.4-mini": Price(inputPerMillion: 0.75, cachedInputPerMillion: 0.075, outputPerMillion: 4.5),
+        "gpt-5.4-nano": Price(inputPerMillion: 0.2, cachedInputPerMillion: 0.02, outputPerMillion: 1.25),
+        "gpt-5.3-codex": Price(inputPerMillion: 1.75, cachedInputPerMillion: 0.175, outputPerMillion: 14),
+        "gpt-5.2-codex": Price(inputPerMillion: 1.75, cachedInputPerMillion: 0.175, outputPerMillion: 14),
+        "gpt-5.2": Price(inputPerMillion: 1.75, cachedInputPerMillion: 0.175, outputPerMillion: 14),
+        "gpt-5.1": Price(inputPerMillion: 1.25, cachedInputPerMillion: 0.125, outputPerMillion: 10),
+        "gpt-5": Price(inputPerMillion: 1.25, cachedInputPerMillion: 0.125, outputPerMillion: 10),
+        "gpt-5-mini": Price(inputPerMillion: 0.25, cachedInputPerMillion: 0.025, outputPerMillion: 2),
+        "gpt-5-nano": Price(inputPerMillion: 0.05, cachedInputPerMillion: 0.005, outputPerMillion: 0.4),
+        "gpt-5-pro": Price(inputPerMillion: 15, cachedInputPerMillion: 15, outputPerMillion: 120),
+        "codex-mini-latest": Price(inputPerMillion: 1.5, cachedInputPerMillion: 0.375, outputPerMillion: 6),
+    ]
+
     public static func price(for model: String) -> Price? {
-        let key = model.lowercased()
-        if key.contains("gpt-5.3-codex") || key.contains("gpt-5.2-codex") {
-            return Price(inputPerMillion: 1.75, cachedInputPerMillion: 0.175, outputPerMillion: 14)
-        }
-        if key.contains("gpt-5.5") {
-            return equivalentPrice
-        }
-        if key.contains("gpt-5") {
-            return Price(inputPerMillion: 1.25, cachedInputPerMillion: 0.125, outputPerMillion: 10)
-        }
-        return nil
+        price(for: model, in: builtInPrices)
+    }
+
+    static func price(for model: String, in prices: [String: Price]) -> Price? {
+        let key = normalizedModelID(model)
+        if let exact = prices[key] { return exact }
+        guard let snapshotBase = snapshotBaseModelID(key) else { return nil }
+        return prices[snapshotBase]
+    }
+
+    static func mergedPrices(overrides: [String: Price]) -> [String: Price] {
+        builtInPrices.merging(overrides) { _, remote in remote }
+    }
+
+    static func isCompatibleCacheVersion(_ value: String) -> Bool {
+        value == version || value.hasPrefix("openai-docs-")
     }
 
     public static func cost(model: String, usage: TokenUsage) -> Decimal? {
@@ -323,7 +427,19 @@ public enum PricingTable {
     }
 
     static var equivalentPrice: Price {
-        Price(inputPerMillion: 5, cachedInputPerMillion: 0.5, outputPerMillion: 30)
+        builtInPrices["gpt-5.6-sol"]!
+    }
+
+    private static func normalizedModelID(_ model: String) -> String {
+        model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func snapshotBaseModelID(_ model: String) -> String? {
+        let suffixPattern = #"-\d{4}-\d{2}-\d{2}$"#
+        guard let range = model.range(of: suffixPattern, options: .regularExpression) else {
+            return nil
+        }
+        return String(model[..<range.lowerBound])
     }
 
     private static func cost(usage: TokenUsage, price: Price) -> Decimal {

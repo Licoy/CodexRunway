@@ -1675,8 +1675,7 @@ final class RunwayModel: ObservableObject {
             let range = try await resolveGrokCurrentCycleCostRange()
             if let grokCostDetail,
                grokCostDetail.isDisplayableCost,
-               abs(grokCostDetail.window.start.timeIntervalSince(range.window.start)) < 60,
-               grokCostDetail.window.end <= range.window.end.addingTimeInterval(120)
+               Self.costWindow(grokCostDetail.window, matches: range.window)
             {
                 return grokCostDetail
             }
@@ -1687,12 +1686,19 @@ final class RunwayModel: ObservableObject {
         // Reuse an in-memory current-cycle snapshot only when its window still matches.
         if let costDetail,
            costDetail.isDisplayableCost,
-           abs(costDetail.window.start.timeIntervalSince(range.window.start)) < 60,
-           costDetail.window.end <= range.window.end.addingTimeInterval(120)
+           Self.costWindow(costDetail.window, matches: range.window)
         {
             return costDetail
         }
         return try await queryCost(range: range)
+    }
+
+    private static func costWindow(
+        _ snapshot: DateInterval,
+        matches requested: DateInterval
+    ) -> Bool {
+        abs(snapshot.start.timeIntervalSince(requested.start)) < 60
+            && abs(snapshot.end.timeIntervalSince(requested.end)) < 120
     }
 
     func previousCycleCostRange() -> ApiCostRange? {
@@ -2286,6 +2292,10 @@ final class RunwayModel: ObservableObject {
     }
 
     private func applyCurrentCost(_ summary: ApiEquivalentSummary) {
+        if let latestCost, latestCost.pricingVersion != summary.pricingVersion {
+            detailCostCache = [:]
+            detailCostCacheOrder = []
+        }
         latestCost = summary
         costDetail = summary
         cacheCost(summary)

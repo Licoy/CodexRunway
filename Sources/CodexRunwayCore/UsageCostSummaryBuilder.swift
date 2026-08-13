@@ -11,29 +11,37 @@ enum UsageCostSummaryBuilder {
         let groups = try group(events)
         let modelRows = modelRows(groups.byModel, priceBook: priceBook)
         let totals = try ApiEquivalentTotals.sum(groups.byDay.values)
-        let unknownWarnings = groups.byModel.keys
+        let unknownModels = groups.byModel.keys
             .filter { priceBook.priceForModel($0) == nil }
             .sorted()
-            .map { "unknown-model:\($0)" }
+        let estimatedUSD = estimatedCost(byModel: groups.byModel, priceBook: priceBook)
+        let confidence: ApiEquivalentConfidence
+        if totals.totalTokens == 0 {
+            confidence = .unavailable
+        } else if estimatedUSD == nil {
+            confidence = .tokensOnly
+        } else {
+            confidence = .priced
+        }
         return ApiEquivalentSummary(
             source: totals.totalTokens > 0 ? .localSessions : .unavailable,
-            confidence: totals.totalTokens > 0 ? .priced : .unavailable,
+            confidence: confidence,
             window: window,
-            estimatedUSD: modelRows.compactMap(\.estimatedUSD).reduce(Decimal(0), +),
+            estimatedUSD: estimatedUSD,
             totals: totals,
             dailyRows: dailyRows(groups, priceBook: priceBook),
             modelRows: modelRows,
-            projectRows: projectRows(groups.byProject, priceBook: priceBook),
+            projectRows: try projectRows(groups.byProjectModel, priceBook: priceBook),
             clientRows: [],
             rawCredits: 0,
-            warnings: unknownWarnings + warnings,
+            warnings: unknownModels.map { "unknown-model:\($0)" } + warnings,
             pricingVersion: priceBook.version,
             calculatedAt: calculatedAt)
     }
 
     private struct Groups {
         var byModel: [String: ApiEquivalentTotals] = [:]
-        var byProject: [String: ApiEquivalentTotals] = [:]
+        var byProjectModel: [String: [String: ApiEquivalentTotals]] = [:]
         var byDay: [String: ApiEquivalentTotals] = [:]
         var byDayModel: [String: [String: ApiEquivalentTotals]] = [:]
     }
@@ -56,10 +64,9 @@ enum UsageCostSummaryBuilder {
                 event.model,
                 default: .zero
             ].adding(totals)
-            result.byProject[event.project, default: .zero] = try result.byProject[
-                event.project,
-                default: .zero
-            ].adding(totals)
+            result.byProjectModel[event.project, default: [:]][event.model, default: .zero] =
+                try result.byProjectModel[event.project, default: [:]][event.model, default: .zero]
+                    .adding(totals)
             result.byDay[event.dayKey, default: .zero] = try result.byDay[
                 event.dayKey,
                 default: .zero
@@ -80,27 +87,27 @@ enum UsageCostSummaryBuilder {
             return ApiEquivalentBreakdownRow(
                 name: model,
                 totals: totals,
-                estimatedUSD: priceBook.cost(model: model, totals: totals)
-                    ?? priceBook.equivalentCost(totals: totals),
+                estimatedUSD: priceBook.cost(model: model, totals: totals),
                 rawCredits: 0)
         }
     }
 
     private static func projectRows(
-        _ grouped: [String: ApiEquivalentTotals],
+        _ grouped: [String: [String: ApiEquivalentTotals]],
         priceBook: UsageCostPriceBook
-    ) -> [ApiEquivalentBreakdownRow] {
-        grouped.keys.sorted { lhs, rhs in
-            let left = grouped[lhs]?.totalTokens ?? 0
-            let right = grouped[rhs]?.totalTokens ?? 0
-            return left == right ? lhs < rhs : left > right
-        }.map { project in
-            let totals = grouped[project] ?? .zero
+    ) throws -> [ApiEquivalentBreakdownRow] {
+        let rows = try grouped.map { project, byModel -> ApiEquivalentBreakdownRow in
+            let totals = try ApiEquivalentTotals.sum(byModel.values)
             return ApiEquivalentBreakdownRow(
                 name: project,
                 totals: totals,
-                estimatedUSD: priceBook.equivalentCost(totals: totals),
+                estimatedUSD: estimatedCost(byModel: byModel, priceBook: priceBook),
                 rawCredits: 0)
+        }
+        return rows.sorted { lhs, rhs in
+            lhs.totals.totalTokens == rhs.totals.totalTokens
+                ? lhs.name < rhs.name
+                : lhs.totals.totalTokens > rhs.totals.totalTokens
         }
     }
 
@@ -123,10 +130,14 @@ enum UsageCostSummaryBuilder {
     private static func estimatedCost(
         byModel: [String: ApiEquivalentTotals],
         priceBook: UsageCostPriceBook
-    ) -> Decimal {
-        byModel.reduce(Decimal(0)) { result, item in
-            result + (priceBook.cost(model: item.key, totals: item.value)
-                ?? priceBook.equivalentCost(totals: item.value))
+    ) -> Decimal? {
+        var result = Decimal(0)
+        for item in byModel {
+            guard let cost = priceBook.cost(model: item.key, totals: item.value) else {
+                return nil
+            }
+            result += cost
         }
+        return result
     }
 }

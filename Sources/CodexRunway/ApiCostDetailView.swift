@@ -169,8 +169,12 @@ struct ApiCostDetailView: View {
     private func header(_ detail: ApiEquivalentSummary) -> some View {
         RunwayPageSummaryRow(
             title: l10n.text(.apiCost),
-            meta: "\(l10n.text(.calculatedAt)) \(calculatedText(detail.calculatedAt)) · \(detail.pricingVersion) · \(sourceText(detail.source))",
+            meta: "\(windowText(detail.window)) · \(l10n.text(.calculatedAt)) \(calculatedText(detail.calculatedAt)) · \(detail.pricingVersion) · \(sourceText(detail.source))",
             figure: detail.estimatedUSD.map(DurationFormatter.money) ?? l10n.text(.tokensOnly))
+    }
+
+    private func windowText(_ window: DateInterval) -> String {
+        "\(calculatedText(window.start)) – \(calculatedText(window.end))"
     }
 
     @ViewBuilder
