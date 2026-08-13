@@ -156,6 +156,7 @@ The self-check reads local state only and makes no network request. It prints re
 - **Reset today?**: Data comes from [https://www.codexrunway.com/api/status.json](https://www.codexrunway.com/api/status.json). Unofficial and advisory only; may be delayed or temporarily unavailable.
 - **Quota / reset credits / official token usage / some online usage**: When signed in, requests use your local credentials against official ChatGPT / Codex backend APIs. Official token usage belongs to the current account and shows the backend statistics date.
 - **Grok quota**: Returned only by the official CLI chat-proxy `/v1/billing?format=credits` endpoint using a local OAuth / SuperGrok login. There is no secondary data source, and API billing or local-session statistics are not mixed into this quota.
+- **Grok API-equivalent cost / local sessions**: Computed from local `~/.grok/sessions` `turn_completed` usage using official xAI Text API prices (input / cached / output; prompts ≥ 200k use long-context rates; price book `xai-builtin-2026-08-13`). Unknown models are not invented as exact costs. CLI `costUsdTicks` is subscription-credit accounting and is not used as API-equivalent cost.
 - **Local-log token usage / API-equivalent cost / recent sessions**: Computed by default from local `~/.codex` session logs and the local index. Historical local logs have no reliable account attribution, so they may include multiple accounts.
 
 ## Development and Contribution

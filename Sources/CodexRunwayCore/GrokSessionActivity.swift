@@ -9,7 +9,7 @@ public struct GrokUsageTotals: Codable, Sendable, Equatable {
     public var reasoningTokens: Int
     public var turns: Int
     public var modelCalls: Int
-    /// Official CLI-reported cost in USD when `costUsdTicks` is present (`ticks / 1e9`).
+    /// API-equivalent USD from official xAI token prices, summed over priced turns.
     public var estimatedUSD: Decimal?
 
     public static let zero = GrokUsageTotals(
@@ -155,8 +155,9 @@ public struct GrokLocalUsageSummary: Codable, Sendable, Equatable {
 public struct GrokSessionScanner: Sendable {
     public var grokHome: URL
     /// Grok CLI reports `costUsdTicks` such that USD = ticks / 1_000_000_000.
+    /// Kept for diagnostics; API-equivalent cost uses `GrokPricingTable`, not ticks.
     public static let costUsdTicksPerDollar: Decimal = 1_000_000_000
-    public static let pricingVersion = "grok-cli-costUsdTicks-2026-08"
+    public static let pricingVersion = GrokPricingTable.version
 
     public init(
         grokHome: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -195,6 +196,7 @@ public struct GrokSessionScanner: Sendable {
             let parsed = parseUsage(
                 from: summary.directory.appendingPathComponent("updates.jsonl"),
                 fallbackDate: summary.updatedAt,
+                fallbackModel: summary.model,
                 calendar: calendar)
             // Keep all day keys; TokenUsageHeatmapBuilder clips to the display year.
             for (day, dayTotals) in parsed.byDay {
@@ -273,9 +275,8 @@ public struct GrokSessionScanner: Sendable {
     }
 
     private struct ParsedUsage {
-        var totals: GrokUsageTotals
-        var modelBreakdown: [String: GrokUsageTotals]
         var byDay: [String: GrokUsageTotals]
+        var byDayModel: [String: [String: GrokUsageTotals]]
     }
 
     private func listSummaries(limit: Int) throws -> [SummaryFile] {
@@ -349,18 +350,18 @@ public struct GrokSessionScanner: Sendable {
     private func parseUsage(
         from updatesURL: URL,
         fallbackDate: Date,
+        fallbackModel: String?,
         calendar: Calendar
     ) -> ParsedUsage {
         guard FileManager.default.fileExists(atPath: updatesURL.path),
               let data = try? Data(contentsOf: updatesURL),
               !data.isEmpty
         else {
-            return ParsedUsage(totals: .zero, modelBreakdown: [:], byDay: [:])
+            return ParsedUsage(byDay: [:], byDayModel: [:])
         }
 
-        var totals = GrokUsageTotals.zero
-        var byModel: [String: GrokUsageTotals] = [:]
         var byDay: [String: GrokUsageTotals] = [:]
+        var byDayModel: [String: [String: GrokUsageTotals]] = [:]
         var start = data.startIndex
         while start < data.endIndex {
             let end = data[start...].firstIndex(of: UInt8(ascii: "\n")) ?? data.endIndex
@@ -374,22 +375,72 @@ public struct GrokSessionScanner: Sendable {
             else {
                 continue
             }
-            let turn = usageTotals(from: usage, countAsTurn: true)
-            totals.merge(turn)
             let day = dayKey(for: object, fallback: fallbackDate, calendar: calendar)
+            var turn = usageTotals(from: usage, countAsTurn: true, model: nil)
+            turn.estimatedUSD = accumulateModelUsage(
+                usage["modelUsage"] as? [String: Any],
+                fallbackUsage: usage,
+                fallbackModel: fallbackModel,
+                day: day,
+                byDayModel: &byDayModel)
             var dayTotals = byDay[day] ?? .zero
             dayTotals.merge(turn)
             byDay[day] = dayTotals
-            if let modelUsage = usage["modelUsage"] as? [String: Any] {
-                for (model, value) in modelUsage {
-                    guard let modelObject = value as? [String: Any] else { continue }
-                    var row = byModel[model] ?? .zero
-                    row.merge(usageTotals(from: modelObject, countAsTurn: false))
-                    byModel[model] = row
-                }
+        }
+        return ParsedUsage(
+            byDay: byDay,
+            byDayModel: byDayModel)
+    }
+
+    /// Prices each model row from official API rates. Returns the sum of priced
+    /// rows (nil if none priced) so mixed unknown models do not blank the turn.
+    private func accumulateModelUsage(
+        _ modelUsage: [String: Any]?,
+        fallbackUsage: [String: Any],
+        fallbackModel: String?,
+        day: String,
+        byDayModel: inout [String: [String: GrokUsageTotals]]
+    ) -> Decimal? {
+        var pricedSum: Decimal?
+        var sawModel = false
+        if let modelUsage {
+            for (model, value) in modelUsage {
+                guard let modelObject = value as? [String: Any] else { continue }
+                sawModel = true
+                mergeModelRow(
+                    usageTotals(from: modelObject, countAsTurn: false, model: model),
+                    model: model,
+                    day: day,
+                    byDayModel: &byDayModel,
+                    pricedSum: &pricedSum)
             }
         }
-        return ParsedUsage(totals: totals, modelBreakdown: byModel, byDay: byDay)
+        if !sawModel, let fallbackModel, !fallbackModel.isEmpty {
+            mergeModelRow(
+                usageTotals(from: fallbackUsage, countAsTurn: false, model: fallbackModel),
+                model: fallbackModel,
+                day: day,
+                byDayModel: &byDayModel,
+                pricedSum: &pricedSum)
+        }
+        return pricedSum
+    }
+
+    private func mergeModelRow(
+        _ row: GrokUsageTotals,
+        model: String,
+        day: String,
+        byDayModel: inout [String: [String: GrokUsageTotals]],
+        pricedSum: inout Decimal?
+    ) {
+        var dayModels = byDayModel[day] ?? [:]
+        var dayRow = dayModels[model] ?? .zero
+        dayRow.merge(row)
+        dayModels[model] = dayRow
+        byDayModel[day] = dayModels
+        if let cost = row.estimatedUSD {
+            pricedSum = (pricedSum ?? 0) + cost
+        }
     }
 
     @discardableResult
@@ -413,25 +464,16 @@ public struct GrokSessionScanner: Sendable {
             var bucket = byDay[day] ?? .zero
             bucket.merge(dayTotals)
             byDay[day] = bucket
+            if let models = parsed.byDayModel[day] {
+                for (model, modelTotals) in models {
+                    var row = byModel[model] ?? .zero
+                    row.merge(modelTotals)
+                    byModel[model] = row
+                }
+            }
         }
         guard matched.hasData else { return false }
         aggregate.merge(matched)
-        // Scale model breakdown proportionally is hard without per-day model data;
-        // attribute full session model rows only when all session days fall in window,
-        // otherwise skip model split for partial windows by using session totals on model rows
-        // only when session totals match matched (full inclusion).
-        if matched.totalTokens == parsed.totals.totalTokens {
-            for (model, modelTotals) in parsed.modelBreakdown {
-                var row = byModel[model] ?? .zero
-                row.merge(modelTotals)
-                byModel[model] = row
-            }
-        } else if matched.totalTokens > 0 {
-            // Fallback: one synthetic row for mixed windows.
-            var row = byModel["grok"] ?? .zero
-            row.merge(matched)
-            byModel["grok"] = row
-        }
         var project = byProject[projectName] ?? .zero
         project.merge(matched)
         byProject[projectName] = project
@@ -498,10 +540,19 @@ public struct GrokSessionScanner: Sendable {
                 estimatedUSD: aggregate.estimatedUSD,
                 rawCredits: 0),
         ]
-        let confidence: ApiEquivalentConfidence =
-            aggregate.estimatedUSD != nil ? .priced : (aggregate.totalTokens > 0 ? .tokensOnly : .unavailable)
+        let unknownModels = byModel.keys
+            .filter { GrokPricingTable.price(for: $0) == nil }
+            .sorted()
+        let confidence: ApiEquivalentConfidence
+        if aggregate.totalTokens == 0 {
+            confidence = .unavailable
+        } else if aggregate.estimatedUSD == nil {
+            confidence = .tokensOnly
+        } else {
+            confidence = .priced
+        }
         return ApiEquivalentSummary(
-            source: .localSessions,
+            source: aggregate.totalTokens > 0 ? .localSessions : .unavailable,
             confidence: confidence,
             window: window,
             estimatedUSD: aggregate.estimatedUSD,
@@ -511,7 +562,7 @@ public struct GrokSessionScanner: Sendable {
             projectRows: projectRows,
             clientRows: clientRows,
             rawCredits: 0,
-            warnings: [],
+            warnings: unknownModels.map { "unknown-model:\($0)" },
             pricingVersion: Self.pricingVersion,
             calculatedAt: now)
     }
@@ -532,7 +583,11 @@ public struct GrokSessionScanner: Sendable {
             && line.range(of: Data("\"usage\"".utf8)) != nil
     }
 
-    private func usageTotals(from usage: [String: Any], countAsTurn: Bool) -> GrokUsageTotals {
+    private func usageTotals(
+        from usage: [String: Any],
+        countAsTurn: Bool,
+        model: String?
+    ) -> GrokUsageTotals {
         let input = intValue(usage["inputTokens"])
         let output = intValue(usage["outputTokens"])
         let cached = intValue(usage["cachedReadTokens"])
@@ -540,7 +595,13 @@ public struct GrokSessionScanner: Sendable {
         let reportedTotal = intValue(usage["totalTokens"])
         let total = reportedTotal > 0 ? reportedTotal : max(0, input + output)
         let modelCalls = intValue(usage["modelCalls"])
-        let cost = Self.usd(fromCostTicks: int64Value(usage["costUsdTicks"]))
+        let cost = model.flatMap {
+            GrokPricingTable.cost(
+                model: $0,
+                inputTokens: input,
+                cachedInputTokens: cached,
+                outputTokens: output)
+        }
         return GrokUsageTotals(
             totalTokens: total,
             inputTokens: input,
@@ -611,21 +672,6 @@ public struct GrokSessionScanner: Sendable {
             return max(0, number.intValue)
         default:
             return 0
-        }
-    }
-
-    private func int64Value(_ value: Any?) -> Int64? {
-        switch value {
-        case let number as Int64:
-            return number
-        case let number as Int:
-            return Int64(number)
-        case let number as Double:
-            return Int64(number.rounded())
-        case let number as NSNumber:
-            return number.int64Value
-        default:
-            return nil
         }
     }
 
