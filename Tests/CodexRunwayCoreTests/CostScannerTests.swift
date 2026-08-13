@@ -98,7 +98,7 @@ struct CostScannerTests {
         #expect(report.diagnostics.candidateFiles == 2)
     }
 
-    @Test("local API equivalent scans the weekly window and falls back for unknown models")
+    @Test("local API equivalent scans the weekly window without pricing unknown models")
     func localAPIEquivalentUsesWeeklyWindow() throws {
         let root = try TemporaryDirectory()
         let calculatedAt = ISO8601DateFormatter().date(from: "2026-06-30T10:00:00Z")!
@@ -118,7 +118,7 @@ struct CostScannerTests {
 
         #expect(summary.calculatedAt == calculatedAt)
         #expect(summary.source == .localSessions)
-        #expect(summary.confidence == .priced)
+        #expect(summary.confidence == .tokensOnly)
         #expect(summary.totals.uncachedInputTokens == 1_300)
         #expect(summary.totals.cachedInputTokens == 200)
         #expect(summary.totals.outputTokens == 75)
@@ -126,7 +126,7 @@ struct CostScannerTests {
         #expect(summary.dailyRows.map(\.date) == ["2026-06-25", "2026-06-29"])
         #expect(summary.dailyRows[0].estimatedUSD != summary.estimatedUSD)
         #expect(summary.modelRows.map(\.name) == ["gpt-5.3-codex", "unknown-model"])
-        #expect(summary.estimatedUSD ?? 0 > 0)
+        #expect(summary.estimatedUSD == nil)
         #expect(summary.warnings.isEmpty == false)
     }
 
@@ -815,6 +815,30 @@ struct CostScannerTests {
         try store.save(summary)
 
         #expect(store.load() == nil)
+    }
+
+    @Test("cost cache accepts an official dynamic pricing version")
+    func costCacheAcceptsOfficialPricingVersion() throws {
+        let root = try TemporaryDirectory()
+        let cacheURL = root.url.appending(path: "api-equivalent-cost.json")
+        let store = UsageCostCacheStore(cacheURL: cacheURL)
+        let summary = ApiEquivalentSummary(
+            source: .localSessions,
+            confidence: .priced,
+            window: DateInterval(start: Date(timeIntervalSince1970: 0), duration: 60),
+            estimatedUSD: 1,
+            totals: .zero,
+            dailyRows: [],
+            modelRows: [],
+            clientRows: [],
+            rawCredits: 0,
+            warnings: [],
+            pricingVersion: "openai-docs-official-etag",
+            calculatedAt: Date(timeIntervalSince1970: 60))
+
+        try store.save(summary)
+
+        #expect(store.load() == summary)
     }
 
     @Test("cost cache ignores missing or corrupt files")

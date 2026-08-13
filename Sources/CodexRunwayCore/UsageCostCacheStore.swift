@@ -12,7 +12,7 @@ public struct UsageCostCacheStore: Sendable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         guard let summary = try? decoder.decode(ApiEquivalentSummary.self, from: data),
-              summary.pricingVersion == PricingTable.version
+              PricingTable.isCompatibleCacheVersion(summary.pricingVersion)
         else {
             return nil
         }

@@ -261,4 +261,40 @@ struct UsageCostRepositoryAggregationTests {
         #expect(diagnostics.bytesRead == 0)
         #expect(diagnostics.rebuiltFiles == 0)
     }
+
+    @Test("project cost sums each model price instead of using one equivalent rate")
+    func projectCostIsModelAware() async throws {
+        let fixture = try RepositoryFixture()
+        let contents = """
+        {"timestamp":"2026-06-29T00:00:00Z","type":"session_meta","payload":{"cwd":"/Users/me/dev/codex-runway"}}
+        \(tokenLine(timestamp: "2026-06-29T01:00:00Z", input: 1_000_000, output: 0, model: "gpt-5.6-sol"))
+        \(tokenLine(timestamp: "2026-06-29T02:00:00Z", input: 1_000_000, output: 0, model: "gpt-5.6-luna"))
+        """
+        try fixture.write(contents, basename: "rollout-project-models.jsonl")
+        let prices = [
+            "gpt-5.6-sol": PricingTable.Price(
+                inputPerMillion: 5,
+                cachedInputPerMillion: 0.5,
+                outputPerMillion: 30),
+            "gpt-5.6-luna": PricingTable.Price(
+                inputPerMillion: 0.2,
+                cachedInputPerMillion: 0.02,
+                outputPerMillion: 1.2),
+        ]
+        let priceBook = UsageCostPriceBook(
+            version: "model-aware",
+            priceForModel: { prices[$0] },
+            equivalentPrice: PricingTable.Price(
+                inputPerMillion: 999,
+                cachedInputPerMillion: 999,
+                outputPerMillion: 999))
+
+        let summary = try #require(try await fixture.repository(priceBook: priceBook).summaries(
+            for: [fullWindowQuery()], calculatedAt: fixedNow, policy: .ifChanged)["full"])
+
+        #expect(summary.projectRows.count == 1)
+        #expect(summary.projectRows[0].name == "codex-runway")
+        #expect(summary.projectRows[0].estimatedUSD == 5.2)
+        #expect(summary.estimatedUSD == 5.2)
+    }
 }

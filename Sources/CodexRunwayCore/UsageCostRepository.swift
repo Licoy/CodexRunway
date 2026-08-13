@@ -85,6 +85,7 @@ public actor UsageCostRepository {
         var queries: [ApiCostQuery]
         var calculatedAt: Date
         var policy: UsageCostRefreshPolicy
+        var pricingVersion: String
     }
 
     private struct Flight {
@@ -94,6 +95,8 @@ public actor UsageCostRepository {
     }
 
     private let worker: UsageCostRepositoryWorker
+    private let pricingProvider: OpenAIPricingCatalogProvider?
+    private let fixedPriceBook: UsageCostPriceBook
     private let beforeFlight: (@Sendable () async -> Void)?
     private var inFlight: [RequestKey: Flight] = [:]
     private var sharedFlightHits = 0
@@ -107,8 +110,9 @@ public actor UsageCostRepository {
             codexHome: codexHome,
             databaseURL: Self.defaultDatabaseURL,
             parserVersion: UsageCostRepositoryWorker.currentParserVersion,
-            priceBook: .current,
             calendar: .autoupdatingCurrent)
+        pricingProvider = OpenAIPricingCatalogProvider()
+        fixedPriceBook = .current
         beforeFlight = nil
     }
 
@@ -118,8 +122,9 @@ public actor UsageCostRepository {
             codexHome: codexHome,
             databaseURL: databaseURL,
             parserVersion: UsageCostRepositoryWorker.currentParserVersion,
-            priceBook: .current,
             calendar: .autoupdatingCurrent)
+        pricingProvider = OpenAIPricingCatalogProvider()
+        fixedPriceBook = .current
         beforeFlight = nil
     }
 
@@ -135,8 +140,9 @@ public actor UsageCostRepository {
             codexHome: codexHome,
             databaseURL: databaseURL,
             parserVersion: parserVersion,
-            priceBook: priceBook,
             calendar: calendar)
+        pricingProvider = nil
+        fixedPriceBook = priceBook
         self.beforeFlight = beforeFlight
     }
 
@@ -149,11 +155,18 @@ public actor UsageCostRepository {
         try Task.checkCancellation()
         guard !queries.isEmpty else { return [:] }
         try Self.validateQueries(queries)
+        let priceBook: UsageCostPriceBook
+        if let pricingProvider {
+            priceBook = await pricingProvider.priceBook()
+        } else {
+            priceBook = fixedPriceBook
+        }
         let canonicalQueries = queries.sorted(by: Self.queryOrder)
         let key = RequestKey(
             queries: canonicalQueries,
             calculatedAt: calculatedAt,
-            policy: policy)
+            policy: policy,
+            pricingVersion: priceBook.version)
 
         let waiterID = UUID()
         let flight: Flight
@@ -172,6 +185,7 @@ public actor UsageCostRepository {
                     for: canonicalQueries,
                     calculatedAt: calculatedAt,
                     policy: policy,
+                    priceBook: priceBook,
                     progress: progress)
             }
             flight = Flight(id: UUID(), task: task, waiters: [waiterID])
