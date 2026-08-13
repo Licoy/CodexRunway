@@ -116,7 +116,7 @@ struct ControlPanelView: View {
     private var displayPane: some View {
         PreferencesPane {
             SettingsSection {
-                SectionLabel(l10n.text(.display))
+                SectionLabel(l10n.text(.displayAppearanceSection))
                 PickerRow(title: l10n.text(.appearance), subtitle: l10n.text(.appearanceSystem)) {
                     Picker(l10n.text(.appearance), selection: appearanceBinding) {
                         Text(l10n.text(.appearanceSystem)).tag(AppearancePreference.system)
@@ -169,67 +169,46 @@ struct ControlPanelView: View {
                         .pickerStyle(.menu)
                     }
                 }
-                PreferenceToggleRow(
-                    title: l10n.text(.showModelSpecificQuotaUsage),
-                    subtitle: l10n.text(.modelSpecificQuotaUsageDescription),
-                    binding: modelSpecificQuotaUsageBinding)
-                PreferenceToggleRow(
-                    title: l10n.text(.showTokenUsageHeatmap),
-                    subtitle: l10n.text(.tokenUsageHeatmapDescription),
-                    binding: tokenUsageHeatmapBinding)
-                if settings.preferences.showsTokenUsageHeatmap {
-                    PickerRow(
-                        title: l10n.text(.tokenUsageChartStyle),
-                        subtitle: l10n.text(.tokenUsageHeatmapDescription))
-                    {
-                        Picker(l10n.text(.tokenUsageChartStyle), selection: tokenUsageChartStyleBinding) {
-                            ForEach(TokenUsageChartStyle.allCases, id: \.self) { style in
-                                Text(style.title(l10n)).tag(style)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                    }
-                }
-                PreferenceToggleRow(
-                    title: l10n.text(.showCostSummary),
-                    subtitle: l10n.text(.apiEquivalent),
-                    binding: costSummaryBinding)
-                PickerRow(title: l10n.text(.apiCostSummaryRange), subtitle: l10n.text(.apiEquivalent)) {
-                    Picker(l10n.text(.apiCostSummaryRange), selection: apiCostSummaryRangeBinding) {
-                        ForEach(ApiCostSummaryRange.allCases, id: \.self) { range in
-                            Text(range.title(l10n)).tag(range)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                }
-                PreferenceToggleRow(
-                    title: l10n.text(.showRateLimitResetToday),
-                    subtitle: l10n.text(.rateLimitResetTodayDescription),
-                    binding: rateLimitResetTodayBinding)
-                if settings.preferences.showsRateLimitResetToday {
-                    PickerRow(
-                        title: l10n.text(.rateLimitResetTodayRefreshInterval),
-                        subtitle: l10n.text(.rateLimitResetTodayDescription))
-                    {
-                        Picker(
-                            l10n.text(.rateLimitResetTodayRefreshInterval),
-                            selection: rateLimitResetTodayRefreshIntervalBinding)
+            }
+            SettingsSection {
+                MainPanelModuleSectionHeader(
+                    title: l10n.text(.mainPanelModules),
+                    subtitle: l10n.text(.mainPanelModulesDescription),
+                    restoreTitle: l10n.text(.restoreDefaultOrder),
+                    restoreDisabled: settings.preferences.mainPanelModuleOrder
+                        == RunwayPreferences.defaultMainPanelModuleOrder,
+                    onRestore: { settings.resetMainPanelModuleOrder() })
+                VStack(spacing: 10) {
+                    ForEach(
+                        Array(settings.preferences.mainPanelModuleOrder.enumerated()),
+                        id: \.element)
+                    { index, module in
+                        MainPanelModuleCard(
+                            title: module.title(l10n),
+                            subtitle: module.subtitle(l10n),
+                            platform: module.platformTitle(l10n),
+                            systemImage: module.systemImage,
+                            visibleTitle: l10n.text(.moduleVisible),
+                            hiddenTitle: l10n.text(.moduleHidden),
+                            moveUpTitle: l10n.text(.accountsMoveUp),
+                            moveDownTitle: l10n.text(.accountsMoveDown),
+                            isEnabled: moduleVisibilityBinding(module),
+                            hasConfiguration: module.hasConfiguration,
+                            canMoveUp: index > 0,
+                            canMoveDown: index + 1 < settings.preferences.mainPanelModuleOrder.count,
+                            onMoveUp: { settings.moveMainPanelModule(module, by: -1) },
+                            onMoveDown: { settings.moveMainPanelModule(module, by: 1) })
                         {
-                            ForEach(RunwayPreferences.rateLimitResetTodayRefreshIntervalOptions, id: \.self) { seconds in
-                                Text(rateLimitResetTodayIntervalLabel(seconds)).tag(seconds)
-                            }
+                            moduleConfiguration(module)
                         }
-                        .pickerStyle(.menu)
                     }
                 }
-                PreferenceToggleRow(
-                    title: l10n.text(.showRecentSessions),
-                    subtitle: l10n.text(.recentSessionsDescription),
-                    binding: recentSessionsBinding)
-                PreferenceToggleRow(
-                    title: l10n.text(.showSessionRepairSummary),
-                    subtitle: l10n.text(.sessionRepair),
-                    binding: repairSummaryBinding)
+                .animation(
+                    .easeInOut(duration: 0.18),
+                    value: settings.preferences.mainPanelModuleOrder)
+            }
+            SettingsSection {
+                SectionLabel(l10n.text(.notificationSettings))
                 PreferenceToggleRow(
                     title: l10n.text(.quotaAlerts),
                     subtitle: l10n.text(.quotaAlertsDescription),
@@ -249,6 +228,49 @@ struct ControlPanelView: View {
                         notificationMessage = model.testNotification()
                     }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func moduleConfiguration(_ module: MainPanelModule) -> some View {
+        switch module {
+        case .quota:
+            PreferenceToggleRow(
+                title: l10n.text(.showModelSpecificQuotaUsage),
+                subtitle: l10n.text(.modelSpecificQuotaUsageDescription),
+                binding: modelSpecificQuotaUsageBinding)
+        case .tokenUsage:
+            ModulePickerRow(title: l10n.text(.tokenUsageChartStyle)) {
+                Picker(l10n.text(.tokenUsageChartStyle), selection: tokenUsageChartStyleBinding) {
+                    ForEach(TokenUsageChartStyle.allCases, id: \.self) { style in
+                        Text(style.title(l10n)).tag(style)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+        case .rateLimitResetToday:
+            ModulePickerRow(title: l10n.text(.rateLimitResetTodayRefreshInterval)) {
+                Picker(
+                    l10n.text(.rateLimitResetTodayRefreshInterval),
+                    selection: rateLimitResetTodayRefreshIntervalBinding)
+                {
+                    ForEach(RunwayPreferences.rateLimitResetTodayRefreshIntervalOptions, id: \.self) { seconds in
+                        Text(rateLimitResetTodayIntervalLabel(seconds)).tag(seconds)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+        case .apiCost:
+            ModulePickerRow(title: l10n.text(.apiCostSummaryRange)) {
+                Picker(l10n.text(.apiCostSummaryRange), selection: apiCostSummaryRangeBinding) {
+                    ForEach(ApiCostSummaryRange.allCases, id: \.self) { range in
+                        Text(range.title(l10n)).tag(range)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+        case .resetCredits, .sessionRepair, .recentSessions:
+            EmptyView()
         }
     }
 
@@ -356,8 +378,65 @@ struct ControlPanelView: View {
         Binding(get: { settings.preferences.statusBarBatteryDetailStyle }, set: { settings.updateStatusBarBatteryDetailStyle($0) })
     }
 
+    private func moduleVisibilityBinding(_ module: MainPanelModule) -> Binding<Bool> {
+        switch module {
+        case .quota:
+            quotaSummaryBinding
+        case .tokenUsage:
+            tokenUsageHeatmapBinding
+        case .rateLimitResetToday:
+            rateLimitResetTodayBinding
+        case .resetCredits:
+            resetCreditsSummaryBinding
+        case .apiCost:
+            costSummaryBinding
+        case .sessionRepair:
+            repairSummaryBinding
+        case .recentSessions:
+            recentSessionsBinding
+        }
+    }
+
+    private var quotaSummaryBinding: Binding<Bool> {
+        Binding(
+            get: { settings.preferences.showsQuotaSummary },
+            set: { enabled in
+                settings.updateShowsQuotaSummary(enabled)
+                guard enabled else { return }
+                if model.selectedProvider == .grok {
+                    model.refreshGrok(.current)
+                } else {
+                    model.refreshQuota()
+                }
+            })
+    }
+
+    private var resetCreditsSummaryBinding: Binding<Bool> {
+        Binding(
+            get: { settings.preferences.showsResetCreditsSummary },
+            set: { enabled in
+                settings.updateShowsResetCreditsSummary(enabled)
+                guard enabled else { return }
+                if model.selectedProvider == .grok {
+                    model.refreshGrok(.current)
+                } else {
+                    model.refreshResetCredits()
+                }
+            })
+    }
+
     private var costSummaryBinding: Binding<Bool> {
-        Binding(get: { settings.preferences.showsCostSummary }, set: { settings.updateShowsCostSummary($0) })
+        Binding(
+            get: { settings.preferences.showsCostSummary },
+            set: { enabled in
+                settings.updateShowsCostSummary(enabled)
+                guard enabled else { return }
+                if model.selectedProvider == .grok {
+                    model.refreshGrokLocalUsage()
+                } else {
+                    model.refreshCost()
+                }
+            })
     }
 
     private var modelSpecificQuotaUsageBinding: Binding<Bool> {
@@ -371,7 +450,10 @@ struct ControlPanelView: View {
             get: { settings.preferences.showsTokenUsageHeatmap },
             set: { enabled in
                 settings.updateShowsTokenUsageHeatmap(enabled)
-                if enabled {
+                guard enabled else { return }
+                if model.selectedProvider == .grok {
+                    model.refreshGrokLocalUsage()
+                } else {
                     model.refreshTokenHeatmap(policy: .force)
                 }
             })
@@ -424,11 +506,26 @@ struct ControlPanelView: View {
     }
 
     private var recentSessionsBinding: Binding<Bool> {
-        Binding(get: { settings.preferences.showsRecentSessions }, set: { settings.updateShowsRecentSessions($0) })
+        Binding(
+            get: { settings.preferences.showsRecentSessions },
+            set: { enabled in
+                settings.updateShowsRecentSessions(enabled)
+                guard enabled else { return }
+                if model.selectedProvider == .grok {
+                    model.refreshGrokLocalUsage()
+                } else {
+                    model.refreshRecentSessions()
+                }
+            })
     }
 
     private var repairSummaryBinding: Binding<Bool> {
-        Binding(get: { settings.preferences.showsSessionRepairSummary }, set: { settings.updateShowsSessionRepairSummary($0) })
+        Binding(
+            get: { settings.preferences.showsSessionRepairSummary },
+            set: { enabled in
+                settings.updateShowsSessionRepairSummary(enabled)
+                if enabled { model.refreshSessionReport() }
+            })
     }
 
     private var automaticallyChecksForUpdatesBinding: Binding<Bool> {
@@ -555,6 +652,62 @@ private extension TokenUsageChartStyle {
     }
 }
 
+private extension MainPanelModule {
+    func title(_ l10n: L10n) -> String {
+        switch self {
+        case .quota: l10n.text(.quota)
+        case .tokenUsage: l10n.text(.tokenUsageHeatmap)
+        case .rateLimitResetToday: l10n.text(.rateLimitResetToday)
+        case .resetCredits: l10n.text(.resetCredits)
+        case .apiCost: l10n.text(.apiCost)
+        case .sessionRepair: l10n.text(.sessionRepair)
+        case .recentSessions: l10n.text(.recentSessions)
+        }
+    }
+
+    func subtitle(_ l10n: L10n) -> String {
+        switch self {
+        case .quota: l10n.text(.moduleQuotaDescription)
+        case .tokenUsage: l10n.text(.tokenUsageHeatmapDescription)
+        case .rateLimitResetToday: l10n.text(.rateLimitResetTodayDescription)
+        case .resetCredits: l10n.text(.moduleResetCreditsDescription)
+        case .apiCost: l10n.text(.moduleAPICostDescription)
+        case .sessionRepair: l10n.text(.moduleSessionRepairDescription)
+        case .recentSessions: l10n.text(.recentSessionsDescription)
+        }
+    }
+
+    func platformTitle(_ l10n: L10n) -> String {
+        switch self {
+        case .rateLimitResetToday, .sessionRepair:
+            l10n.text(.moduleAppliesCodex)
+        case .quota, .tokenUsage, .resetCredits, .apiCost, .recentSessions:
+            l10n.text(.moduleAppliesBoth)
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .quota: "gauge"
+        case .tokenUsage: "chart.bar.xaxis"
+        case .rateLimitResetToday: "arrow.clockwise.circle"
+        case .resetCredits: "arrow.counterclockwise.circle"
+        case .apiCost: "dollarsign.circle"
+        case .sessionRepair: "cross.case"
+        case .recentSessions: "clock"
+        }
+    }
+
+    var hasConfiguration: Bool {
+        switch self {
+        case .quota, .tokenUsage, .rateLimitResetToday, .apiCost:
+            true
+        case .resetCredits, .sessionRepair, .recentSessions:
+            false
+        }
+    }
+}
+
 struct PreferencesPane<Content: View>: View {
     @ViewBuilder var content: Content
 
@@ -591,6 +744,157 @@ struct SectionLabel: View {
     var body: some View {
         Text(title)
             .font(.caption).foregroundStyle(.secondary).textCase(.uppercase)
+    }
+}
+
+private struct MainPanelModuleSectionHeader: View {
+    var title: String
+    var subtitle: String
+    var restoreTitle: String
+    var restoreDisabled: Bool
+    var onRestore: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .center) {
+                SectionLabel(title)
+                Spacer()
+                Button(action: onRestore) {
+                    Label(restoreTitle, systemImage: "arrow.counterclockwise")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .disabled(restoreDisabled)
+            }
+            Text(subtitle)
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct MainPanelModuleCard<Configuration: View>: View {
+    var title: String
+    var subtitle: String
+    var platform: String
+    var systemImage: String
+    var visibleTitle: String
+    var hiddenTitle: String
+    var moveUpTitle: String
+    var moveDownTitle: String
+    @Binding var isEnabled: Bool
+    var hasConfiguration: Bool
+    var canMoveUp: Bool
+    var canMoveDown: Bool
+    var onMoveUp: () -> Void
+    var onMoveDown: () -> Void
+    @ViewBuilder var configuration: Configuration
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(isEnabled ? Color.accentColor : Color.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        (isEnabled ? RunwaySurface.hoverAccent : RunwaySurface.sunken),
+                        in: RoundedRectangle(
+                            cornerRadius: RunwaySurface.radiusRow,
+                            style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(title)
+                            .font(.body.weight(.medium))
+                        Text(platform)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                RunwaySurface.sunken,
+                                in: Capsule())
+                    }
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 8)
+                HStack(spacing: 2) {
+                    ModuleMoveButton(
+                        title: moveUpTitle,
+                        systemImage: "chevron.up",
+                        isEnabled: canMoveUp,
+                        action: onMoveUp)
+                    ModuleMoveButton(
+                        title: moveDownTitle,
+                        systemImage: "chevron.down",
+                        isEnabled: canMoveDown,
+                        action: onMoveDown)
+                }
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(isEnabled ? visibleTitle : hiddenTitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Toggle("", isOn: $isEnabled)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .help(isEnabled ? visibleTitle : hiddenTitle)
+                }
+            }
+            .padding(11)
+
+            if isEnabled, hasConfiguration {
+                Divider()
+                    .opacity(0.7)
+                configuration
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .runwayCard(isEnabled ? .raised : .sunken)
+        .animation(.easeOut(duration: 0.15), value: isEnabled)
+    }
+
+}
+
+private struct ModuleMoveButton: View {
+    var title: String
+    var systemImage: String
+    var isEnabled: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.semibold))
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .disabled(!isEnabled)
+        .help(title)
+        .accessibilityLabel(title)
+    }
+}
+
+private struct ModulePickerRow<Control: View>: View {
+    var title: String
+    @ViewBuilder var control: Control
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Spacer()
+            control
+                .labelsHidden()
+                .frame(width: 190, alignment: .trailing)
+        }
     }
 }
 

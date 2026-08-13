@@ -13,18 +13,18 @@ struct RunwayMainPanelSectionsTests {
         preferences.showsSessionRepairSummary = true
         preferences.showsRecentSessions = true
 
-        let sections = RunwayMainPanelSections.visible(
+        let sections = RunwayMainPanelSections.orderedVisible(
             provider: .grok,
             preferences: preferences)
 
         #expect(sections == [
             .grokQuota,
-            .grokResetCredits,
             .grokTokenHeatmap,
+            .grokResetCredits,
             .grokAPICost,
             .grokRecentSessions,
         ])
-        #expect(sections.isDisjoint(with: [
+        #expect(Set(sections).isDisjoint(with: [
             .codexQuota,
             .codexTokenHeatmap,
             .codexRateLimitResetToday,
@@ -44,10 +44,58 @@ struct RunwayMainPanelSectionsTests {
         preferences.showsSessionRepairSummary = false
         preferences.showsRecentSessions = false
 
-        let sections = RunwayMainPanelSections.visible(
+        let sections = RunwayMainPanelSections.orderedVisible(
             provider: .codex,
             preferences: preferences)
 
         #expect(sections == [.codexQuota, .codexResetCredits])
+    }
+
+    @Test("custom order is shared while each provider filters unsupported modules")
+    func customOrderFiltersByProvider() {
+        var preferences = RunwayPreferences()
+        preferences.mainPanelModuleOrder = [
+            .recentSessions,
+            .sessionRepair,
+            .apiCost,
+            .resetCredits,
+            .rateLimitResetToday,
+            .tokenUsage,
+            .quota,
+        ]
+        preferences.showsRecentSessions = true
+
+        #expect(RunwayMainPanelSections.orderedVisible(provider: .codex, preferences: preferences) == [
+            .codexRecentSessions,
+            .codexSessionRepair,
+            .codexAPICost,
+            .codexResetCredits,
+            .codexRateLimitResetToday,
+            .codexTokenHeatmap,
+            .codexQuota,
+        ])
+        #expect(RunwayMainPanelSections.orderedVisible(provider: .grok, preferences: preferences) == [
+            .grokRecentSessions,
+            .grokAPICost,
+            .grokResetCredits,
+            .grokTokenHeatmap,
+            .grokQuota,
+        ])
+    }
+
+    @Test("quota and reset credits can be hidden without changing order")
+    func hidesPreviouslyRequiredModules() {
+        var preferences = RunwayPreferences()
+        let order = preferences.mainPanelModuleOrder
+        preferences.showsQuotaSummary = false
+        preferences.showsResetCreditsSummary = false
+
+        let sections = RunwayMainPanelSections.orderedVisible(
+            provider: .codex,
+            preferences: preferences)
+
+        #expect(!sections.contains(.codexQuota))
+        #expect(!sections.contains(.codexResetCredits))
+        #expect(preferences.mainPanelModuleOrder == order)
     }
 }
