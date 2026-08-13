@@ -225,15 +225,16 @@ public struct SessionActivityScanner: Sendable {
     }
 
     private func estimatedCost(_ byModel: [String: ApiEquivalentTotals]) -> Decimal? {
-        guard !byModel.isEmpty else { return nil }
         var result = Decimal(0)
+        var priced = false
         for item in byModel {
             guard let cost = PricingTable.cost(model: item.key, totals: item.value) else {
-                return nil
+                continue
             }
+            priced = true
             result += cost
         }
-        return result
+        return priced ? result : nil
     }
 }
 

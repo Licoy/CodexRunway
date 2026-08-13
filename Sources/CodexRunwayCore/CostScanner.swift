@@ -273,13 +273,15 @@ public struct UsageCostScanner: Sendable {
 
     private static func estimatedCost(byModel: [String: ApiEquivalentTotals]) -> Decimal? {
         var result = Decimal(0)
+        var priced = false
         for item in byModel {
             guard let cost = PricingTable.cost(model: item.key, totals: item.value) else {
-                return nil
+                continue
             }
+            priced = true
             result += cost
         }
-        return result
+        return priced ? result : nil
     }
 }
 

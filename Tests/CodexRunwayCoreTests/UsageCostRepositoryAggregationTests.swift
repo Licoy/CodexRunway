@@ -315,4 +315,27 @@ struct UsageCostRepositoryAggregationTests {
         #expect(summary.estimatedUSD == 6.75)
         #expect(summary.modelRows.first { $0.name == "gpt-5.3-codex-spark" }?.estimatedUSD == 1.75)
     }
+
+    @Test("unknown models stay unpriced without wiping the known-model total")
+    func mixedUnknownModelsKeepPricedTotal() async throws {
+        let fixture = try RepositoryFixture()
+        let contents = """
+        {"timestamp":"2026-06-29T00:00:00Z","type":"session_meta","payload":{"cwd":"/Users/me/dev/codex-runway"}}
+        \(tokenLine(timestamp: "2026-06-29T01:00:00Z", input: 1_000_000, output: 0, model: "gpt-5.6-sol"))
+        \(tokenLine(timestamp: "2026-06-29T02:00:00Z", input: 500_000, output: 0, model: "unknown-model"))
+        \(tokenLine(timestamp: "2026-06-29T03:00:00Z", input: 250_000, output: 0, model: "codex-auto-review"))
+        """
+        try fixture.write(contents, basename: "rollout-mixed-unknown.jsonl")
+
+        let summary = try #require(try await fixture.repository().summaries(
+            for: [fullWindowQuery()], calculatedAt: fixedNow, policy: .ifChanged)["full"])
+
+        #expect(summary.confidence == .priced)
+        #expect(summary.estimatedUSD == 5)
+        #expect(summary.modelRows.first { $0.name == "gpt-5.6-sol" }?.estimatedUSD == 5)
+        #expect(summary.modelRows.first { $0.name == "unknown-model" }?.estimatedUSD == nil)
+        #expect(summary.modelRows.first { $0.name == "codex-auto-review" }?.estimatedUSD == nil)
+        #expect(summary.warnings.contains("unknown-model:unknown-model"))
+        #expect(summary.warnings.contains("unknown-model:codex-auto-review"))
+    }
 }

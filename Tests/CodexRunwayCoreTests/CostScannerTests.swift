@@ -98,7 +98,7 @@ struct CostScannerTests {
         #expect(report.diagnostics.candidateFiles == 2)
     }
 
-    @Test("local API equivalent scans the weekly window without pricing unknown models")
+    @Test("local API equivalent scans the weekly window and prices known models only")
     func localAPIEquivalentUsesWeeklyWindow() throws {
         let root = try TemporaryDirectory()
         let calculatedAt = ISO8601DateFormatter().date(from: "2026-06-30T10:00:00Z")!
@@ -118,15 +118,18 @@ struct CostScannerTests {
 
         #expect(summary.calculatedAt == calculatedAt)
         #expect(summary.source == .localSessions)
-        #expect(summary.confidence == .tokensOnly)
+        #expect(summary.confidence == .priced)
         #expect(summary.totals.uncachedInputTokens == 1_300)
         #expect(summary.totals.cachedInputTokens == 200)
         #expect(summary.totals.outputTokens == 75)
         #expect(summary.totals.turns == 2)
         #expect(summary.dailyRows.map(\.date) == ["2026-06-25", "2026-06-29"])
-        #expect(summary.dailyRows[0].estimatedUSD != summary.estimatedUSD)
         #expect(summary.modelRows.map(\.name) == ["gpt-5.3-codex", "unknown-model"])
-        #expect(summary.estimatedUSD == nil)
+        #expect(summary.modelRows[0].estimatedUSD != nil)
+        #expect(summary.modelRows[1].estimatedUSD == nil)
+        #expect(summary.estimatedUSD == summary.modelRows[0].estimatedUSD)
+        #expect(summary.dailyRows[0].estimatedUSD == summary.estimatedUSD)
+        #expect(summary.dailyRows[1].estimatedUSD == nil)
         #expect(summary.warnings.isEmpty == false)
     }
 
