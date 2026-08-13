@@ -100,6 +100,9 @@ struct PreferencesTests {
             refreshIntervalSeconds: 120,
             widgetRefreshIntervalSeconds: 300,
             apiCostSummaryRange: .thisMonth,
+            mainPanelModuleOrder: [.apiCost, .quota, .tokenUsage],
+            showsQuotaSummary: false,
+            showsResetCreditsSummary: false,
             showsCostSummary: false,
             showsRecentSessions: true,
             showsSessionRepairSummary: false,
@@ -120,6 +123,17 @@ struct PreferencesTests {
         #expect(store.load().refreshIntervalSeconds == 120)
         #expect(store.load().widgetRefreshIntervalSeconds == 300)
         #expect(store.load().apiCostSummaryRange == .thisMonth)
+        #expect(store.load().mainPanelModuleOrder == [
+            .apiCost,
+            .quota,
+            .tokenUsage,
+            .rateLimitResetToday,
+            .resetCredits,
+            .sessionRepair,
+            .recentSessions,
+        ])
+        #expect(store.load().showsQuotaSummary == false)
+        #expect(store.load().showsResetCreditsSummary == false)
         #expect(store.load().showsCostSummary == false)
         #expect(store.load().showsRecentSessions)
         #expect(store.load().showsSessionRepairSummary == false)
@@ -148,6 +162,52 @@ struct PreferencesTests {
 
         #expect(preferences.selectedProvider == .codex)
         #expect(RunwayProvider.allCases == [.codex, .grok])
+        #expect(preferences.mainPanelModuleOrder == RunwayPreferences.defaultMainPanelModuleOrder)
+        #expect(preferences.showsQuotaSummary)
+        #expect(preferences.showsResetCreditsSummary)
+    }
+
+    @Test("main panel order repairs duplicates, unknown values, and new modules")
+    func mainPanelOrderNormalization() throws {
+        let data = """
+        {
+          "mainPanelModuleOrder": ["apiCost", "unknown-future-module", "quota", "apiCost"]
+        }
+        """.data(using: .utf8)!
+
+        let preferences = try JSONDecoder().decode(RunwayPreferences.self, from: data)
+
+        #expect(preferences.mainPanelModuleOrder == [
+            .apiCost,
+            .quota,
+            .tokenUsage,
+            .rateLimitResetToday,
+            .resetCredits,
+            .sessionRepair,
+            .recentSessions,
+        ])
+    }
+
+    @Test("main panel modules move one position and restore defaults")
+    func mainPanelOrderMovement() {
+        var preferences = RunwayPreferences()
+
+        preferences.moveMainPanelModule(.apiCost, by: -1)
+        #expect(preferences.mainPanelModuleOrder == [
+            .quota,
+            .tokenUsage,
+            .rateLimitResetToday,
+            .apiCost,
+            .resetCredits,
+            .sessionRepair,
+            .recentSessions,
+        ])
+
+        preferences.moveMainPanelModule(.quota, by: -1)
+        #expect(preferences.mainPanelModuleOrder.first == .quota)
+
+        preferences.resetMainPanelModuleOrder()
+        #expect(preferences.mainPanelModuleOrder == RunwayPreferences.defaultMainPanelModuleOrder)
     }
 
     @Test("old preferences default rate-limit-reset-today section on with 1h refresh")

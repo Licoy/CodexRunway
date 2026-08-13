@@ -10,53 +10,60 @@ enum RunwayMainPanelSection: Hashable {
     case codexRecentSessions
     case grokQuota
     case grokResetCredits
-    case grokBilling
     case grokTokenHeatmap
     case grokAPICost
     case grokRecentSessions
 }
 
 enum RunwayMainPanelSections {
-    static func visible(
+    static func orderedVisible(
         provider: RunwayProvider,
-        preferences: RunwayPreferences) -> Set<RunwayMainPanelSection>
+        preferences: RunwayPreferences) -> [RunwayMainPanelSection]
     {
+        RunwayPreferences.normalizedMainPanelModuleOrder(preferences.mainPanelModuleOrder)
+            .compactMap { section(for: $0, provider: provider, preferences: preferences) }
+    }
+
+    private static func section(
+        for module: MainPanelModule,
+        provider: RunwayProvider,
+        preferences: RunwayPreferences
+    ) -> RunwayMainPanelSection? {
         switch provider {
         case .grok:
             // Billing details live behind the included-quota info button, not a full section.
             // Reset-credits is shown only when an official snapshot exists (see the Grok panel).
-            var sections: Set<RunwayMainPanelSection> = [.grokQuota, .grokResetCredits]
-            if preferences.showsTokenUsageHeatmap {
-                sections.insert(.grokTokenHeatmap)
+            switch module {
+            case .quota:
+                return preferences.showsQuotaSummary ? .grokQuota : nil
+            case .tokenUsage:
+                return preferences.showsTokenUsageHeatmap ? .grokTokenHeatmap : nil
+            case .rateLimitResetToday, .sessionRepair:
+                return nil
+            case .resetCredits:
+                return preferences.showsResetCreditsSummary ? .grokResetCredits : nil
+            case .apiCost:
+                return preferences.showsCostSummary ? .grokAPICost : nil
+            case .recentSessions:
+                return preferences.showsRecentSessions ? .grokRecentSessions : nil
             }
-            if preferences.showsCostSummary {
-                sections.insert(.grokAPICost)
-            }
-            if preferences.showsRecentSessions {
-                sections.insert(.grokRecentSessions)
-            }
-            return sections
         case .codex:
-            var sections: Set<RunwayMainPanelSection> = [
-                .codexQuota,
-                .codexResetCredits,
-            ]
-            if preferences.showsTokenUsageHeatmap {
-                sections.insert(.codexTokenHeatmap)
+            switch module {
+            case .quota:
+                return preferences.showsQuotaSummary ? .codexQuota : nil
+            case .tokenUsage:
+                return preferences.showsTokenUsageHeatmap ? .codexTokenHeatmap : nil
+            case .rateLimitResetToday:
+                return preferences.showsRateLimitResetToday ? .codexRateLimitResetToday : nil
+            case .resetCredits:
+                return preferences.showsResetCreditsSummary ? .codexResetCredits : nil
+            case .apiCost:
+                return preferences.showsCostSummary ? .codexAPICost : nil
+            case .sessionRepair:
+                return preferences.showsSessionRepairSummary ? .codexSessionRepair : nil
+            case .recentSessions:
+                return preferences.showsRecentSessions ? .codexRecentSessions : nil
             }
-            if preferences.showsRateLimitResetToday {
-                sections.insert(.codexRateLimitResetToday)
-            }
-            if preferences.showsCostSummary {
-                sections.insert(.codexAPICost)
-            }
-            if preferences.showsSessionRepairSummary {
-                sections.insert(.codexSessionRepair)
-            }
-            if preferences.showsRecentSessions {
-                sections.insert(.codexRecentSessions)
-            }
-            return sections
         }
     }
 }

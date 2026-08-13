@@ -39,10 +39,16 @@ struct RunwayPopoverView: View {
     @State private var detailPage: RunwaySidePanel?
     @State private var apiCostDetailRange = ApiCostSummaryRange.today
     private var l10n: L10n { settings.l10n }
-    private var visibleSections: Set<RunwayMainPanelSection> {
-        RunwayMainPanelSections.visible(
+    private var visibleSections: [RunwayMainPanelSection] {
+        RunwayMainPanelSections.orderedVisible(
             provider: model.selectedProvider,
             preferences: settings.preferences)
+    }
+
+    private var displayedSections: [RunwayMainPanelSection] {
+        visibleSections.filter { section in
+            section != .grokResetCredits || model.grokPanelState.resetCreditSummary != nil
+        }
     }
 
     init(
@@ -127,159 +133,130 @@ struct RunwayPopoverView: View {
 
     private var mainContent: some View {
         PolishedScrollView(verticalPadding: 4) {
-            if model.selectedProvider == .grok {
-                grokMainContent
-            } else {
-                codexMainContent
+            VStack(alignment: .leading, spacing: 0) {
+                if model.selectedProvider == .codex, RunwayDevFlags.showsTierBadgeGallery {
+                    sectionBlock(isFirst: true) {
+                        DevTierBadgeGallery(l10n: l10n)
+                    }
+                }
+                ForEach(Array(displayedSections.enumerated()), id: \.element) { index, section in
+                    sectionBlock(
+                        isFirst: index == 0
+                            && !(model.selectedProvider == .codex && RunwayDevFlags.showsTierBadgeGallery))
+                    {
+                        sectionContent(section)
+                    }
+                }
             }
         }
     }
 
-    private var grokMainContent: some View {
-        VStack(alignment: .leading, spacing: 0) {
+    @ViewBuilder
+    private func sectionContent(_ section: RunwayMainPanelSection) -> some View {
+        switch section {
+        case .codexQuota:
+            QuotaMetersView(
+                title: l10n.text(.quota),
+                meters: model.quotaMeters,
+                l10n: l10n,
+                isRefreshing: model.isRefreshing(.quota),
+                onRefresh: { model.refreshQuota() })
+        case .codexTokenHeatmap:
+            TokenUsageHeatmapView(
+                allDevicesTokens: model.tokenHeatmapAllDevicesTokens,
+                localTokens: model.tokenHeatmapLocalTokens,
+                calculatedAt: model.tokenHeatmapCalculatedAt,
+                officialStatsAsOf: model.tokenHeatmapOfficialStatsAsOf,
+                officialGeneratedAt: model.tokenHeatmapOfficialGeneratedAt,
+                chartStyle: Binding(
+                    get: { settings.preferences.tokenUsageChartStyle },
+                    set: { settings.updateTokenUsageChartStyle($0) }),
+                l10n: l10n,
+                isRefreshing: model.isRefreshing(.tokenHeatmap),
+                onRefresh: { model.refreshTokenHeatmap(policy: .force) })
+        case .codexRateLimitResetToday:
+            RateLimitResetTodayView(
+                snapshot: model.rateLimitResetToday,
+                l10n: l10n,
+                isRefreshing: model.isRefreshing(.rateLimitResetToday),
+                onRefresh: { model.refreshRateLimitResetToday(force: true) },
+                onOpenSource: {
+                    ExternalURLLauncher.open(RateLimitResetTodayClient.siteURL)
+                },
+                onOpenEvidence: { url in
+                    ExternalURLLauncher.open(url)
+                })
+        case .codexResetCredits:
+            ResetCreditsSummaryView(
+                summary: model.resetCreditSummary,
+                l10n: l10n,
+                isRefreshing: model.isRefreshing(.resetCredits),
+                onRefresh: { model.refreshResetCredits() },
+                onDetailsSelect: { detailPage = .resetCredits })
+        case .codexAPICost:
+            CostSummaryView(
+                text: model.costText,
+                subtitle: model.costSubtitle,
+                l10n: l10n,
+                isRefreshing: model.isRefreshing(.apiCost),
+                onRefresh: { model.refreshCost() },
+                onDetailsSelect: {
+                    apiCostDetailRange = settings.preferences.apiCostSummaryRange
+                    detailPage = .apiCost
+                })
+        case .codexSessionRepair:
+            sessionSummary
+        case .codexRecentSessions:
+            RecentSessionsView(
+                sessions: model.recentSessions,
+                l10n: l10n,
+                isRefreshing: model.isRefreshing(.recentSessions),
+                onRefresh: { model.refreshRecentSessions() })
+        case .grokQuota:
             GrokDashboardView(
                 state: model.grokPanelState,
                 l10n: l10n,
                 isRefreshing: model.isRefreshingGrok,
                 onRefresh: { model.refreshGrok(.current) })
-            if visibleSections.contains(.grokTokenHeatmap) {
-                sectionBlock {
-                    TokenUsageHeatmapView(
-                        allDevicesTokens: [:],
-                        localTokens: model.grokTokenHeatmapLocalTokens,
-                        calculatedAt: model.grokTokenHeatmapCalculatedAt,
-                        officialStatsAsOf: nil,
-                        officialGeneratedAt: nil,
-                        showsOfficialStats: false,
-                        chartStyle: Binding(
-                            get: { settings.preferences.tokenUsageChartStyle },
-                            set: { settings.updateTokenUsageChartStyle($0) }),
-                        l10n: l10n,
-                        isRefreshing: model.grokPanelState.isRefreshingLocalUsage,
-                        onRefresh: { model.refreshGrokLocalUsage() })
-                }
-            }
-            if visibleSections.contains(.grokResetCredits),
-               model.grokPanelState.resetCreditSummary != nil
-            {
-                sectionBlock {
-                    ResetCreditsSummaryView(
-                        summary: model.grokPanelState.resetCreditSummary,
-                        l10n: l10n,
-                        isRefreshing: model.isRefreshingGrok,
-                        onRefresh: { model.refreshGrok(.current) },
-                        onDetailsSelect: { detailPage = .resetCredits })
-                }
-            }
-            if visibleSections.contains(.grokAPICost) {
-                sectionBlock {
-                    CostSummaryView(
-                        text: model.grokCostText,
-                        subtitle: model.grokCostSubtitle,
-                        l10n: l10n,
-                        isRefreshing: model.grokPanelState.isRefreshingLocalUsage,
-                        onRefresh: { model.refreshGrokLocalUsage() },
-                        onDetailsSelect: {
-                            apiCostDetailRange = settings.preferences.apiCostSummaryRange
-                            detailPage = .apiCost
-                        })
-                }
-            }
-            if visibleSections.contains(.grokRecentSessions) {
-                sectionBlock {
-                    GrokRecentSessionsView(
-                        items: model.grokPanelState.localUsage?.recentItems ?? [],
-                        l10n: l10n,
-                        isRefreshing: model.grokPanelState.isRefreshingLocalUsage,
-                        onRefresh: { model.refreshGrokLocalUsage() })
-                }
-            }
+        case .grokTokenHeatmap:
+            TokenUsageHeatmapView(
+                allDevicesTokens: [:],
+                localTokens: model.grokTokenHeatmapLocalTokens,
+                calculatedAt: model.grokTokenHeatmapCalculatedAt,
+                officialStatsAsOf: nil,
+                officialGeneratedAt: nil,
+                showsOfficialStats: false,
+                chartStyle: Binding(
+                    get: { settings.preferences.tokenUsageChartStyle },
+                    set: { settings.updateTokenUsageChartStyle($0) }),
+                l10n: l10n,
+                isRefreshing: model.grokPanelState.isRefreshingLocalUsage,
+                onRefresh: { model.refreshGrokLocalUsage() })
+        case .grokResetCredits:
+            ResetCreditsSummaryView(
+                summary: model.grokPanelState.resetCreditSummary,
+                l10n: l10n,
+                isRefreshing: model.isRefreshingGrok,
+                onRefresh: { model.refreshGrok(.current) },
+                onDetailsSelect: { detailPage = .resetCredits })
+        case .grokAPICost:
+            CostSummaryView(
+                text: model.grokCostText,
+                subtitle: model.grokCostSubtitle,
+                l10n: l10n,
+                isRefreshing: model.grokPanelState.isRefreshingLocalUsage,
+                onRefresh: { model.refreshGrokLocalUsage() },
+                onDetailsSelect: {
+                    apiCostDetailRange = settings.preferences.apiCostSummaryRange
+                    detailPage = .apiCost
+                })
+        case .grokRecentSessions:
+            GrokRecentSessionsView(
+                items: model.grokPanelState.localUsage?.recentItems ?? [],
+                l10n: l10n,
+                isRefreshing: model.grokPanelState.isRefreshingLocalUsage,
+                onRefresh: { model.refreshGrokLocalUsage() })
         }
-    }
-
-    private var codexMainContent: some View {
-            VStack(alignment: .leading, spacing: 0) {
-                if RunwayDevFlags.showsTierBadgeGallery {
-                    sectionBlock(isFirst: true) {
-                        DevTierBadgeGallery(l10n: l10n)
-                    }
-                }
-                sectionBlock(isFirst: !RunwayDevFlags.showsTierBadgeGallery) {
-                    QuotaMetersView(
-                        title: l10n.text(.quota),
-                        meters: model.quotaMeters,
-                        l10n: l10n,
-                        isRefreshing: model.isRefreshing(.quota),
-                        onRefresh: { model.refreshQuota() })
-                }
-                if visibleSections.contains(.codexTokenHeatmap) {
-                    sectionBlock {
-                        TokenUsageHeatmapView(
-                            allDevicesTokens: model.tokenHeatmapAllDevicesTokens,
-                            localTokens: model.tokenHeatmapLocalTokens,
-                            calculatedAt: model.tokenHeatmapCalculatedAt,
-                            officialStatsAsOf: model.tokenHeatmapOfficialStatsAsOf,
-                            officialGeneratedAt: model.tokenHeatmapOfficialGeneratedAt,
-                            chartStyle: Binding(
-                                get: { settings.preferences.tokenUsageChartStyle },
-                                set: { settings.updateTokenUsageChartStyle($0) }),
-                            l10n: l10n,
-                            isRefreshing: model.isRefreshing(.tokenHeatmap),
-                            onRefresh: { model.refreshTokenHeatmap(policy: .force) })
-                    }
-                }
-                if visibleSections.contains(.codexRateLimitResetToday) {
-                    sectionBlock {
-                        RateLimitResetTodayView(
-                            snapshot: model.rateLimitResetToday,
-                            l10n: l10n,
-                            isRefreshing: model.isRefreshing(.rateLimitResetToday),
-                            onRefresh: { model.refreshRateLimitResetToday(force: true) },
-                            onOpenSource: {
-                                ExternalURLLauncher.open(RateLimitResetTodayClient.siteURL)
-                            },
-                            onOpenEvidence: { url in
-                                ExternalURLLauncher.open(url)
-                            })
-                    }
-                }
-                sectionBlock {
-                    ResetCreditsSummaryView(
-                        summary: model.resetCreditSummary,
-                        l10n: l10n,
-                        isRefreshing: model.isRefreshing(.resetCredits),
-                        onRefresh: { model.refreshResetCredits() },
-                        onDetailsSelect: { detailPage = .resetCredits })
-                }
-                if visibleSections.contains(.codexAPICost) {
-                    sectionBlock {
-                        CostSummaryView(
-                            text: model.costText,
-                            subtitle: model.costSubtitle,
-                            l10n: l10n,
-                            isRefreshing: model.isRefreshing(.apiCost),
-                            onRefresh: { model.refreshCost() },
-                            onDetailsSelect: {
-                                apiCostDetailRange = settings.preferences.apiCostSummaryRange
-                                detailPage = .apiCost
-                            })
-                    }
-                }
-                if visibleSections.contains(.codexSessionRepair) {
-                    sectionBlock {
-                        sessionSummary
-                    }
-                }
-                if visibleSections.contains(.codexRecentSessions) {
-                    sectionBlock {
-                        RecentSessionsView(
-                            sessions: model.recentSessions,
-                            l10n: l10n,
-                            isRefreshing: model.isRefreshing(.recentSessions),
-                            onRefresh: { model.refreshRecentSessions() })
-                    }
-                }
-            }
     }
 
     /// Ruled section rhythm: an inset hairline above every section except the first.

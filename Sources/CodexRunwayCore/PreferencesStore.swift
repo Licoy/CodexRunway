@@ -63,6 +63,16 @@ public enum TokenUsageChartStyle: String, CaseIterable, Codable, Sendable, Hasha
     case bar
 }
 
+public enum MainPanelModule: String, CaseIterable, Codable, Sendable, Hashable {
+    case quota
+    case tokenUsage
+    case rateLimitResetToday
+    case resetCredits
+    case apiCost
+    case sessionRepair
+    case recentSessions
+}
+
 public struct RunwayPreferences: Codable, Sendable, Equatable {
     public var selectedProvider: RunwayProvider
     public var language: LanguagePreference
@@ -75,6 +85,9 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     public var refreshIntervalSeconds: Int
     public var widgetRefreshIntervalSeconds: Int
     public var apiCostSummaryRange: ApiCostSummaryRange
+    public var mainPanelModuleOrder: [MainPanelModule]
+    public var showsQuotaSummary: Bool
+    public var showsResetCreditsSummary: Bool
     public var showsCostSummary: Bool
     public var showsRecentSessions: Bool
     public var showsSessionRepairSummary: Bool
@@ -93,6 +106,15 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     public static let defaultWidgetRefreshIntervalSeconds = 60
     public static let rateLimitResetTodayRefreshIntervalOptions: [Int] = [900, 1_800, 3_600, 7_200, 21_600]
     public static let defaultRateLimitResetTodayRefreshIntervalSeconds = 3_600
+    public static let defaultMainPanelModuleOrder: [MainPanelModule] = [
+        .quota,
+        .tokenUsage,
+        .rateLimitResetToday,
+        .resetCredits,
+        .apiCost,
+        .sessionRepair,
+        .recentSessions,
+    ]
 
     public init(
         selectedProvider: RunwayProvider = .codex,
@@ -106,6 +128,9 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         refreshIntervalSeconds: Int = 300,
         widgetRefreshIntervalSeconds: Int = RunwayPreferences.defaultWidgetRefreshIntervalSeconds,
         apiCostSummaryRange: ApiCostSummaryRange = .today,
+        mainPanelModuleOrder: [MainPanelModule] = RunwayPreferences.defaultMainPanelModuleOrder,
+        showsQuotaSummary: Bool = true,
+        showsResetCreditsSummary: Bool = true,
         showsCostSummary: Bool = true,
         showsRecentSessions: Bool = false,
         showsSessionRepairSummary: Bool = true,
@@ -131,6 +156,9 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         self.refreshIntervalSeconds = refreshIntervalSeconds
         self.widgetRefreshIntervalSeconds = Self.clampWidgetRefreshInterval(widgetRefreshIntervalSeconds)
         self.apiCostSummaryRange = apiCostSummaryRange
+        self.mainPanelModuleOrder = Self.normalizedMainPanelModuleOrder(mainPanelModuleOrder)
+        self.showsQuotaSummary = showsQuotaSummary
+        self.showsResetCreditsSummary = showsResetCreditsSummary
         self.showsCostSummary = showsCostSummary
         self.showsRecentSessions = showsRecentSessions
         self.showsSessionRepairSummary = showsSessionRepairSummary
@@ -155,6 +183,27 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         max(60, min(1_800, seconds))
     }
 
+    public static func normalizedMainPanelModuleOrder(
+        _ order: [MainPanelModule]
+    ) -> [MainPanelModule] {
+        var seen = Set<MainPanelModule>()
+        let unique = order.filter { seen.insert($0).inserted }
+        return unique + defaultMainPanelModuleOrder.filter { seen.insert($0).inserted }
+    }
+
+    public mutating func moveMainPanelModule(_ module: MainPanelModule, by offset: Int) {
+        var order = Self.normalizedMainPanelModuleOrder(mainPanelModuleOrder)
+        guard let source = order.firstIndex(of: module) else { return }
+        let destination = source + offset
+        guard order.indices.contains(destination) else { return }
+        order.swapAt(source, destination)
+        mainPanelModuleOrder = order
+    }
+
+    public mutating func resetMainPanelModuleOrder() {
+        mainPanelModuleOrder = Self.defaultMainPanelModuleOrder
+    }
+
     enum CodingKeys: String, CodingKey {
         case selectedProvider
         case language
@@ -167,6 +216,9 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         case refreshIntervalSeconds
         case widgetRefreshIntervalSeconds
         case apiCostSummaryRange
+        case mainPanelModuleOrder
+        case showsQuotaSummary
+        case showsResetCreditsSummary
         case showsCostSummary
         case showsRecentSessions
         case showsSessionRepairSummary
@@ -197,6 +249,16 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
             try container.decodeIfPresent(Int.self, forKey: .widgetRefreshIntervalSeconds)
                 ?? Self.defaultWidgetRefreshIntervalSeconds)
         apiCostSummaryRange = try container.decodeIfPresent(ApiCostSummaryRange.self, forKey: .apiCostSummaryRange) ?? .today
+        let storedModuleIDs = try container.decodeIfPresent(
+            [String].self,
+            forKey: .mainPanelModuleOrder)
+        let storedModuleOrder = storedModuleIDs?
+            .compactMap(MainPanelModule.init(rawValue:))
+            ?? Self.defaultMainPanelModuleOrder
+        mainPanelModuleOrder = Self.normalizedMainPanelModuleOrder(storedModuleOrder)
+        showsQuotaSummary = try container.decodeIfPresent(Bool.self, forKey: .showsQuotaSummary) ?? true
+        showsResetCreditsSummary =
+            try container.decodeIfPresent(Bool.self, forKey: .showsResetCreditsSummary) ?? true
         showsCostSummary = try container.decodeIfPresent(Bool.self, forKey: .showsCostSummary) ?? true
         showsRecentSessions = try container.decodeIfPresent(Bool.self, forKey: .showsRecentSessions) ?? false
         showsSessionRepairSummary = try container.decodeIfPresent(Bool.self, forKey: .showsSessionRepairSummary) ?? true

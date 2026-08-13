@@ -105,6 +105,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case duplicate
     case duplicateIndexIDs
     case display
+    case displayAppearanceSection
     case endDate
     case estimatedAPICost
     case expiresRemaining
@@ -325,6 +326,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case resetCreditAlertsDescription
     case resetCreditAlerts
     case resetCreditDetails
+    case restoreDefaultOrder
     case runway
     case seconds
     case sessionRepair
@@ -339,6 +341,17 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case showRecentSessions
     case showSessionRepairSummary
     case showTokenUsageHeatmap
+    case mainPanelModules
+    case mainPanelModulesDescription
+    case moduleAPICostDescription
+    case moduleAppliesCodex
+    case moduleAppliesBoth
+    case moduleHidden
+    case moduleQuotaDescription
+    case moduleResetCreditsDescription
+    case moduleSessionRepairDescription
+    case moduleVisible
+    case notificationSettings
     case tokenUsageHeatmap
     case tokenUsageHeatmapDescription
     case tokenUsageHeatmapUnavailable

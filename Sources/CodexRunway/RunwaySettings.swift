@@ -75,6 +75,22 @@ final class RunwaySettings: ObservableObject {
         update { $0.apiCostSummaryRange = range }
     }
 
+    func moveMainPanelModule(_ module: MainPanelModule, by offset: Int) {
+        update { $0.moveMainPanelModule(module, by: offset) }
+    }
+
+    func resetMainPanelModuleOrder() {
+        update { $0.resetMainPanelModuleOrder() }
+    }
+
+    func updateShowsQuotaSummary(_ isShown: Bool) {
+        update { $0.showsQuotaSummary = isShown }
+    }
+
+    func updateShowsResetCreditsSummary(_ isShown: Bool) {
+        update { $0.showsResetCreditsSummary = isShown }
+    }
+
     func updateShowsCostSummary(_ isShown: Bool) {
         update { $0.showsCostSummary = isShown }
     }
