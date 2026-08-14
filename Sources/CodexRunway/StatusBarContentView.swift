@@ -171,7 +171,7 @@ final class StatusBarContentView: NSView {
     }
 
     private func drawMeter(_ meter: QuotaMeter, row: NSRect) {
-        let barWidth = min(40, row.width * 0.36)
+        let barWidth = min(layout.meterBarWidth, row.width)
         let barRect = NSRect(x: row.minX, y: row.midY - 2.5, width: barWidth, height: 5)
         let background = NSBezierPath(roundedRect: barRect, xRadius: 2.5, yRadius: 2.5)
         NSColor.separatorColor.withAlphaComponent(0.45).setFill()
@@ -185,9 +185,9 @@ final class StatusBarContentView: NSView {
             height: barRect.height)
         NSBezierPath(roundedRect: fillRect, xRadius: 2.5, yRadius: 2.5).fill(with: meterColor(meter), alpha: 0.95)
         let textRect = NSRect(
-            x: barRect.maxX + 4,
+            x: barRect.maxX + layout.meterTextGap,
             y: row.minY,
-            width: max(20, row.maxX - barRect.maxX - 4),
+            width: max(0, row.maxX - barRect.maxX - layout.meterTextGap),
             height: row.height)
         drawLine(layout.meterCaption(for: meter), rect: textRect)
     }
