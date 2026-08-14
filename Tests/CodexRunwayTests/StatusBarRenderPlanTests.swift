@@ -169,6 +169,24 @@ struct StatusBarRenderPlanTests {
         }
     }
 
+    @Test("single meter column fits its visible bar and caption without trailing slack")
+    func singleMeterColumnFitsVisibleContent() throws {
+        let weekly = meter(title: "每周", usedPercent: 10, windowMinutes: 10_080)
+        let displayMinute = Int(Date().timeIntervalSince1970 / 60)
+        let layout = StatusBarContentLayout(state: StatusBarContentState(
+            configuration: StatusBarContentState.Configuration(
+                preferences: preferences(style: .meters),
+                language: .simplifiedChinese),
+            content: StatusBarContentState.Content(
+                text: "",
+                meters: [weekly],
+                displayMinute: displayMinute)))
+
+        let columnWidth = try #require(layout.meterColumnWidths.first)
+        #expect(abs(columnWidth - layout.meterContentWidth(for: weekly)) < 0.001)
+        #expect(layout.preferredWidth == columnWidth)
+    }
+
     @Test("all status bar styles render weekly-only and model-specific layouts")
     @MainActor
     func allStylesRenderVariableQuotaCounts() throws {

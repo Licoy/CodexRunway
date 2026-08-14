@@ -79,7 +79,7 @@ struct StatusBarContentLayout {
             // Elongated iOS-style body + terminal + padding around the center label.
             return min(150, max(72, textWidth(batteryDetail(for: onlyMeter), font: batteryFont) + 32))
         case .meters:
-            return renderPlan.meters.isEmpty ? 70 : totalWidth(meterColumnWidths, gap: 6)
+            return renderPlan.meters.isEmpty ? 70 : contentWidth(meterColumnWidths, gap: 6)
         case .rings:
             return CGFloat(max(1, renderPlan.meters.count) * 24 + 4)
         }
@@ -107,6 +107,14 @@ struct StatusBarContentLayout {
 
     var meterTextFont: NSFont {
         .systemFont(ofSize: 8.5, weight: .semibold)
+    }
+
+    var meterBarWidth: CGFloat {
+        40
+    }
+
+    var meterTextGap: CGFloat {
+        4
     }
 
     var ringFont: NSFont {
@@ -142,11 +150,15 @@ struct StatusBarContentLayout {
 
     var meterColumnWidths: [CGFloat] {
         renderPlan.columns.map { column in
-            let maximumTextWidth = column.map {
-                textWidth(meterCaption(for: $0), font: meterTextFont)
-            }.max() ?? 0
-            return min(166, max(96, maximumTextWidth + 52))
+            let maximumContentWidth = column.map { meterContentWidth(for: $0) }.max() ?? 0
+            return min(166, max(64, maximumContentWidth))
         }
+    }
+
+    func meterContentWidth(for meter: QuotaMeter) -> CGFloat {
+        meterBarWidth
+            + meterTextGap
+            + textWidth(meterCaption(for: meter), font: meterTextFont)
     }
 
     func countdownCaption(for meter: QuotaMeter) -> String {
@@ -227,7 +239,11 @@ struct StatusBarContentLayout {
     }
 
     private func totalWidth(_ widths: [CGFloat], gap: CGFloat) -> CGFloat {
-        widths.reduce(8, +) + CGFloat(max(0, widths.count - 1)) * gap
+        contentWidth(widths, gap: gap) + 8
+    }
+
+    private func contentWidth(_ widths: [CGFloat], gap: CGFloat) -> CGFloat {
+        widths.reduce(0, +) + CGFloat(max(0, widths.count - 1)) * gap
     }
 
     private func textWidth(_ text: String, font: NSFont) -> CGFloat {
