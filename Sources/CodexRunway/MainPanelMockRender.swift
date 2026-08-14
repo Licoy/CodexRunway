@@ -30,6 +30,79 @@ enum MainPanelMockRender {
         }
     }
 
+    struct PanelLayoutMeasurement: Equatable, Sendable {
+        var panelWidth: CGFloat
+        var fittingWidth: CGFloat
+        var fittingHeight: CGFloat
+        var documentWidth: CGFloat
+        var hostAvailable: Bool
+    }
+
+    /// Hosts the shipped popover at `RunwayPopoverView.panelSize` and reports
+    /// fitting / scroll-document widths for locale layout tests.
+    @MainActor
+    static func measure(language: ResolvedLanguage) -> PanelLayoutMeasurement {
+        let settings = fixtureSettings(language: language)
+        let model = fixtureModel(settings: settings)
+        let visibility = MainPanelVisibility()
+        visibility.isVisible = true
+        let root = RunwayPopoverRootView(
+            model: model,
+            settings: settings,
+            mainPanelVisibility: visibility,
+            checkForUpdates: {},
+            openGitHub: {},
+            openControlPanel: { _ in })
+        let host = NSHostingView(rootView: AnyView(root))
+        let panelWidth = RunwayPopoverView.panelSize.width
+        host.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: panelWidth,
+            height: RunwayPopoverView.panelSize.height)
+        host.layoutSubtreeIfNeeded()
+        let fitting = host.fittingSize
+        let document = findScrollDocument(in: host)
+        let documentWidth = document?.frame.width ?? fitting.width
+        let hostAvailable = fitting.width > 1 && fitting.height > 1
+        return PanelLayoutMeasurement(
+            panelWidth: panelWidth,
+            fittingWidth: fitting.width,
+            fittingHeight: fitting.height,
+            documentWidth: documentWidth,
+            hostAvailable: hostAvailable)
+    }
+
+    @MainActor
+    static func writeLayoutDump(to directory: String) throws {
+        let root = URL(fileURLWithPath: directory, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        var lines: [String] = []
+        for language in ResolvedLanguage.allCases {
+            let measurement = measure(language: language)
+            lines.append(
+                "\(language.rawValue) panel=\(measurement.panelWidth) fitting=\(measurement.fittingWidth)x\(measurement.fittingHeight) document=\(measurement.documentWidth) hostAvailable=\(measurement.hostAvailable)")
+            let name = language == .english ? "english.txt" : "\(language.rawValue).txt"
+            let file = root.appendingPathComponent(name)
+            try lines.last!.write(to: file, atomically: true, encoding: .utf8)
+        }
+        try lines.joined(separator: "\n").appending("\n")
+            .write(to: root.appendingPathComponent("all.txt"), atomically: true, encoding: .utf8)
+    }
+
+    @MainActor
+    private static func findScrollDocument(in view: NSView) -> NSView? {
+        if let scroll = view as? NSScrollView {
+            return scroll.documentView
+        }
+        for child in view.subviews {
+            if let found = findScrollDocument(in: child) {
+                return found
+            }
+        }
+        return nil
+    }
+
     @MainActor
     static func writeAll(to directory: String, language: ResolvedLanguage = .simplifiedChinese) throws {
         for page in Page.allCases {
@@ -130,7 +203,7 @@ enum MainPanelMockRender {
         }
         defaults.removePersistentDomain(forName: suiteName)
         let settings = RunwaySettings(store: PreferencesStore(defaults: defaults))
-        settings.updateLanguage(language == .simplifiedChinese ? .simplifiedChinese : .english)
+        settings.updateLanguage(language.preference)
         settings.updateShowsRecentSessions(true)
         settings.updateShowsRateLimitResetToday(true)
         settings.updateShowsCostSummary(true)

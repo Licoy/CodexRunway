@@ -1,0 +1,1 @@
+NSAppDataUsageDescription = "Codex Runway читает локальную конфигурацию Codex и Grok, чтобы показать квоту, кредиты сброса и эквивалентную стоимость API.";

@@ -108,6 +108,7 @@ struct RunwayPopoverView: View {
             } else {
                 mainContent
                     .padding(.horizontal, 16)
+                    .id(l10n.language)
                 if model.selectedAccountOperationMessage != nil || model.selectedLastError != nil {
                     VStack(alignment: .leading, spacing: 3) {
                         if let message = model.selectedAccountOperationMessage {
@@ -140,7 +141,7 @@ struct RunwayPopoverView: View {
     }
 
     private var mainContent: some View {
-        PolishedScrollView(verticalPadding: 4) {
+        PolishedScrollView(verticalPadding: 4, remasureToken: l10n.language) {
             VStack(alignment: .leading, spacing: 0) {
                 if showsTierBadgeGallery {
                     sectionBlock(isFirst: true) {

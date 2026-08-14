@@ -193,6 +193,11 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case language
     case languageEnglish
     case languageSimplifiedChinese
+    case languageTraditionalChinese
+    case languageKorean
+    case languageJapanese
+    case languageRussian
+    case languageFrench
     case lastReset
     case lastUpdated
     case later
@@ -494,18 +499,49 @@ public struct L10n: Sendable {
             return .english
         case .simplifiedChinese:
             return .simplifiedChinese
+        case .traditionalChinese:
+            return .traditionalChinese
+        case .korean:
+            return .korean
+        case .japanese:
+            return .japanese
+        case .russian:
+            return .russian
+        case .french:
+            return .french
         case .system:
-            return preferredLanguages.contains { $0.lowercased().hasPrefix("zh") } ? .simplifiedChinese : .english
+            return ResolvedLanguage.resolveSystem(preferredLanguages: preferredLanguages)
         }
     }
 
     public func text(_ key: L10nKey) -> String {
-        let table = language == .simplifiedChinese ? Self.zhHans : Self.en
-        return table[key] ?? Self.en[key] ?? key.rawValue
+        Self.table(for: language)[key] ?? Self.en[key] ?? key.rawValue
     }
 
     public static func missingTranslations(for language: ResolvedLanguage) -> [L10nKey] {
-        let table = language == .simplifiedChinese ? zhHans : en
-        return L10nKey.allCases.filter { table[$0] == nil }
+        let table = table(for: language)
+        return L10nKey.allCases.filter { key in
+            guard let value = table[key] else { return true }
+            return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    public static func table(for language: ResolvedLanguage) -> [L10nKey: String] {
+        switch language {
+        case .english:
+            return en
+        case .simplifiedChinese:
+            return zhHans
+        case .traditionalChinese:
+            return zhHant
+        case .korean:
+            return ko
+        case .japanese:
+            return ja
+        case .russian:
+            return ru
+        case .french:
+            return fr
+        }
     }
 }

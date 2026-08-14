@@ -268,7 +268,13 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         }
         mainPanelVisibility.isVisible = wasVisible
         if let controlPanelWindow {
-            controlPanelWindow.title = settings.l10n.text(.controlPanel)
+            let didResize = ControlPanelLayout.applyWindowLayout(
+                controlPanelWindow,
+                title: settings.l10n.text(.controlPanel),
+                titles: controlPanelTabTitles)
+            if didResize {
+                centerControlPanel(controlPanelWindow)
+            }
         }
     }
 
@@ -658,21 +664,29 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     }
 
     private func showControlPanel(tab: ControlPanelTab = .general) {
+        let panelSize = ControlPanelLayout.contentSize(titles: controlPanelTabTitles)
         let window = controlPanelWindow ?? NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 546, height: 662),
+            contentRect: NSRect(
+                x: 0,
+                y: 0,
+                width: panelSize.width,
+                height: panelSize.height),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false)
-        window.title = settings.l10n.text(.controlPanel)
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.setContentSize(NSSize(width: 546, height: 662))
-        // Rebuild hosting view so initial tab selection is applied every open.
+        // Rebuild hosting view so initial tab selection and localized tab widths
+        // are applied every time the panel opens.
         window.contentViewController = NSHostingController(rootView: ControlPanelView(
             settings: settings,
             model: model,
             checkForUpdates: { [weak self] in self?.updaterService.checkForUpdates() },
             initialTab: tab))
+        ControlPanelLayout.applyWindowLayout(
+            window,
+            title: settings.l10n.text(.controlPanel),
+            titles: controlPanelTabTitles)
         controlPanelWindow = window
         applyAppearance()
         NSApp.activate(ignoringOtherApps: true)
@@ -684,6 +698,10 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
             guard let self, let window else { return }
             self.centerControlPanel(window)
         }
+    }
+
+    private var controlPanelTabTitles: [String] {
+        ControlPanelTab.allCases.map { $0.title(settings.l10n) }
     }
 
     private func centerControlPanel(_ window: NSWindow) {

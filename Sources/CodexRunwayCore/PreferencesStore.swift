@@ -4,11 +4,21 @@ public enum LanguagePreference: String, CaseIterable, Codable, Sendable {
     case system
     case english
     case simplifiedChinese
+    case traditionalChinese
+    case korean
+    case japanese
+    case russian
+    case french
 }
 
-public enum ResolvedLanguage: String, Codable, Sendable, Equatable {
+public enum ResolvedLanguage: String, CaseIterable, Codable, Sendable, Equatable {
     case english
     case simplifiedChinese
+    case traditionalChinese
+    case korean
+    case japanese
+    case russian
+    case french
 }
 
 public enum AppearancePreference: String, CaseIterable, Codable, Sendable {

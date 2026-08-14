@@ -41,18 +41,32 @@ struct PreferencesTests {
     @Test("system language resolves from device locale")
     func resolvesSystemLanguage() {
         #expect(L10n.resolve(.system, localeIdentifier: "zh-Hans-CN") == .simplifiedChinese)
+        #expect(L10n.resolve(.system, localeIdentifier: "zh-Hant-TW") == .traditionalChinese)
+        #expect(L10n.resolve(.system, localeIdentifier: "zh-TW") == .traditionalChinese)
+        #expect(L10n.resolve(.system, localeIdentifier: "zh-HK") == .traditionalChinese)
+        #expect(L10n.resolve(.system, localeIdentifier: "ko-KR") == .korean)
+        #expect(L10n.resolve(.system, localeIdentifier: "ja-JP") == .japanese)
+        #expect(L10n.resolve(.system, localeIdentifier: "ru-RU") == .russian)
+        #expect(L10n.resolve(.system, localeIdentifier: "fr-FR") == .french)
         #expect(L10n.resolve(.system, localeIdentifier: "en-US") == .english)
-        #expect(L10n.resolve(.system, localeIdentifier: "fr-FR") == .english)
+        #expect(L10n.resolve(.system, localeIdentifier: "de-DE") == .english)
     }
 
     @Test("system language resolves from preferred languages")
     func resolvesSystemLanguageFromPreferredLanguages() {
         #expect(L10n.resolve(.system, preferredLanguages: ["zh-Hans-CN", "en-US"]) == .simplifiedChinese)
-        #expect(L10n.resolve(.system, preferredLanguages: ["en-US", "zh-Hans-CN"]) == .simplifiedChinese)
+        #expect(L10n.resolve(.system, preferredLanguages: ["en-US", "zh-Hans-CN"]) == .english)
+        #expect(L10n.resolve(.system, preferredLanguages: ["zh-Hant-TW"]) == .traditionalChinese)
+        #expect(L10n.resolve(.system, preferredLanguages: ["ko-KR"]) == .korean)
+        #expect(L10n.resolve(.system, preferredLanguages: ["ja-JP"]) == .japanese)
+        #expect(L10n.resolve(.system, preferredLanguages: ["ru-RU"]) == .russian)
+        #expect(L10n.resolve(.system, preferredLanguages: ["fr-FR"]) == .french)
         #expect(L10n.resolve(.system, preferredLanguages: []) == .english)
-        #expect(L10n.resolve(.system, preferredLanguages: ["fr-FR"]) == .english)
+        #expect(L10n.resolve(.system, preferredLanguages: ["de-DE"]) == .english)
         #expect(L10n.resolve(.english, preferredLanguages: ["zh-Hans-CN"]) == .english)
         #expect(L10n.resolve(.simplifiedChinese, preferredLanguages: ["en-US"]) == .simplifiedChinese)
+        #expect(L10n.resolve(.korean, preferredLanguages: ["en-US"]) == .korean)
+        #expect(L10n.resolve(.french, preferredLanguages: ["ja-JP"]) == .french)
     }
 
     @Test("translations fall back to English")
@@ -68,12 +82,57 @@ struct PreferencesTests {
         #expect(chinese.text(.statusBarMetersDetailBoth) == "两者都显示")
         #expect(english.text(.updateNetworkProxyHint).contains("system proxy bypass"))
         #expect(chinese.text(.updateNetworkProxyHint).contains("系统代理绕过"))
+        #expect(L10n(language: .traditionalChinese).text(.settings) == "設定")
+        #expect(L10n(language: .korean).text(.settings) == "설정")
+        #expect(L10n(language: .japanese).text(.settings) == "設定")
+        #expect(L10n(language: .russian).text(.settings) == "Настройки")
+        #expect(L10n(language: .french).text(.settings) == "Réglages")
     }
 
-    @Test("all localization keys have English and Chinese translations")
+    @Test("all localization keys have translations for every resolved language")
     func localizationCompleteness() {
-        #expect(L10n.missingTranslations(for: .english).isEmpty)
-        #expect(L10n.missingTranslations(for: .simplifiedChinese).isEmpty)
+        for language in ResolvedLanguage.allCases {
+            #expect(
+                L10n.missingTranslations(for: language).isEmpty,
+                "missing keys for \(language.rawValue)")
+        }
+    }
+
+    @Test("language menu titles keep native scripts except Auto")
+    func languageMenuTitlesStayNative() {
+        let expectedExplicit = [
+            LanguagePreference.nativeTitleEnglish,
+            LanguagePreference.nativeTitleSimplifiedChinese,
+            LanguagePreference.nativeTitleTraditionalChinese,
+            LanguagePreference.nativeTitleKorean,
+            LanguagePreference.nativeTitleJapanese,
+            LanguagePreference.nativeTitleRussian,
+            LanguagePreference.nativeTitleFrench,
+        ]
+        for ui in ResolvedLanguage.allCases {
+            #expect(LanguagePreference.system.menuTitle(uiLanguage: ui) == L10n(language: ui).text(.auto))
+            let titles = LanguagePreference.explicitCases.map { $0.menuTitle(uiLanguage: ui) }
+            #expect(titles == expectedExplicit)
+        }
+    }
+
+    @Test("new language preference raw values persist and decode")
+    func newLanguagePreferenceRoundTrips() throws {
+        let suiteName = "CodexRunwayLanguageRoundTrip-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = PreferencesStore(defaults: defaults)
+
+        for language in LanguagePreference.explicitCases {
+            store.save(RunwayPreferences(language: language))
+            #expect(store.load().language == language)
+        }
+
+        let data = """
+        { "language": "traditionalChinese" }
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(RunwayPreferences.self, from: data)
+        #expect(decoded.language == .traditionalChinese)
     }
 
     @Test("progress text is the final status-bar style option")
@@ -350,6 +409,13 @@ struct PreferencesTests {
         #expect(DurationFormatter.localized(seconds, language: .simplifiedChinese, includeSeconds: false) == "1小时1分钟")
         #expect(DurationFormatter.localized(305 * 3_600 + 54 * 60, language: .simplifiedChinese) == "12天17小时")
         #expect(DurationFormatter.localized(305 * 3_600 + 54 * 60, language: .english) == "12 days 17 hours")
+        #expect(DurationFormatter.localized(seconds, language: .traditionalChinese) == "1小時1分鐘1秒")
+        #expect(DurationFormatter.localized(seconds, language: .japanese) == "1時間1分1秒")
+        #expect(DurationFormatter.localized(seconds, language: .japanese) != DurationFormatter.localized(seconds, language: .english))
+        #expect(DurationFormatter.localized(seconds, language: .french) == "1 heure 1 minute 1 seconde")
+        #expect(DurationFormatter.localized(seconds, language: .russian) == "1 час 1 минута 1 секунда")
+        #expect(!DurationFormatter.localized(seconds, language: .russian).contains("hour"))
+        #expect(!DurationFormatter.localized(seconds, language: .french).contains("hour"))
     }
 
     @Test("relative past durations mention ago")

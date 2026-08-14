@@ -35,10 +35,13 @@ struct QuotaMetersView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(meter.title)
                     .font(.callout.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
                 Text("\(meter.remainingPercent)% \(l10n.text(.left))")
                     .font(.callout.weight(.semibold).monospacedDigit())
                     .foregroundStyle(RunwayProgressBar.textColor(for: meter.health))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.trailing)
             }
             RunwayProgressBar(meter: meter)
                 .frame(height: RunwayProgressBar.barHeight)
@@ -47,6 +50,7 @@ struct QuotaMetersView: View {
                     Text(projectionText(projection))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
                 if let resetsAt = meter.resetsAt {
@@ -456,9 +460,9 @@ struct RateLimitResetTodayView: View {
                 now: now,
                 language: l10n.language)
             let countdown = String(format: l10n.text(.rateLimitResetTodayUntilReset), remaining)
-            let separator = l10n.language == .simplifiedChinese ? "：" : ": "
-            let openParen = l10n.language == .simplifiedChinese ? "（" : " ("
-            let closeParen = l10n.language == .simplifiedChinese ? "）" : ")"
+            let separator = l10n.language.colonSeparator
+            let openParen = l10n.language.openParen
+            let closeParen = l10n.language.closeParen
             dividedSection {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Image(systemName: "clock.arrow.circlepath")
@@ -629,8 +633,8 @@ struct RateLimitResetTodayView: View {
                     now: now,
                     language: l10n.language)
                 let countdown = String(format: l10n.text(.rateLimitResetTodayUntilReset), remaining)
-                let openParen = l10n.language == .simplifiedChinese ? "（" : " ("
-                let closeParen = l10n.language == .simplifiedChinese ? "）" : ")"
+                let openParen = l10n.language.openParen
+                let closeParen = l10n.language.closeParen
                 return "\(String(format: l10n.text(.rateLimitResetTodayNoHintWithNext), when))\(openParen)\(countdown)\(closeParen)"
             }
             if snapshot.hasUncertainNoSignalToday(now: now, calendar: calendar) {
@@ -710,10 +714,13 @@ struct ResetCreditsSummaryView: View {
                 }
                 HStack(alignment: .firstTextBaseline) {
                     Text("\(l10n.text(.totalRemaining)): \(duration(summary.totalRemainingDuration))")
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 8)
                     if let remaining = summary.nextExpiryRemaining {
                         Text("\(l10n.text(.left)) \(duration(remaining))")
                             .monospacedDigit()
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.trailing)
                     }
                 }
                 .font(.caption)
@@ -754,11 +761,13 @@ struct CostSummaryView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
                 if !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             SidePanelDisclosureRow(title: l10n.text(.showDetails), action: onDetailsSelect)
@@ -785,6 +794,7 @@ struct RefreshableSectionHeader: View {
         HStack(alignment: .center, spacing: 6) {
             Text(title)
                 .font(.headline)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             if let trailingCaption, !trailingCaption.isEmpty {
                 Text(trailingCaption)

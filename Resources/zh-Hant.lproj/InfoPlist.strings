@@ -1,0 +1,1 @@
+NSAppDataUsageDescription = "Codex Runway 需要讀取本機 Codex 和 Grok 設定，才能顯示配額、重設次數和 API 等價成本。";

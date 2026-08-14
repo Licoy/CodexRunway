@@ -367,7 +367,7 @@ struct ApiCostDetailView: View {
 
     private func calculatedText(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: l10n.language == .simplifiedChinese ? "zh_Hans_CN" : "en_US_POSIX")
+        formatter.locale = Locale(identifier: l10n.language.posixLocaleIdentifier)
         formatter.dateStyle = .medium
         formatter.timeStyle = .medium
         return formatter.string(from: date)

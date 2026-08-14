@@ -1,4 +1,4 @@
-[English](./README.md) · 简体中文
+[English](./README.md) · 简体中文 · [繁體中文](./README_ZH_HANT.md) · [한국어](./README_KO.md) · [日本語](./README_JA.md) · [Русский](./README_RU.md) · [Français](./README_FR.md)
 
 <p align="center">
   <img src="Resources/AppIcon.png" alt="Codex Runway logo" width="128" height="128">
@@ -29,7 +29,7 @@ Codex Runway 是一个原生 macOS 状态栏应用，帮你在菜单栏查看 Co
 - 本机会话增量索引，加速成本扫描。
 - 查看最近 Codex 会话、项目、状态和用量摘要。
 - 修复本机会话索引。
-- 支持浅色、深色、跟随系统和中英文界面。
+- 支持浅色、深色、跟随系统，以及 English、简体中文、繁體中文、한국어、日本語、Русский、Français 界面。
 - 支持内置更新检测。
 - 提供 macOS 14+ 桌面组件：额度总览、Token 趋势、关键指标和今日重置。
 

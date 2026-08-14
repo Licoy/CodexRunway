@@ -1,4 +1,4 @@
-English · [简体中文](./README_ZH.md)
+English · [简体中文](./README_ZH.md) · [繁體中文](./README_ZH_HANT.md) · [한국어](./README_KO.md) · [日本語](./README_JA.md) · [Русский](./README_RU.md) · [Français](./README_FR.md)
 
 <p align="center">
   <img src="Resources/AppIcon.png" alt="Codex Runway logo" width="128" height="128">
@@ -29,7 +29,7 @@ Codex Runway is a native macOS menu bar app for checking Codex and Grok quota. I
 - Use a local incremental session index for faster cost scans.
 - View recent Codex sessions, projects, status, and usage summaries.
 - Repair the local session index.
-- Support light, dark, system appearance, Chinese, and English.
+- Support light, dark, system appearance, and English, 简体中文, 繁體中文, 한국어, 日本語, Русский, Français.
 - Support built-in update checks.
 - Offer macOS 14+ desktop widgets for quota overview, token trend, a key metric, and reset-today status.
 

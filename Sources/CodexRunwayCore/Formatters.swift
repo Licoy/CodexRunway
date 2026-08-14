@@ -12,28 +12,17 @@ public enum DurationFormatter {
         let hours = (value % 86_400) / 3_600
         let minutes = (value % 3_600) / 60
         let seconds = value % 60
-        if language == .simplifiedChinese {
-            var parts: [String] = []
-            if days > 0 {
-                parts.append("\(days)天")
-                if hours > 0 { parts.append("\(hours)小时") }
-                return parts.joined()
-            }
-            if hours > 0 { parts.append("\(hours)小时") }
-            if minutes > 0 || hours > 0 { parts.append("\(minutes)分钟") }
-            if includeSeconds || parts.isEmpty { parts.append("\(seconds)秒") }
-            return parts.joined()
-        }
+        let style = DurationUnitStyle(language: language)
         var parts: [String] = []
         if days > 0 {
-            parts.append(unit(days, singular: "day", plural: "days"))
-            if hours > 0 { parts.append(unit(hours, singular: "hour", plural: "hours")) }
-            return parts.joined(separator: " ")
+            parts.append(style.unit(days, .day))
+            if hours > 0 { parts.append(style.unit(hours, .hour)) }
+            return style.join(parts)
         }
-        if hours > 0 { parts.append(unit(hours, singular: "hour", plural: "hours")) }
-        if minutes > 0 || hours > 0 { parts.append(unit(minutes, singular: "minute", plural: "minutes")) }
-        if includeSeconds || parts.isEmpty { parts.append(unit(seconds, singular: "second", plural: "seconds")) }
-        return parts.joined(separator: " ")
+        if hours > 0 { parts.append(style.unit(hours, .hour)) }
+        if minutes > 0 || hours > 0 { parts.append(style.unit(minutes, .minute)) }
+        if includeSeconds || parts.isEmpty { parts.append(style.unit(seconds, .second)) }
+        return style.join(parts)
     }
 
     public static func money(_ value: Decimal) -> String {
@@ -52,10 +41,10 @@ public enum DurationFormatter {
         // Minute granularity: callers that re-render on a timer use this so the
         // string only changes once per minute instead of every second.
         if !includeSeconds, interval < 60 {
-            return language == .simplifiedChinese ? "刚刚" : "just now"
+            return DurationCopy.justNow(language)
         }
         let text = localized(interval, language: language, includeSeconds: includeSeconds)
-        return language == .simplifiedChinese ? "\(text)之前" : "\(text) ago"
+        return DurationCopy.ago(text, language: language)
     }
 
     /// Compact absolute remaining duration (no "ago"/"in" wrapper), e.g. "3小时20分钟".
@@ -68,7 +57,7 @@ public enum DurationFormatter {
     {
         let interval = max(0, date.timeIntervalSince(now))
         if !includeSeconds, interval < 60 {
-            return language == .simplifiedChinese ? "不到1分钟" : "under 1 minute"
+            return DurationCopy.underOneMinute(language)
         }
         return localized(interval, language: language, includeSeconds: includeSeconds)
     }
@@ -83,13 +72,9 @@ public enum DurationFormatter {
     {
         let interval = max(0, now.timeIntervalSince(date))
         if !includeSeconds, interval < 60 {
-            return language == .simplifiedChinese ? "不到1分钟" : "under 1 minute"
+            return DurationCopy.underOneMinute(language)
         }
         return localized(interval, language: language, includeSeconds: includeSeconds)
-    }
-
-    private static func unit(_ value: Int, singular: String, plural: String) -> String {
-        "\(value) \(value == 1 ? singular : plural)"
     }
 }
 
@@ -104,7 +89,7 @@ public enum ResetLabelFormatter {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.timeZone = calendar.timeZone
-        formatter.locale = Locale(identifier: language == .simplifiedChinese ? "zh_Hans_CN" : "en_US_POSIX")
+        formatter.locale = Locale(identifier: language.posixLocaleIdentifier)
         formatter.dateFormat = calendar.isDate(date, inSameDayAs: now) ? "HH:mm" : "M/d"
         return formatter.string(from: date)
     }
@@ -131,7 +116,7 @@ public enum ResetLabelFormatter {
         guard window.isRange else { return end }
         let start = window.startAt > now
             ? countdownDuration(until: window.startAt, now: now, language: language)
-            : (language == .simplifiedChinese ? "现在" : "now")
+            : DurationCopy.now(language)
         return "\(start)~\(end)"
     }
 
@@ -144,20 +129,12 @@ public enum ResetLabelFormatter {
         let hours = totalSeconds / 3_600
         let minutes = (totalSeconds % 3_600) / 60
         let seconds = totalSeconds % 60
-        if language == .simplifiedChinese {
-            var parts: [String] = []
-            if hours > 0 { parts.append("\(hours)小时") }
-            if minutes > 0 || hours > 0 { parts.append("\(minutes)分钟") }
-            parts.append("\(seconds)秒")
-            return parts.joined()
-        }
+        let style = DurationUnitStyle(language: language)
         var parts: [String] = []
-        if hours > 0 { parts.append("\(hours) \(hours == 1 ? "hour" : "hours")") }
-        if minutes > 0 || hours > 0 {
-            parts.append("\(minutes) \(minutes == 1 ? "minute" : "minutes")")
-        }
-        parts.append("\(seconds) \(seconds == 1 ? "second" : "seconds")")
-        return parts.joined(separator: " ")
+        if hours > 0 { parts.append(style.unit(hours, .hour)) }
+        if minutes > 0 || hours > 0 { parts.append(style.unit(minutes, .minute)) }
+        parts.append(style.unit(seconds, .second))
+        return style.join(parts)
     }
 
     private static func fullDateTime(
@@ -168,8 +145,7 @@ public enum ResetLabelFormatter {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.timeZone = calendar.timeZone
-        formatter.locale = Locale(
-            identifier: language == .simplifiedChinese ? "zh_Hans_CN" : "en_US_POSIX")
+        formatter.locale = Locale(identifier: language.posixLocaleIdentifier)
         formatter.dateFormat = "yyyy/M/d HH:mm"
         return formatter.string(from: date)
     }
@@ -194,7 +170,7 @@ public enum ResetCreditDateFormatter {
         -> DateFormatter
     {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: language == .simplifiedChinese ? "zh_Hans_CN" : "en_US_POSIX")
+        formatter.locale = Locale(identifier: language.posixLocaleIdentifier)
         formatter.dateStyle = dateStyle
         formatter.timeStyle = timeStyle
         return formatter
@@ -212,9 +188,16 @@ public enum SubscriptionDateFormatter {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.timeZone = calendar.timeZone
-        formatter.locale = Locale(identifier: language == .simplifiedChinese ? "zh_Hans_CN" : "en_US_POSIX")
+        formatter.locale = language.locale
         // Fixed patterns avoid locale-style churn (e.g. "Jun 20, 2026" vs numeric).
-        formatter.dateFormat = language == .simplifiedChinese ? "yyyy/M/d" : "MMM d, yyyy"
+        switch language {
+        case .simplifiedChinese, .traditionalChinese, .japanese, .korean:
+            formatter.dateFormat = "yyyy/M/d"
+        case .russian, .french:
+            formatter.dateFormat = "d MMM yyyy"
+        case .english:
+            formatter.dateFormat = "MMM d, yyyy"
+        }
         return formatter.string(from: date)
     }
 
@@ -238,5 +221,249 @@ public enum SubscriptionDateFormatter {
             return date
         }
         return next.addingTimeInterval(-1)
+    }
+}
+
+public enum TokenUsageDateFormatting {
+    public static func monthTitle(_ month: Int, language: ResolvedLanguage) -> String {
+        switch language {
+        case .simplifiedChinese, .traditionalChinese, .japanese:
+            return "\(month)月"
+        case .korean:
+            return "\(month)월"
+        case .english, .russian, .french:
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.locale = language.locale
+            let symbols = calendar.shortMonthSymbols
+            let index = max(0, min(symbols.count - 1, month - 1))
+            return symbols[index]
+        }
+    }
+
+    public static func mediumDateFormatter(language: ResolvedLanguage) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.locale = language.locale
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }
+
+    public static func seriesTooltipFormatter(
+        mode: TokenUsageHeatmapMode,
+        language: ResolvedLanguage)
+        -> DateFormatter
+    {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.locale = language.locale
+        switch mode {
+        case .weekly:
+            formatter.dateFormat = yearMonthDayPattern(language)
+        case .cumulative:
+            formatter.dateFormat = yearMonthPattern(language)
+        case .daily:
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+        }
+        return formatter
+    }
+
+    private static func yearMonthDayPattern(_ language: ResolvedLanguage) -> String {
+        switch language {
+        case .simplifiedChinese, .traditionalChinese, .japanese:
+            return "yyyy年M月d日"
+        case .korean:
+            return "yyyy년 M월 d일"
+        default:
+            return "MMM d, yyyy"
+        }
+    }
+
+    private static func yearMonthPattern(_ language: ResolvedLanguage) -> String {
+        switch language {
+        case .simplifiedChinese, .traditionalChinese, .japanese:
+            return "yyyy年M月"
+        case .korean:
+            return "yyyy년 M월"
+        default:
+            return "MMM yyyy"
+        }
+    }
+}
+
+enum DurationCopy {
+    static func justNow(_ language: ResolvedLanguage) -> String {
+        switch language {
+        case .english:
+            return "just now"
+        case .simplifiedChinese:
+            return "刚刚"
+        case .traditionalChinese:
+            return "剛剛"
+        case .korean:
+            return "방금"
+        case .japanese:
+            return "たった今"
+        case .russian:
+            return "только что"
+        case .french:
+            return "à l'instant"
+        }
+    }
+
+    static func underOneMinute(_ language: ResolvedLanguage) -> String {
+        switch language {
+        case .english:
+            return "under 1 minute"
+        case .simplifiedChinese:
+            return "不到1分钟"
+        case .traditionalChinese:
+            return "不到1分鐘"
+        case .korean:
+            return "1분 미만"
+        case .japanese:
+            return "1分未満"
+        case .russian:
+            return "меньше 1 минуты"
+        case .french:
+            return "moins d'1 minute"
+        }
+    }
+
+    static func now(_ language: ResolvedLanguage) -> String {
+        switch language {
+        case .english:
+            return "now"
+        case .simplifiedChinese:
+            return "现在"
+        case .traditionalChinese:
+            return "現在"
+        case .korean:
+            return "지금"
+        case .japanese:
+            return "現在"
+        case .russian:
+            return "сейчас"
+        case .french:
+            return "maintenant"
+        }
+    }
+
+    static func ago(_ text: String, language: ResolvedLanguage) -> String {
+        switch language {
+        case .english:
+            return "\(text) ago"
+        case .simplifiedChinese, .traditionalChinese:
+            return "\(text)之前"
+        case .korean:
+            return "\(text) 전"
+        case .japanese:
+            return "\(text)前"
+        case .russian:
+            return "\(text) назад"
+        case .french:
+            return "il y a \(text)"
+        }
+    }
+}
+
+private struct DurationUnitStyle {
+    enum Unit {
+        case day, hour, minute, second
+    }
+
+    var language: ResolvedLanguage
+
+    func join(_ parts: [String]) -> String {
+        switch language {
+        case .simplifiedChinese, .traditionalChinese, .japanese, .korean:
+            return parts.joined()
+        default:
+            return parts.joined(separator: " ")
+        }
+    }
+
+    func unit(_ value: Int, _ unit: Unit) -> String {
+        switch language {
+        case .simplifiedChinese:
+            switch unit {
+            case .day: return "\(value)天"
+            case .hour: return "\(value)小时"
+            case .minute: return "\(value)分钟"
+            case .second: return "\(value)秒"
+            }
+        case .traditionalChinese:
+            switch unit {
+            case .day: return "\(value)天"
+            case .hour: return "\(value)小時"
+            case .minute: return "\(value)分鐘"
+            case .second: return "\(value)秒"
+            }
+        case .japanese:
+            switch unit {
+            case .day: return "\(value)日"
+            case .hour: return "\(value)時間"
+            case .minute: return "\(value)分"
+            case .second: return "\(value)秒"
+            }
+        case .korean:
+            switch unit {
+            case .day: return "\(value)일"
+            case .hour: return "\(value)시간"
+            case .minute: return "\(value)분"
+            case .second: return "\(value)초"
+            }
+        case .russian:
+            switch unit {
+            case .day:
+                return russianPlural(value, one: "день", few: "дня", many: "дней")
+            case .hour:
+                return russianPlural(value, one: "час", few: "часа", many: "часов")
+            case .minute:
+                return russianPlural(value, one: "минута", few: "минуты", many: "минут")
+            case .second:
+                return russianPlural(value, one: "секунда", few: "секунды", many: "секунд")
+            }
+        case .french:
+            switch unit {
+            case .day: return french(value, singular: "jour", plural: "jours")
+            case .hour: return french(value, singular: "heure", plural: "heures")
+            case .minute: return french(value, singular: "minute", plural: "minutes")
+            case .second: return french(value, singular: "seconde", plural: "secondes")
+            }
+        case .english:
+            switch unit {
+            case .day: return english(value, singular: "day", plural: "days")
+            case .hour: return english(value, singular: "hour", plural: "hours")
+            case .minute: return english(value, singular: "minute", plural: "minutes")
+            case .second: return english(value, singular: "second", plural: "seconds")
+            }
+        }
+    }
+
+    private func english(_ value: Int, singular: String, plural: String) -> String {
+        "\(value) \(value == 1 ? singular : plural)"
+    }
+
+    private func french(_ value: Int, singular: String, plural: String) -> String {
+        "\(value) \(value <= 1 ? singular : plural)"
+    }
+
+    private func russianPlural(_ value: Int, one: String, few: String, many: String) -> String {
+        let absValue = abs(value)
+        let mod10 = absValue % 10
+        let mod100 = absValue % 100
+        let word: String
+        if mod10 == 1 && mod100 != 11 {
+            word = one
+        } else if (2...4).contains(mod10) && !(12...14).contains(mod100) {
+            word = few
+        } else {
+            word = many
+        }
+        return "\(value) \(word)"
     }
 }

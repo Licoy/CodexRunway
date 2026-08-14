@@ -2,16 +2,51 @@ import AppKit
 import CodexRunwayCore
 import SwiftUI
 
-enum ControlPanelTab: Hashable {
+enum ControlPanelTab: String, Hashable, CaseIterable {
     case general
     case accounts
     case display
     case advanced
     case about
+
+    var systemImage: String {
+        switch self {
+        case .general:
+            return "gearshape"
+        case .accounts:
+            return "person.2"
+        case .display:
+            return "eye"
+        case .advanced:
+            return "slider.horizontal.3"
+        case .about:
+            return "info.circle"
+        }
+    }
+
+    var titleKey: L10nKey {
+        switch self {
+        case .general:
+            return .general
+        case .accounts:
+            return .accounts
+        case .display:
+            return .display
+        case .advanced:
+            return .advanced
+        case .about:
+            return .about
+        }
+    }
+
+    func title(_ l10n: L10n) -> String {
+        l10n.text(titleKey)
+    }
 }
 
 struct ControlPanelView: View {
     static let githubURL = URL(string: "https://github.com/Licoy/codex-runway")!
+    nonisolated static let panelHeight: CGFloat = ControlPanelLayout.panelHeight
     private static let feedbackURL = URL(string: "https://github.com/Licoy/codex-runway/issues/new")!
 
     @ObservedObject var settings: RunwaySettings
@@ -23,6 +58,12 @@ struct ControlPanelView: View {
     @State private var confirmRepair = false
     @State private var notificationMessage: String?
     private var l10n: L10n { settings.l10n }
+    private var tabTitles: [String] {
+        ControlPanelTab.allCases.map { $0.title(l10n) }
+    }
+    private var panelWidth: CGFloat {
+        ControlPanelLayout.panelWidth(titles: tabTitles)
+    }
 
     init(
         settings: RunwaySettings,
@@ -55,9 +96,12 @@ struct ControlPanelView: View {
                 .tabItem { Label(l10n.text(.about), systemImage: "info.circle") }
                 .tag(ControlPanelTab.about)
         }
-        .padding(.horizontal, 24)
+        // Rebuild SwiftUI's native toolbar item so it cannot retain the
+        // previous language's wider frame after the window contracts.
+        .id(l10n.language.rawValue)
+        .padding(.horizontal, ControlPanelLayout.horizontalContentPadding)
         .padding(.vertical, 16)
-        .frame(width: 546, height: 662)
+        .frame(width: panelWidth, height: Self.panelHeight)
         .background(Color(nsColor: .windowBackgroundColor))
         .alert(l10n.text(.repairConfirmTitle), isPresented: $confirmRepair) {
             Button(l10n.text(.repair), role: .destructive) { model.repairSessions() }
@@ -73,16 +117,22 @@ struct ControlPanelView: View {
     }
 
     private var generalPane: some View {
-        PreferencesPane {
+        PreferencesPane(remasureToken: l10n.language) {
             SettingsSection {
                 SectionLabel(l10n.text(.general))
-                PickerRow(title: l10n.text(.language), subtitle: l10n.text(.auto)) {
+                PickerRow(
+                    title: l10n.text(.language),
+                    subtitle: l10n.text(.auto),
+                    controlWidth: LanguagePickerSizing.controlWidth(
+                        selectedTitle: settings.preferences.language.menuTitle(uiLanguage: l10n.language)))
+                {
                     Picker(l10n.text(.language), selection: languageBinding) {
-                        Text(l10n.text(.auto)).tag(LanguagePreference.system)
-                        Text(l10n.text(.languageEnglish)).tag(LanguagePreference.english)
-                        Text(l10n.text(.languageSimplifiedChinese)).tag(LanguagePreference.simplifiedChinese)
+                        ForEach(LanguagePreference.allCases, id: \.self) { preference in
+                            Text(preference.menuTitle(uiLanguage: l10n.language)).tag(preference)
+                        }
                     }
                     .pickerStyle(.menu)
+                    .fixedSize(horizontal: true, vertical: false)
                 }
                 PickerRow(title: l10n.text(.refreshInterval), subtitle: l10n.text(.minutes)) {
                     Picker(l10n.text(.refreshInterval), selection: refreshBinding) {
@@ -114,7 +164,7 @@ struct ControlPanelView: View {
     }
 
     private var displayPane: some View {
-        PreferencesPane {
+        PreferencesPane(remasureToken: l10n.language) {
             SettingsSection {
                 SectionLabel(l10n.text(.displayAppearanceSection))
                 PickerRow(title: l10n.text(.appearance), subtitle: l10n.text(.appearanceSystem)) {
@@ -276,7 +326,7 @@ struct ControlPanelView: View {
     }
 
     private var advancedPane: some View {
-        PreferencesPane {
+        PreferencesPane(remasureToken: l10n.language) {
             SettingsSection {
                 SectionLabel(l10n.text(.advanced))
                 ActionRow(title: l10n.text(.refresh), subtitle: l10n.text(.quota), button: l10n.text(.refresh)) {
@@ -298,7 +348,7 @@ struct ControlPanelView: View {
     }
 
     private var aboutPane: some View {
-        PreferencesPane {
+        PreferencesPane(remasureToken: l10n.language) {
             SettingsSection {
                 AboutLogoView()
                 SectionLabel(l10n.text(.about))
@@ -714,10 +764,16 @@ private extension MainPanelModule {
 }
 
 struct PreferencesPane<Content: View>: View {
+    var remasureToken: AnyHashable = 0
     @ViewBuilder var content: Content
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: true) {
+        PolishedScrollView(
+            verticalPadding: 0,
+            fadesEdges: false,
+            remasureToken: remasureToken,
+            showsOverlayScroller: true)
+        {
             VStack(alignment: .leading, spacing: 16) {
                 content
             }
@@ -909,13 +965,14 @@ private struct ModulePickerRow<Control: View>: View {
 private struct PickerRow<Control: View>: View {
     var title: String
     var subtitle: String
+    var controlWidth: CGFloat = 220
     @ViewBuilder var control: Control
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             RowText(title: title, subtitle: subtitle)
             Spacer(minLength: 16)
-            control.labelsHidden().frame(width: 220, alignment: .trailing)
+            control.labelsHidden().frame(width: controlWidth, alignment: .trailing)
         }
         .frame(maxWidth: .infinity)
     }

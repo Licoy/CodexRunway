@@ -6,15 +6,30 @@ struct PolishedScrollView<Content: View>: View {
     private let verticalPadding: CGFloat
     /// Soft edge fade. Disable when a fixed toolbar sits above the scroll view so the first row is not washed out.
     private let fadesEdges: Bool
+    /// Changing this token forces an immediate document remasure (e.g. language switch).
+    private let remasureToken: AnyHashable
+    /// Thin overlay knob that fades away when idle. Off for the popover, on for settings.
+    private let showsOverlayScroller: Bool
 
-    init(verticalPadding: CGFloat = 8, fadesEdges: Bool = true, @ViewBuilder content: () -> Content) {
+    init(
+        verticalPadding: CGFloat = 8,
+        fadesEdges: Bool = true,
+        remasureToken: AnyHashable = 0,
+        showsOverlayScroller: Bool = false,
+        @ViewBuilder content: () -> Content)
+    {
         self.verticalPadding = verticalPadding
         self.fadesEdges = fadesEdges
+        self.remasureToken = remasureToken
+        self.showsOverlayScroller = showsOverlayScroller
         self.content = content()
     }
 
     var body: some View {
-        let scroll = HiddenScrollerScrollView {
+        let scroll = HiddenScrollerScrollView(
+            remasureToken: remasureToken,
+            showsOverlayScroller: showsOverlayScroller)
+        {
             content
                 .padding(.vertical, verticalPadding)
                 .padding(.trailing, 4)
@@ -39,8 +54,16 @@ struct PolishedScrollView<Content: View>: View {
 
 private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
     let content: Content
+    let remasureToken: AnyHashable
+    let showsOverlayScroller: Bool
 
-    init(@ViewBuilder content: () -> Content) {
+    init(
+        remasureToken: AnyHashable,
+        showsOverlayScroller: Bool,
+        @ViewBuilder content: () -> Content)
+    {
+        self.remasureToken = remasureToken
+        self.showsOverlayScroller = showsOverlayScroller
         self.content = content()
     }
 
@@ -51,22 +74,27 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
     /// The nested NSHostingView is a separate SwiftUI root: custom environment keys do
     /// not cross it, so the panel-visibility flag that pauses shimmer timelines must be
     /// re-injected from the outer tree.
-    private func rootView(_ context: Context) -> AnyView {
-        AnyView(content.environment(\.runwayPanelVisible, context.environment.runwayPanelVisible))
+    private func rootView(_ context: Context, width: CGFloat) -> AnyView {
+        AnyView(
+            content
+                .environment(\.runwayPanelVisible, context.environment.runwayPanelVisible)
+                .frame(width: max(1, width), alignment: .topLeading)
+                .fixedSize(horizontal: false, vertical: true))
     }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = SizingScrollView()
-        let hostingView = NSHostingView(rootView: rootView(context))
+        rememberRootBuilder(context)
+        let hostingView = NSHostingView(rootView: rootView(context, width: 1))
         hostingView.isFlipped = true
 
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
-        scrollView.hasVerticalScroller = false
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.verticalScrollElasticity = .automatic
         scrollView.scrollerStyle = .overlay
+        applyScroller(scrollView)
         scrollView.documentView = hostingView
         scrollView.onLayout = { [weak scrollView, weak hostingView] in
             guard let scrollView, let hostingView else { return }
@@ -78,13 +106,58 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let hostingView = scrollView.documentView as? NSHostingView<AnyView> else { return }
-        hostingView.rootView = rootView(context)
+        applyScroller(scrollView)
+        let coordinator = context.coordinator
+        rememberRootBuilder(context)
+        let languageChanged = coordinator.lastRemasureToken != remasureToken
+        coordinator.lastRemasureToken = remasureToken
+        let width = max(1, scrollView.contentSize.width)
+        hostingView.rootView = rootView(context, width: width)
         // Model refreshes publish in bursts; a full height probe costs several layout
         // passes of the whole panel, so coalesce probes instead of paying one per publish.
-        let coordinator = context.coordinator
+        // Language (or other remasure token) changes must remasure immediately so
+        // longer strings wrap and grow instead of staying clipped at the old height.
+        if languageChanged {
+            resize(hostingView, in: scrollView, coordinator: coordinator, force: true)
+            return
+        }
         coordinator.throttleProbe { [weak scrollView, weak hostingView] in
             guard let scrollView, let hostingView else { return }
             resize(hostingView, in: scrollView, coordinator: coordinator, force: true)
+        }
+    }
+
+    private func applyScroller(_ scrollView: NSScrollView) {
+        if let sizing = scrollView as? SizingScrollView {
+            sizing.forceOverlayScroller = showsOverlayScroller
+        }
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.scrollerStyle = .overlay
+        if showsOverlayScroller {
+            scrollView.hasVerticalScroller = true
+            if !(scrollView.verticalScroller is ThinOverlayScroller) {
+                let scroller = ThinOverlayScroller()
+                scroller.controlSize = .regular
+                scroller.scrollerStyle = .overlay
+                scrollView.verticalScroller = scroller
+            } else {
+                scrollView.verticalScroller?.scrollerStyle = .overlay
+            }
+        } else {
+            scrollView.hasVerticalScroller = false
+        }
+    }
+
+    private func rememberRootBuilder(_ context: Context) {
+        let visible = context.environment.runwayPanelVisible
+        let body = content
+        context.coordinator.makeRoot = { width in
+            AnyView(
+                body
+                    .environment(\.runwayPanelVisible, visible)
+                    .frame(width: max(1, width), alignment: .topLeading)
+                    .fixedSize(horizontal: false, vertical: true))
         }
     }
 
@@ -95,6 +168,11 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
         force: Bool)
     {
         let width = max(1, scrollView.contentSize.width)
+        if let typed = hostingView as? NSHostingView<AnyView>, let makeRoot = coordinator.makeRoot {
+            // Keep the SwiftUI tree pinned to the scroll width so English / long
+            // locales wrap instead of measuring an unconstrained fitting width.
+            typed.rootView = makeRoot(width)
+        }
         // Bounded probe height: large enough for the panel, cheap vs. 1_000_000.
         let probeHeight: CGFloat = 8_000
         let widthChanged = abs(coordinator.lastWidth - width) > 0.5
@@ -104,7 +182,8 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
 
         hostingView.setFrameSize(NSSize(width: width, height: probeHeight))
         hostingView.layoutSubtreeIfNeeded()
-        let height = max(1, hostingView.fittingSize.height)
+        let fitting = hostingView.fittingSize
+        let height = max(1, fitting.height)
 
         // Skip frame writes when nothing meaningful changed (avoids layout thrash).
         if abs(coordinator.lastWidth - width) < 0.5,
@@ -125,6 +204,8 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
     final class Coordinator {
         var lastWidth: CGFloat = 0
         var lastHeight: CGFloat = 0
+        var lastRemasureToken: AnyHashable?
+        var makeRoot: ((CGFloat) -> AnyView)?
 
         private let probeInterval: TimeInterval = 0.1
         private var lastProbeAt: Date?
@@ -156,9 +237,64 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
 
 private final class SizingScrollView: NSScrollView {
     var onLayout: (() -> Void)?
+    var forceOverlayScroller = false
+
+    override var scrollerStyle: NSScroller.Style {
+        get { forceOverlayScroller ? .overlay : super.scrollerStyle }
+        set { super.scrollerStyle = forceOverlayScroller ? .overlay : newValue }
+    }
 
     override func layout() {
         super.layout()
+        if forceOverlayScroller, super.scrollerStyle != .overlay {
+            super.scrollerStyle = .overlay
+        }
         onLayout?()
+    }
+}
+
+/// Overlay knob used by settings: 3pt wide, no track, fades with AppKit overlay.
+final class ThinOverlayScroller: NSScroller {
+    static let slotWidth: CGFloat = 7
+    static let knobWidth: CGFloat = 3
+
+    override class var isCompatibleWithOverlayScrollers: Bool { true }
+
+    override class func scrollerWidth(
+        for controlSize: NSControl.ControlSize,
+        scrollerStyle: NSScroller.Style) -> CGFloat
+    {
+        slotWidth
+    }
+
+    override var isOpaque: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        drawKnob()
+    }
+
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
+
+    override func drawKnob() {
+        var knob = rect(for: .knob)
+        let insetX = max(0, (bounds.width - Self.knobWidth) / 2)
+        knob = NSRect(
+            x: bounds.minX + insetX,
+            y: knob.minY + 1,
+            width: Self.knobWidth,
+            height: max(Self.knobWidth, knob.height - 2))
+        let path = NSBezierPath(
+            roundedRect: knob,
+            xRadius: Self.knobWidth / 2,
+            yRadius: Self.knobWidth / 2)
+        Self.knobFill(for: effectiveAppearance).setFill()
+        path.fill()
+    }
+
+    static func knobFill(for appearance: NSAppearance) -> NSColor {
+        let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return isDark
+            ? NSColor.white.withAlphaComponent(0.36)
+            : NSColor.black.withAlphaComponent(0.22)
     }
 }

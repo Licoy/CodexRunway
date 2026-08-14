@@ -412,25 +412,37 @@ public enum TokenUsageHeatmapBuilder {
         return DateInterval(start: start, end: endExclusive)
     }
 
-    /// Locale-aware compact token count: 中文用「万 / 亿」, English uses K / M / B.
+    /// Locale-aware compact token count: 中/日/韩用万级单位, Latin locales use K / M / B.
     public static func compactTokenCount(
         _ value: Int,
         language: ResolvedLanguage = .english
     ) -> String {
         let amount = max(0, value)
-        if language == .simplifiedChinese {
-            return compactTokenCountChinese(amount)
+        switch language.compactNumberScale {
+        case .wanYiSimplified:
+            return compactTokenCountAsian(amount, tenThousand: "万", hundredMillion: "亿")
+        case .wanYiTraditional:
+            return compactTokenCountAsian(amount, tenThousand: "萬", hundredMillion: "億")
+        case .wanYiJapanese:
+            return compactTokenCountAsian(amount, tenThousand: "万", hundredMillion: "億")
+        case .manEok:
+            return compactTokenCountAsian(amount, tenThousand: "만", hundredMillion: "억")
+        case .latin:
+            return compactTokenCountEnglish(amount)
         }
-        return compactTokenCountEnglish(amount)
     }
 
-    private static func compactTokenCountChinese(_ value: Int) -> String {
+    private static func compactTokenCountAsian(
+        _ value: Int,
+        tenThousand: String,
+        hundredMillion: String
+    ) -> String {
         // 1 亿 = 100_000_000, 1 万 = 10_000
         if value >= 100_000_000 {
-            return trimTrailingZeros(String(format: "%.2f", Double(value) / 100_000_000)) + "亿"
+            return trimTrailingZeros(String(format: "%.2f", Double(value) / 100_000_000)) + hundredMillion
         }
         if value >= 10_000 {
-            return trimTrailingZeros(String(format: "%.2f", Double(value) / 10_000)) + "万"
+            return trimTrailingZeros(String(format: "%.2f", Double(value) / 10_000)) + tenThousand
         }
         return "\(value)"
     }

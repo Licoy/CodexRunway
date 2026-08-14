@@ -460,12 +460,7 @@ struct TokenUsageHeatmapView: View {
     }
 
     private func monthTitle(_ month: Int) -> String {
-        if l10n.language == .simplifiedChinese {
-            return "\(month)月"
-        }
-        let symbols = Calendar(identifier: .gregorian).shortMonthSymbols
-        let index = max(0, min(symbols.count - 1, month - 1))
-        return symbols[index]
+        TokenUsageDateFormatting.monthTitle(month, language: l10n.language)
     }
 
     private func accessibilitySummary(_ snapshot: TokenUsageHeatmapSnapshot) -> String {
@@ -514,13 +509,7 @@ struct TokenUsageHeatmapView: View {
     }
 
     private static func tooltipDateFormatter(language: ResolvedLanguage) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = .autoupdatingCurrent
-        formatter.locale = Locale(identifier: language == .simplifiedChinese ? "zh_Hans_CN" : "en_US")
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter
+        TokenUsageDateFormatting.mediumDateFormatter(language: language)
     }
 }
 
@@ -976,12 +965,7 @@ private struct TokenUsageTrendChartView: View {
     }
 
     private func monthTitle(_ month: Int) -> String {
-        if l10n.language == .simplifiedChinese {
-            return "\(month)月"
-        }
-        let symbols = Calendar(identifier: .gregorian).shortMonthSymbols
-        let index = max(0, min(symbols.count - 1, month - 1))
-        return symbols[index]
+        TokenUsageDateFormatting.monthTitle(month, language: l10n.language)
     }
 
     @ViewBuilder
@@ -1045,21 +1029,7 @@ private struct TokenUsageTrendChartView: View {
     }
 
     private var tooltipDateFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = .autoupdatingCurrent
-        formatter.locale = Locale(identifier: l10n.language == .simplifiedChinese ? "zh_Hans_CN" : "en_US")
-        switch series.mode {
-        case .weekly:
-            formatter.dateFormat = l10n.language == .simplifiedChinese ? "yyyy年M月d日" : "MMM d, yyyy"
-        case .cumulative:
-            // Monthly aggregation: show year-month.
-            formatter.dateFormat = l10n.language == .simplifiedChinese ? "yyyy年M月" : "MMM yyyy"
-        case .daily:
-            formatter.dateStyle = .medium
-            formatter.timeStyle = .none
-        }
-        return formatter
+        TokenUsageDateFormatting.seriesTooltipFormatter(mode: series.mode, language: l10n.language)
     }
 }
 

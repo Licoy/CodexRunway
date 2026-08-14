@@ -191,6 +191,14 @@ struct TokenUsageHeatmapTests {
         #expect(TokenUsageHeatmapBuilder.compactTokenCount(1_500, language: .english) == "1.5K")
         #expect(TokenUsageHeatmapBuilder.compactTokenCount(100_340_000, language: .english) == "100.34M")
         #expect(TokenUsageHeatmapBuilder.compactTokenCount(2_000_000_000, language: .english) == "2B")
+
+        #expect(TokenUsageHeatmapBuilder.compactTokenCount(10_000, language: .traditionalChinese) == "1萬")
+        #expect(TokenUsageHeatmapBuilder.compactTokenCount(100_000_000, language: .japanese) == "1億")
+        #expect(TokenUsageHeatmapBuilder.compactTokenCount(10_000, language: .korean) == "1만")
+        #expect(TokenUsageHeatmapBuilder.compactTokenCount(1_500, language: .french) == "1.5K")
+        #expect(TokenUsageHeatmapBuilder.compactTokenCount(1_500, language: .russian) == "1.5K")
+        #expect(TokenUsageHeatmapBuilder.compactTokenCount(10_000, language: .japanese) != "1.5K")
+        #expect(TokenUsageHeatmapBuilder.compactTokenCount(10_000, language: .french) != TokenUsageHeatmapBuilder.compactTokenCount(10_000, language: .japanese))
     }
 
     @Test("intensity prefers all-devices series while cells keep both values")

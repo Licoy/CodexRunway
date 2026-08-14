@@ -6,6 +6,42 @@ if CommandLine.arguments.contains("--self-check") {
     exit(0)
 }
 
+if let dumpIndex = CommandLine.arguments.firstIndex(of: "--dump-locale-metrics") {
+    let pathIndex = CommandLine.arguments.index(after: dumpIndex)
+    guard pathIndex < CommandLine.arguments.endIndex else {
+        fputs("usage: --dump-locale-metrics <output-directory>\n", stderr)
+        exit(2)
+    }
+    let directory = CommandLine.arguments[pathIndex]
+    do {
+        try FileManager.default.createDirectory(
+            atPath: directory,
+            withIntermediateDirectories: true)
+        var lines: [String] = [
+            "compactCap=\(LanguagePickerSizing.compactCap)",
+            "minimumWidth=\(LanguagePickerSizing.minimumWidth)",
+            "horizontalChrome=\(LanguagePickerSizing.horizontalChrome)",
+            "longestItem=Simplified Chinese width=\(LanguagePickerSizing.measuredTitleWidth("Simplified Chinese"))",
+        ]
+        for preference in LanguagePreference.explicitCases {
+            let title = preference.menuTitle(uiLanguage: .english)
+            let width = LanguagePickerSizing.controlWidth(selectedTitle: title)
+            lines.append("\(preference.rawValue)\ttitle=\(title)\twidth=\(width)")
+        }
+        let widthsURL = URL(fileURLWithPath: directory)
+            .appendingPathComponent("language-picker-widths.txt")
+        try (lines.joined(separator: "\n") + "\n").write(to: widthsURL, atomically: true, encoding: .utf8)
+        let app = NSApplication.shared
+        app.setActivationPolicy(.accessory)
+        try MainPanelMockRender.writeLayoutDump(
+            to: URL(fileURLWithPath: directory).appendingPathComponent("panel-layout").path)
+        exit(0)
+    } catch {
+        fputs("dump failed: \(error.localizedDescription)\n", stderr)
+        exit(1)
+    }
+}
+
 // Dev helper: `--dev-tier-badges` (or CODEX_RUNWAY_DEV_TIER_BADGES=1) shows every
 // subscription tier capsule + expiry phase chips in the main popover. Example:
 //   swift run CodexRunway -- --dev-tier-badges

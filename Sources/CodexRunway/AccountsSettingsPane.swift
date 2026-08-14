@@ -33,7 +33,7 @@ struct AccountsSettingsPane: View {
     @State private var importTargetProvider: RunwayProvider = .codex
 
     var body: some View {
-        PreferencesPane {
+        PreferencesPane(remasureToken: l10n.language) {
             SettingsSection {
                 platformToolbar
 
