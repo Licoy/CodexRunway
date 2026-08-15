@@ -33,7 +33,7 @@ struct StatusBarContentState: Equatable {
 
     static let placeholder = StatusBarContentState(
         configuration: Configuration(
-            preferences: RunwayPreferences(statusBarDisplayStyle: .countdown),
+            preferences: RunwayPreferences(),
             language: .english),
         content: Content(text: "", meters: [], displayMinute: 0))
 }

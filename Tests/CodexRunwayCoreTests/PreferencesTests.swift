@@ -135,9 +135,11 @@ struct PreferencesTests {
         #expect(decoded.language == .traditionalChinese)
     }
 
-    @Test("progress text is the final status-bar style option")
+    @Test("quota bars are the default and first status-bar style")
     func statusBarStyleOrdering() {
+        #expect(StatusBarDisplayStyle.allCases.first == .meters)
         #expect(StatusBarDisplayStyle.allCases.last == .text)
+        #expect(RunwayPreferences().statusBarDisplayStyle == .meters)
     }
 
     @Test("preferences persist to user defaults")

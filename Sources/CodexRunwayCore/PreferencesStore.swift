@@ -28,9 +28,9 @@ public enum AppearancePreference: String, CaseIterable, Codable, Sendable {
 }
 
 public enum StatusBarDisplayStyle: String, CaseIterable, Codable, Sendable {
+    case meters
     case countdown
     case battery
-    case meters
     case rings
     case text
 }
