@@ -247,32 +247,41 @@ struct TokenUsageHeatmapView: View {
         }
     }
 
+    /// Header stays on two rows so the section's intrinsic width never exceeds the
+    /// panel content width: a single row (title + as-of caption + mode picker +
+    /// style popup + refresh) measures ~394pt in English and ~516pt in Russian,
+    /// which made the whole section lay out at its ideal width and pushed the
+    /// heatmap grid (and the controls) outside the 368pt popover content area.
     private var header: some View {
-        HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 5) {
-                    Text(l10n.text(.tokenUsageHeatmap))
-                        .font(.headline)
-                        .lineLimit(1)
-                    Image(systemName: "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .help(TokenUsageSourcePresentation.disclosure(
-                            l10n: l10n,
-                            showsOfficialStats: showsOfficialStats))
-                        .accessibilityLabel(TokenUsageSourcePresentation.disclosure(
-                            l10n: l10n,
-                            showsOfficialStats: showsOfficialStats))
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 5) {
+                        Text(l10n.text(.tokenUsageHeatmap))
+                            .font(.headline)
+                            .lineLimit(1)
+                        Image(systemName: "info.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .help(TokenUsageSourcePresentation.disclosure(
+                                l10n: l10n,
+                                showsOfficialStats: showsOfficialStats))
+                            .accessibilityLabel(TokenUsageSourcePresentation.disclosure(
+                                l10n: l10n,
+                                showsOfficialStats: showsOfficialStats))
+                    }
+                    if showsOfficialStats, let officialAsOfText {
+                        Text(officialAsOfText)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
-                if showsOfficialStats, let officialAsOfText {
-                    Text(officialAsOfText)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                // Cap so a future longer localization truncates instead of
+                // widening the section past the panel.
+                .frame(maxWidth: 320, alignment: .leading)
+                Spacer(minLength: 4)
             }
-            .fixedSize(horizontal: true, vertical: false)
-            Spacer(minLength: 4)
             HStack(spacing: 4) {
                 Picker("", selection: $mode) {
                     Text(l10n.text(.heatmapDaily)).tag(TokenUsageHeatmapMode.daily)
@@ -283,6 +292,9 @@ struct TokenUsageHeatmapView: View {
                 .pickerStyle(.segmented)
                 .controlSize(.small)
                 .fixedSize(horizontal: true, vertical: false)
+                // Long locale labels (e.g. Russian "По неделям") must compress
+                // inside the panel instead of growing the section's ideal width.
+                .frame(maxWidth: 252, alignment: .leading)
 
                 // AppKit popup avoids SwiftUI Menu, which can collapse / mis-place NSPopover.
                 ChartStylePopUpButton(
@@ -489,11 +501,18 @@ struct TokenUsageHeatmapView: View {
         hover.clear()
     }
 
+    /// Upper bound for grid cell sizing. The section can momentarily be proposed
+    /// its ideal width when localized header strings exceed the panel content
+    /// width; the grid must never size itself beyond the shipped popover content
+    /// area (400 − 2×16 padding − 4 scroll trailing padding).
+    private static let maxGridWidth: CGFloat = 364
+
     private func layoutMetrics(width: CGFloat, weekCount: Int) -> HeatmapLayoutMetrics {
         let columnSpacing: CGFloat = 2
         let rowSpacing: CGFloat = 2
         let count = max(1, weekCount)
         let totalSpacing = columnSpacing * CGFloat(count - 1)
+        let width = min(width, Self.maxGridWidth)
         let raw = floor(max(1, (width - totalSpacing) / CGFloat(count)))
         let cellSize = min(11, max(5, raw))
         return HeatmapLayoutMetrics(
