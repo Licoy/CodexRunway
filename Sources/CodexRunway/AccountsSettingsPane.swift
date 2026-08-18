@@ -378,6 +378,14 @@ struct AccountsSettingsPane: View {
                         }
                         .help(l10n.text(.accountsMoveDown))
                         Button {
+                            restartAfterSwitch = true
+                            accountPendingSwitch = account
+                        } label: {
+                            Image(systemName: "checkmark.circle")
+                        }
+                        .help(l10n.text(.accountsForceCurrent))
+                        .disabled(model.isSwitchingAccount)
+                        Button {
                             editingAliasId = account.id
                             aliasDraft = account.alias ?? ""
                         } label: {

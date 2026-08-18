@@ -145,6 +145,13 @@ struct GrokAccountsSettingsContent: View {
                         }
                         .help(l10n.text(.accountsMoveDown))
                         Button {
+                            pendingSwitch = account
+                        } label: {
+                            Image(systemName: "checkmark.circle")
+                        }
+                        .help(l10n.text(.accountsForceCurrent))
+                        .disabled(model.isGrokAccountOperationInProgress)
+                        Button {
                             editingAliasID = account.id
                             aliasDraft = account.alias ?? ""
                         } label: {

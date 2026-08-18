@@ -343,7 +343,9 @@ final class RunwayModel: ObservableObject {
     }
 
     func switchAccount(id: String, restartCodex: Bool = true) {
-        guard id != activeAccountId, !isSwitchingAccount else { return }
+        // Re-applying the listed current account is allowed: official auth.json can
+        // drift after a manual edit while the account store still marks this row current.
+        guard !isSwitchingAccount else { return }
         isSwitchingAccount = true
         accountOperationMessage = l10n.text(.accountsSwitching)
         Task {

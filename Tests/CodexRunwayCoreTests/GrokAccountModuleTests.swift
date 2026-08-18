@@ -492,6 +492,29 @@ struct GrokAccountModuleTests {
         #expect(apiKey["key"] as? String == "official-api-key-for-tests")
     }
 
+    @Test("re-applying the listed current account overwrites a drifted official credential")
+    func reappliesListedCurrentOverDriftedOfficial() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let firstData = Self.credential(email: "first@example.com", userID: "first-user")
+        let driftedData = Self.credential(email: "drifted@example.com", userID: "drifted-user")
+        try fixture.writeOfficial(firstData)
+        let first = try fixture.store.upsertCredentialData(firstData, makeCurrent: true, now: fixture.now)
+        try fixture.writeOfficial(driftedData)
+        #expect(try fixture.store.loadIndex().currentAccountID == first.id)
+
+        let module = GrokAccountModule(
+            store: fixture.store,
+            cli: Self.unusedCLI,
+            runningProcessIDs: { [] },
+            now: { fixture.now })
+        let state = try await module.apply(.makeCurrent(id: first.id, allowWhileRunning: true))
+        let official = try GrokAuthDocument.parse(fixture.store.loadOfficialCredentialData())
+
+        #expect(state.currentAccountID == first.id)
+        #expect(official.stableID == first.id)
+    }
+
     @Test("isolated OAuth login makes only the first account current")
     func isolatedLoginOnlyMakesFirstCurrent() async throws {
         let fixture = try Fixture()

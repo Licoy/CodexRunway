@@ -222,6 +222,56 @@ struct RunwayModelRefreshTests {
         #expect(!model.tokenHeatmapAllDevicesTokens.values.contains(100))
     }
 
+    @Test("re-applying the listed current account overwrites drifted official auth")
+    func reappliesListedCurrentAccountToOfficialAuth() async throws {
+        let currentAuth = Self.auth(accountId: "acct-current")
+        let driftedAuth = Self.auth(accountId: "acct-drifted")
+        let store = isolatedAccountStore()
+        let current = try store.upsert(auth: currentAuth, makeActive: true)
+        try store.saveOfficialAuth(currentAuth)
+        let settings = RunwaySettings(store: PreferencesStore(defaults: scopedDefaults()))
+        let services = RunwayModelServices(
+            loadValidAuth: { _, cached in cached ?? currentAuth },
+            fetchQuota: { _ in Self.quotaSnapshot() },
+            fetchResetCredits: { _ in ResetCreditsSnapshot(availableCount: 0, credits: [], updatedAt: Date()) },
+            fetchRateLimitResetToday: {
+                RateLimitResetTodaySnapshot(state: .no, fetchedAt: Date())
+            },
+            scanAPIEquivalent: { queries, now, _, _ in
+                Dictionary(uniqueKeysWithValues: queries.map {
+                    ($0.id, ApiEquivalentSummary.unavailable(window: $0.window, calculatedAt: now))
+                })
+            },
+            fetchDailyWorkspaceUsage: { _, _, _, window, now in
+                Self.costSummary(window: window, calculatedAt: now)
+            },
+            fetchCodexProfileTokenUsage: { _ in
+                CodexProfileTokenUsage(dailyTokens: [:], statsAsOf: nil, generatedAt: nil)
+            },
+            dryRunSessions: {
+                SessionRepairReport(
+                    missingIndexIDs: [],
+                    orphanIndexIDs: [],
+                    duplicateIndexIDs: [],
+                    staleTitleIDs: [],
+                    backupPath: nil,
+                    plannedEntries: 0)
+            },
+            scanRecentSessions: { _ in SessionActivitySummary(items: []) })
+        let model = RunwayModel(settings: settings, services: services, accountStore: store)
+        try store.saveOfficialAuth(driftedAuth)
+
+        #expect(model.activeAccountId == current.id)
+        #expect(try store.loadOfficialAuth().tokens.accountId == "acct-drifted")
+
+        model.switchAccount(id: current.id, restartCodex: false)
+        try await waitForOfficialAccount("acct-current", in: store)
+
+        #expect(model.activeAccountId == current.id)
+        #expect(try store.loadOfficialAuth().tokens.accountId == "acct-current")
+        #expect(!model.isSwitchingAccount)
+    }
+
     @Test("full refresh starts independent popover sections without waiting for API cost")
     func fullRefreshStartsIndependentSectionsWithoutWaitingForAPICost() async throws {
         // Gate-based ordering (not sleep races): hold cost and reset so we can
@@ -760,6 +810,16 @@ struct RunwayModelRefreshTests {
             try await Task.sleep(for: .milliseconds(10))
         }
         Issue.record("Timed out waiting for account store switch")
+    }
+
+    private func waitForOfficialAccount(_ accountId: String, in store: AccountStore) async throws {
+        for _ in 0..<100 {
+            if (try? store.loadOfficialAuth())?.tokens.accountId == accountId {
+                return
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("Timed out waiting for official auth rewrite")
     }
 
     private func waitForAccountSwitch(_ id: String, in model: RunwayModel) async throws {

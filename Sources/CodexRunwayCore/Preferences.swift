@@ -35,6 +35,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case accountsExportSucceeded
     case accountsExportTitle
     case accountsExportWarning
+    case accountsForceCurrent
     case accountsImportFailed
     case accountsImportNoCredentials
     case accountsImportPreviewHint
