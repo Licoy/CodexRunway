@@ -423,7 +423,10 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
             }
             return latestEvent
         case .no:
-            // Prefer same-day non-reset commentary that explains today's "no".
+            // Same-day non-reset commentary explains today's "no".
+            // A still-pending future schedule is also useful.
+            // Do not fall back to latestEvent: past-day reset_completed
+            // announcements are history, not evidence for today.
             if let sameDayCommentary = events
                 .filter({
                     calendar.isDate($0.announcedAt, inSameDayAs: now)
@@ -435,7 +438,7 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
             {
                 return sameDayCommentary
             }
-            return nextScheduledReset(now: now)?.event ?? latestEvent
+            return nextScheduledReset(now: now)?.event
         case .unknown:
             return latestEvent
         }
@@ -446,7 +449,6 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> URL?
     {
         primaryEvidenceEvent(now: now, calendar: calendar)?.source.url
-            ?? latestEvent?.source.url
     }
 
     /// Maps the event kind to app-owned copy; feed text is never shown directly.

@@ -164,10 +164,10 @@ struct RateLimitResetTodayTests {
         #expect(event.text == "I have reset usage limits for Codex.")
         #expect(snapshot.state == .yes)
         #expect(
-            snapshot.evidenceLine(l10n: L10n(language: .english))
+            snapshot.evidenceLine(l10n: L10n(language: .english), now: now)
                 == "An explicit Codex quota reset was announced.")
         #expect(
-            snapshot.evidenceLine(l10n: L10n(language: .simplifiedChinese))
+            snapshot.evidenceLine(l10n: L10n(language: .simplifiedChinese), now: now)
                 == "发现明确的 Codex 配额重置公告。")
         #expect(snapshot.evidenceURL(now: now) == event.source.url)
     }
@@ -232,9 +232,11 @@ struct RateLimitResetTodayTests {
         #expect(pending.state == .yes)
         #expect(pending.hasAlreadyEffectiveResetToday(now: now) == false)
         #expect(pending.nextScheduledReset(now: now)?.event.source.postID != nil)
+        #expect(pending.primaryEvidenceEvent(now: now)?.kind == .resetScheduled)
         #expect(effective.state == .no)
         #expect(effective.hasAlreadyEffectiveResetToday(now: now) == false)
         #expect(effective.nextScheduledReset(now: now) == nil)
+        #expect(effective.primaryEvidenceEvent(now: now) == nil)
     }
 
     @Test("date-only Tibo schedule expands to a local full-day window")
@@ -371,6 +373,10 @@ struct RateLimitResetTodayTests {
             .decode()
         #expect(snapshot.state == .no)
         #expect(snapshot.nextScheduledReset(now: now)?.event.source.postID != nil)
+        #expect(snapshot.primaryEvidenceEvent(now: now)?.kind == .resetScheduled)
+        #expect(
+            snapshot.evidenceLine(l10n: L10n(language: .english), now: now)
+                == "An explicit Codex quota reset was scheduled.")
     }
 
     @Test(
@@ -523,10 +529,18 @@ struct RateLimitResetTodayTests {
             .decode()
 
         #expect(snapshot.state == .yes)
+        let nextDay = try resetStatusDate("2026-07-29T00:01:00Z")
         #expect(
             snapshot.resolvedState(
-                now: try resetStatusDate("2026-07-29T00:01:00Z"),
+                now: nextDay,
                 calendar: resetStatusUTCCalendar) == .no)
+        #expect(snapshot.primaryEvidenceEvent(now: nextDay, calendar: resetStatusUTCCalendar) == nil)
+        #expect(
+            snapshot.evidenceLine(
+                l10n: L10n(language: .english),
+                now: nextDay,
+                calendar: resetStatusUTCCalendar) == nil)
+        #expect(snapshot.evidenceURL(now: nextDay, calendar: resetStatusUTCCalendar) == nil)
     }
 
     @Test("UTC date prefix is not treated as the local calendar day")
@@ -555,6 +569,9 @@ struct RateLimitResetTodayTests {
         #expect(snapshotCN.state == .yes)
         #expect(snapshotLA.hasAlreadyEffectiveResetToday(now: now, calendar: losAngeles) == false)
         #expect(snapshotCN.hasAlreadyEffectiveResetToday(now: now, calendar: shanghai) == true)
+        #expect(snapshotLA.primaryEvidenceEvent(now: now, calendar: losAngeles) == nil)
+        #expect(snapshotLA.evidenceLine(l10n: L10n(language: .english), now: now, calendar: losAngeles) == nil)
+        #expect(snapshotCN.primaryEvidenceEvent(now: now, calendar: shanghai)?.kind == .resetCompleted)
     }
 
     @Test("detected alert follows local day, not the UTC date string")
@@ -702,6 +719,58 @@ struct RateLimitResetTodayTests {
         #expect(
             snapshot.primaryEvidenceEvent(now: now, calendar: resetStatusUTCCalendar)?
                 .source.postID == "200")
+    }
+
+    @Test("past-day completed resets are not today's evidence when the answer is no")
+    func pastDayCompletedResetIsNotTodayEvidence() throws {
+        // Matches the live 2026-08-18 feed: last X completion is Aug 11,
+        // a later manual confirmation landed Aug 13, and today has neither.
+        let now = try resetStatusDate("2026-08-18T03:15:00Z")
+        let completed = ResetStatusEventFixture(
+            kind: "reset_completed",
+            announcedAt: "2026-08-11T00:27:44Z",
+            postID: "2086972802457063486")
+        let scheduled = ResetStatusEventFixture(
+            kind: "reset_scheduled",
+            announcedAt: "2026-08-13T01:01:37Z",
+            effectiveAt: "2026-08-13T02:01:37Z",
+            schedulePrecision: "datetime",
+            scheduleBasis: "explicit",
+            postID: "2087706104814023111")
+        let snapshot = try ResetStatusFeedFixture(event: completed, now: now)
+            .checked(at: "2026-08-18T01:00:02Z")
+            .using(resetStatusUTCCalendar)
+            .withTimeline(
+                resetStatusEmptyTimelineJSON(
+                    manualJSON: """
+                    {
+                      "id": "manual:cl_stale_evidence",
+                      "completedAt": "2026-08-13T04:35:00.000Z",
+                      "visibleUntil": "2026-08-23T04:35:00.000Z",
+                      "representativePostId": "2087706104814023111",
+                      "schedulePostIds": ["2087706104814023111"],
+                      "schedules": [\(scheduled.json)],
+                      "fulfillmentOrigin": "manual"
+                    }
+                    """))
+            .decode()
+
+        let lastReset = try resetStatusDate("2026-08-13T04:35:00Z")
+        #expect(snapshot.resolvedState(now: now, calendar: resetStatusUTCCalendar) == .no)
+        #expect(snapshot.nextScheduledReset(now: now) == nil)
+        #expect(snapshot.latestResetAt(now: now) == lastReset)
+        #expect(snapshot.primaryEvidenceEvent(now: now, calendar: resetStatusUTCCalendar) == nil)
+        #expect(
+            snapshot.evidenceLine(
+                l10n: L10n(language: .english),
+                now: now,
+                calendar: resetStatusUTCCalendar) == nil)
+        #expect(
+            snapshot.evidenceLine(
+                l10n: L10n(language: .simplifiedChinese),
+                now: now,
+                calendar: resetStatusUTCCalendar) == nil)
+        #expect(snapshot.evidenceURL(now: now, calendar: resetStatusUTCCalendar) == nil)
     }
 
 }

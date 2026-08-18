@@ -74,6 +74,8 @@ struct RateLimitResetTodayTimelineTests {
         #expect(snapshot.hasResetTimeline)
         #expect(snapshot.resolvedState(now: now) == .no)
         #expect(snapshot.nextScheduledReset(now: now) == nil)
+        #expect(snapshot.primaryEvidenceEvent(now: now) == nil)
+        #expect(snapshot.evidenceURL(now: now) == nil)
     }
 
     @Test("timeline-aware completion wins over an independent same-day schedule")

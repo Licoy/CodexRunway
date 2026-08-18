@@ -294,16 +294,16 @@ struct RateLimitResetTodayView: View {
                     hero(now: context.date)
                     nextScheduledSection(now: context.date)
                     scopeSummarySection(now: context.date)
-                    if hasEvidenceRow {
+                    if hasEvidenceRow(now: context.date) {
                         dividedSection {
-                            evidenceRowContent
+                            evidenceRowContent(now: context.date)
                         }
                     }
-                    if let footerText = footerMetaText {
+                    if let footerText = footerMetaText(now: context.date) {
                         dividedSection {
                             Text(footerText)
                                 .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                                 .lineLimit(2)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -489,13 +489,14 @@ struct RateLimitResetTodayView: View {
     }
 
     @ViewBuilder
-    private var evidenceRowContent: some View {
+    private func evidenceRowContent(now: Date) -> some View {
+        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
         let row = HStack(spacing: 6) {
             Image(systemName: "bubble.left")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            Text(evidenceLineText)
+            Text(evidenceLineText(now: now))
                 .font(.caption2)
                 .foregroundStyle(.primary.opacity(0.85))
                 .lineLimit(2)
@@ -503,16 +504,13 @@ struct RateLimitResetTodayView: View {
 
             Spacer(minLength: 4)
 
-            if snapshot?.evidenceURL(
-                calendar: RateLimitResetTodaySnapshot.localDayCalendar) != nil
-            {
+            if snapshot?.evidenceURL(now: now, calendar: calendar) != nil {
                 Image(systemName: "arrow.up.right")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
         }
-        if let url = snapshot?.evidenceURL(
-            calendar: RateLimitResetTodaySnapshot.localDayCalendar),
+        if let url = snapshot?.evidenceURL(now: now, calendar: calendar),
            let onOpenEvidence
         {
             EvidenceRowButton(
@@ -544,7 +542,7 @@ struct RateLimitResetTodayView: View {
     }
 
     /// Site-side meta only (last local refresh lives in the section header).
-    private var footerMetaText: String? {
+    private func footerMetaText(now: Date) -> String? {
         guard let snapshot else {
             return l10n.text(isRefreshing ? .calculating : .notLoaded)
         }
@@ -552,32 +550,32 @@ struct RateLimitResetTodayView: View {
         var parts: [String] = []
         if let checkedAt = snapshot.lastSuccessfulCheckAt {
             parts.append(
-                "\(l10n.text(.rateLimitResetTodayLastCheck)) \(DurationFormatter.relativePast(since: checkedAt, language: l10n.language))")
+                "\(l10n.text(.rateLimitResetTodayLastCheck)) \(DurationFormatter.relativePast(since: checkedAt, now: now, language: l10n.language))")
         }
-        if let resetAt = snapshot.latestResetAt() {
+        if let resetAt = snapshot.latestResetAt(now: now) {
             parts.append(
-                "\(l10n.text(.lastReset)) \(DurationFormatter.relativePast(since: resetAt, language: l10n.language))")
-        } else if snapshot.resolvedState(calendar: calendar) == .no,
-                  snapshot.nextScheduledReset() == nil
+                "\(l10n.text(.lastReset)) \(DurationFormatter.relativePast(since: resetAt, now: now, language: l10n.language))")
+        } else if snapshot.resolvedState(now: now, calendar: calendar) == .no,
+                  snapshot.nextScheduledReset(now: now) == nil
         {
             parts.append(l10n.text(.rateLimitResetTodayAwaiting))
         }
-        if let confidence = snapshot.primaryEvidenceEvent(calendar: calendar)?.confidence {
+        if let confidence = snapshot.primaryEvidenceEvent(now: now, calendar: calendar)?.confidence {
             parts.append(
                 "\(l10n.text(.rateLimitResetTodayConfidence)) \(Int((confidence * 100).rounded()))%")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private var hasEvidenceRow: Bool {
+    private func hasEvidenceRow(now: Date) -> Bool {
         let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-        return snapshot?.evidenceURL(calendar: calendar) != nil
-            || snapshot?.evidenceLine(l10n: l10n, calendar: calendar) != nil
+        return snapshot?.evidenceURL(now: now, calendar: calendar) != nil
+            || snapshot?.evidenceLine(l10n: l10n, now: now, calendar: calendar) != nil
     }
 
-    private var evidenceLineText: String {
+    private func evidenceLineText(now: Date) -> String {
         let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-        if let line = snapshot?.evidenceLine(l10n: l10n, calendar: calendar), !line.isEmpty {
+        if let line = snapshot?.evidenceLine(l10n: l10n, now: now, calendar: calendar), !line.isEmpty {
             return line
         }
         return l10n.text(.rateLimitResetTodayLatestEvidence)
@@ -799,7 +797,7 @@ struct RefreshableSectionHeader: View {
             if let trailingCaption, !trailingCaption.isEmpty {
                 Text(trailingCaption)
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(-1)
