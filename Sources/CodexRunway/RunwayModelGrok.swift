@@ -657,9 +657,16 @@ extension RunwayModel {
         }
 
         grokLastError = nil
-        grokAccountOperationMessage = grokPanelState.externalLoginChanged
-            ? l10n.text(.grokExternalLoginChanged)
-            : nil
+        if grokPanelState.externalLoginChanged {
+            grokAccountOperationMessage = l10n.text(.grokExternalLoginChanged)
+        } else if !isGrokIdentitySuccessMessage(grokAccountOperationMessage) {
+            grokAccountOperationMessage = nil
+        }
+    }
+
+    private func isGrokIdentitySuccessMessage(_ message: String?) -> Bool {
+        message == l10n.text(.grokSwitchOnlyNewSessions)
+            || message == l10n.text(.grokImportSucceeded)
     }
 
     private func finishGrokRefresh(generation: Int) {

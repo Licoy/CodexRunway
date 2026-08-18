@@ -1128,7 +1128,7 @@ private actor BlockingProfileUsageService {
     }
 
     func waitUntilFirstRequest() async throws {
-        for _ in 0..<100 {
+        for _ in 0..<300 {
             if firstRequestStarted { return }
             try await Task.sleep(for: .milliseconds(10))
         }

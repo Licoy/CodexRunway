@@ -383,7 +383,11 @@ struct RunwayModelProviderTests {
         #expect(model.grokAccountOperationMessage == model.l10n.text(.grokExternalLoginChanged))
 
         model.switchGrokAccount(id: second.id)
-        try await waitUntil { !model.isGrokAccountOperationInProgress }
+        try await waitUntil {
+            !model.isGrokAccountOperationInProgress
+                && !model.isRefreshingGrok
+                && model.grokAccountOperationMessage == model.l10n.text(.grokSwitchOnlyNewSessions)
+        }
         #expect(!model.grokPanelState.externalLoginChanged)
         #expect(model.grokAccountOperationMessage == model.l10n.text(.grokSwitchOnlyNewSessions))
         model.rebuildGrokPanelState()
