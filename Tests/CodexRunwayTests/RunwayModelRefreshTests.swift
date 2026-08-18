@@ -265,7 +265,7 @@ struct RunwayModelRefreshTests {
         #expect(try store.loadOfficialAuth().tokens.accountId == "acct-drifted")
 
         model.switchAccount(id: current.id, restartCodex: false)
-        try await waitForOfficialAccount("acct-current", in: store)
+        try await waitForOfficialAccount("acct-current", in: store, model: model)
 
         #expect(model.activeAccountId == current.id)
         #expect(try store.loadOfficialAuth().tokens.accountId == "acct-current")
@@ -812,9 +812,16 @@ struct RunwayModelRefreshTests {
         Issue.record("Timed out waiting for account store switch")
     }
 
-    private func waitForOfficialAccount(_ accountId: String, in store: AccountStore) async throws {
-        for _ in 0..<100 {
-            if (try? store.loadOfficialAuth())?.tokens.accountId == accountId {
+    private func waitForOfficialAccount(
+        _ accountId: String,
+        in store: AccountStore,
+        model: RunwayModel) async throws
+    {
+        // switchTo writes official auth before the switch Task finishes other work.
+        for _ in 0..<200 {
+            if (try? store.loadOfficialAuth())?.tokens.accountId == accountId,
+               !model.isSwitchingAccount
+            {
                 return
             }
             try await Task.sleep(for: .milliseconds(10))
