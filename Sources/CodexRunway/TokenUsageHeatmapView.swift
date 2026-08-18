@@ -176,7 +176,7 @@ struct TokenUsageHeatmapView: View {
             content
         }
         // Fixed height keeps NSPopover geometry stable when switching chart styles.
-        .frame(minHeight: chartContentMinHeight, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: chartContentMinHeight, alignment: .topLeading)
         .onAppear { rebuildData() }
         .onChange(of: dataFingerprint) { _ in
             rebuildData()
@@ -291,10 +291,13 @@ struct TokenUsageHeatmapView: View {
                 .labelsHidden()
                 .pickerStyle(.segmented)
                 .controlSize(.small)
-                .fixedSize(horizontal: true, vertical: false)
-                // Long locale labels (e.g. Russian "По неделям") must compress
-                // inside the panel instead of growing the section's ideal width.
+                // Cap first so long locale labels compress, then hug that size.
+                // The reverse order left a 252pt hole between the segments and
+                // the trailing controls, so the row never used the panel width.
                 .frame(maxWidth: 252, alignment: .leading)
+                .fixedSize(horizontal: true, vertical: false)
+
+                Spacer(minLength: 4)
 
                 // AppKit popup avoids SwiftUI Menu, which can collapse / mis-place NSPopover.
                 ChartStylePopUpButton(
@@ -322,6 +325,7 @@ struct TokenUsageHeatmapView: View {
                 .help(l10n.text(.refresh))
                 .pointingHandCursor()
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -351,9 +355,12 @@ struct TokenUsageHeatmapView: View {
 
     private func grid(_ snapshot: TokenUsageHeatmapSnapshot) -> some View {
         let weekCount = max(1, snapshot.weeks.count)
-        let outerHeight = contentHeight(cellSize: 11, rowSpacing: 2, labelSpacing: 6)
+        let outerHeight = contentHeight(
+            cellSize: HeatmapLayoutMetrics.maxCellSize,
+            rowSpacing: HeatmapLayoutMetrics.rowSpacing,
+            labelSpacing: HeatmapLayoutMetrics.labelSpacing)
         return GeometryReader { proxy in
-            let metrics = layoutMetrics(width: proxy.size.width, weekCount: weekCount)
+            let metrics = HeatmapLayoutMetrics.make(width: proxy.size.width, weekCount: weekCount)
             let height = contentHeight(
                 cellSize: metrics.cellSize,
                 rowSpacing: metrics.rowSpacing,
@@ -501,28 +508,6 @@ struct TokenUsageHeatmapView: View {
         hover.clear()
     }
 
-    /// Upper bound for grid cell sizing. The section can momentarily be proposed
-    /// its ideal width when localized header strings exceed the panel content
-    /// width; the grid must never size itself beyond the shipped popover content
-    /// area (400 − 2×16 padding − 4 scroll trailing padding).
-    private static let maxGridWidth: CGFloat = 364
-
-    private func layoutMetrics(width: CGFloat, weekCount: Int) -> HeatmapLayoutMetrics {
-        let columnSpacing: CGFloat = 2
-        let rowSpacing: CGFloat = 2
-        let count = max(1, weekCount)
-        let totalSpacing = columnSpacing * CGFloat(count - 1)
-        let width = min(width, Self.maxGridWidth)
-        let raw = floor(max(1, (width - totalSpacing) / CGFloat(count)))
-        let cellSize = min(11, max(5, raw))
-        return HeatmapLayoutMetrics(
-            cellSize: cellSize,
-            columnSpacing: columnSpacing,
-            rowSpacing: rowSpacing,
-            labelSpacing: 6,
-            weekCount: count)
-    }
-
     private func contentHeight(cellSize: CGFloat, rowSpacing: CGFloat, labelSpacing: CGFloat) -> CGFloat {
         cellSize * 7 + rowSpacing * 6 + labelSpacing + 14
     }
@@ -589,7 +574,16 @@ private final class HeatmapHoverStore: ObservableObject {
     }
 }
 
-private struct HeatmapLayoutMetrics: Equatable {
+struct HeatmapLayoutMetrics: Equatable {
+    /// Upper bound so a momentarily unconstrained header cannot grow the grid
+    /// past the shipped popover content area (400 − 2×16 padding − 4 scroll).
+    static let maxGridWidth: CGFloat = 364
+    static let minCellSize: CGFloat = 5
+    static let maxCellSize: CGFloat = 11
+    static let columnSpacing: CGFloat = 2
+    static let rowSpacing: CGFloat = 2
+    static let labelSpacing: CGFloat = 6
+
     var cellSize: CGFloat
     var columnSpacing: CGFloat
     var rowSpacing: CGFloat
@@ -598,6 +592,24 @@ private struct HeatmapLayoutMetrics: Equatable {
 
     var gridWidth: CGFloat {
         CGFloat(weekCount) * cellSize + CGFloat(max(0, weekCount - 1)) * columnSpacing
+    }
+
+    /// Sizes square cells to fill `width` when that stays within the cell cap.
+    /// Late-year YTD grids (≈30+ weeks) therefore sit flush with the panel;
+    /// early-year grids keep the compact GitHub-style cell size instead of
+    /// inflating a handful of columns.
+    static func make(width: CGFloat, weekCount: Int) -> HeatmapLayoutMetrics {
+        let count = max(1, weekCount)
+        let totalSpacing = columnSpacing * CGFloat(count - 1)
+        let available = min(max(0, width), maxGridWidth)
+        let raw = (available - totalSpacing) / CGFloat(count)
+        let cellSize = min(maxCellSize, max(minCellSize, raw))
+        return HeatmapLayoutMetrics(
+            cellSize: cellSize,
+            columnSpacing: columnSpacing,
+            rowSpacing: rowSpacing,
+            labelSpacing: labelSpacing,
+            weekCount: count)
     }
 }
 

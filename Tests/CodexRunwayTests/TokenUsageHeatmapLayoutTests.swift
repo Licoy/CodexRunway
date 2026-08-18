@@ -44,6 +44,51 @@ struct TokenUsageHeatmapLayoutTests {
         }
     }
 
+    @Test("late-year grid metrics fill the available panel width")
+    func lateYearGridMetricsFillWidth() {
+        let metrics = HeatmapLayoutMetrics.make(width: 364, weekCount: 34)
+        #expect(abs(metrics.gridWidth - 364) < 0.51)
+        #expect(metrics.cellSize > HeatmapLayoutMetrics.minCellSize)
+        #expect(metrics.cellSize <= HeatmapLayoutMetrics.maxCellSize)
+    }
+
+    @Test("early-year grid keeps the compact cell cap instead of inflating")
+    func earlyYearGridKeepsCellCap() {
+        let metrics = HeatmapLayoutMetrics.make(width: 364, weekCount: 5)
+        #expect(metrics.cellSize == HeatmapLayoutMetrics.maxCellSize)
+        #expect(metrics.gridWidth < 364)
+    }
+
+    @Test("year-end 53-week grid stays near the panel width")
+    func yearEndGridStaysBounded() {
+        let metrics = HeatmapLayoutMetrics.make(width: 364, weekCount: 53)
+        #expect(metrics.cellSize == HeatmapLayoutMetrics.minCellSize)
+        #expect(metrics.gridWidth <= 364 + Self.gridWidthTolerance)
+    }
+
+    @MainActor
+    @Test("rendered late-year heatmap uses the panel width")
+    func renderedLateYearHeatmapFillsPanel() throws {
+        let now = date(2026, 8, 18)
+        let host = makeHost(language: .simplifiedChinese, chartStyle: .heatmap, now: now)
+        guard hostAvailable(host) else { return }
+        let gridFrames = platformHostFrames(in: host, containing: "HeatmapGrid")
+        #expect(!gridFrames.isEmpty)
+        guard let grid = gridFrames.first else { return }
+        #expect(grid.minX >= -0.5)
+        #expect(grid.maxX <= Self.hostWidth + Self.gridWidthTolerance)
+        #expect(
+            grid.width >= Self.hostWidth - 12,
+            "grid should fill the panel, got width \(grid.width) in \(Self.hostWidth)")
+
+        let controls = platformHostFrames(in: host, containing: "PopUpButton")
+        if let popup = controls.first {
+            #expect(
+                popup.maxX >= Self.hostWidth - 40,
+                "style control should sit on the trailing edge, got \(popup)")
+        }
+    }
+
     @MainActor
     @Test("heatmap header controls stay visible for every language")
     func heatmapHeaderControlsStayInsidePanel() throws {
@@ -84,9 +129,9 @@ struct TokenUsageHeatmapLayoutTests {
     @MainActor
     private func makeHost(
         language: ResolvedLanguage,
-        chartStyle: TokenUsageChartStyle
+        chartStyle: TokenUsageChartStyle,
+        now: Date = Date()
     ) -> NSHostingView<AnyView> {
-        let now = Date()
         let heatmap = Self.mockTokens(now: now)
         let view = TokenUsageHeatmapView(
             allDevicesTokens: heatmap.mapValues { $0 * 2 },
@@ -147,6 +192,12 @@ struct TokenUsageHeatmapLayoutTests {
             index += 1
         }
         return heatmap
+    }
+
+    private func date(_ year: Int, _ month: Int, _ day: Int) -> Date {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0)!
+        return utc.date(from: DateComponents(year: year, month: month, day: day))!
     }
 
     private static func dayKey(_ date: Date, calendar: Calendar = Calendar(identifier: .gregorian)) -> String {
