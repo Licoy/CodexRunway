@@ -40,6 +40,8 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     private var timer: Timer?
     private var widgetCoordinator: RunwayWidgetCoordinator?
     private var widgetSnapshotCancellable: AnyCancellable?
+    private var liveMainPanelHeight: CGFloat?
+    private var mainPanelResizeTopEdge: CGFloat?
 
     init(initialWidgetReloadAllowed: Bool = true) {
         self.widgetReloadGate = RunwayWidgetReloadGate(
@@ -74,7 +76,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         popover.behavior = .applicationDefined
         popover.animates = false
         popover.delegate = self
-        popover.contentSize = NSSize(width: RunwayPopoverView.panelSize.width, height: RunwayPopoverView.panelSize.height)
+        popover.contentSize = mainPanelContentSize()
         // No hosting yet: showPopover builds a fresh tree per open, and while hidden no
         // SwiftUI tree stays alive subscribed to model publishes.
         resignActiveObserver = NotificationCenter.default.addObserver(
@@ -285,23 +287,116 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
             mainPanelVisibility: mainPanelVisibility,
             checkForUpdates: { [weak self] in self?.updaterService.checkForUpdates() },
             openGitHub: { ExternalURLLauncher.open(ControlPanelView.githubURL) },
-            openControlPanel: { [weak self] tab in self?.showControlPanel(tab: tab) })
+            openControlPanel: { [weak self] tab in self?.showControlPanel(tab: tab) },
+            initialPanelHeight: preferredMainPanelHeight,
+            resizeMainPanel: { [weak self] height, shouldPersist in
+                self?.resizeMainPanel(to: height, persist: shouldPersist)
+                    ?? MainPanelLayout.clampedHeight(height)
+            })
     }
 
     private func makePopoverHostingController() -> NSHostingController<RunwayPopoverRootView> {
         let controller = NSHostingController(rootView: popoverRootView())
-        controller.preferredContentSize = RunwayPopoverView.panelSize
+        controller.preferredContentSize = mainPanelContentSize()
         return controller
     }
 
     private func pinPopoverContentSize() {
-        let size = NSSize(
-            width: RunwayPopoverView.panelSize.width,
-            height: RunwayPopoverView.panelSize.height)
+        let size = mainPanelContentSize()
         popover.contentSize = size
         if let controller = popover.contentViewController {
             controller.preferredContentSize = size
         }
+    }
+
+    private var preferredMainPanelHeight: CGFloat {
+        resolvedMainPanelHeight(
+            liveMainPanelHeight ?? CGFloat(settings.preferences.mainPanelHeight))
+    }
+
+    private var availableMainPanelScreenHeight: CGFloat? {
+        let screen = loadedPopoverWindow?.screen
+            ?? detailsWindow?.screen
+            ?? statusItem.button?.window?.screen
+            ?? NSScreen.main
+        return screen?.visibleFrame.height
+    }
+
+    private func resolvedMainPanelHeight(_ proposedHeight: CGFloat) -> CGFloat {
+        MainPanelLayout.alignedHeight(
+            MainPanelLayout.clampedHeight(
+                proposedHeight,
+                availableScreenHeight: availableMainPanelScreenHeight))
+    }
+
+    private func mainPanelContentSize(height: CGFloat? = nil) -> NSSize {
+        MainPanelLayout.contentSize(
+            height: height ?? preferredMainPanelHeight,
+            availableScreenHeight: availableMainPanelScreenHeight)
+    }
+
+    @discardableResult
+    private func resizeMainPanel(to proposedHeight: CGFloat, persist: Bool) -> CGFloat {
+        let height = resolvedMainPanelHeight(proposedHeight)
+        let currentHeight = liveMainPanelHeight ?? preferredMainPanelHeight
+        captureMainPanelResizeTopEdgeIfNeeded()
+
+        if height != currentHeight {
+            liveMainPanelHeight = height
+            let size = mainPanelContentSize(height: height)
+
+            popover.contentSize = size
+            popover.contentViewController?.preferredContentSize = size
+            if let window = loadedPopoverWindow, let topEdge = mainPanelResizeTopEdge {
+                keepWindowTopEdge(window, at: topEdge)
+            }
+            if let detailsWindow, detailsWindow.isVisible {
+                resizeDetailsWindow(
+                    detailsWindow,
+                    contentSize: size,
+                    topEdge: mainPanelResizeTopEdge)
+            }
+        }
+
+        if persist {
+            settings.updateMainPanelHeight(liveMainPanelHeight ?? currentHeight)
+            mainPanelResizeTopEdge = nil
+        }
+        return liveMainPanelHeight ?? currentHeight
+    }
+
+    private func captureMainPanelResizeTopEdgeIfNeeded() {
+        guard mainPanelResizeTopEdge == nil else { return }
+        if let window = loadedPopoverWindow {
+            mainPanelResizeTopEdge = window.frame.maxY
+        } else if let detailsWindow, detailsWindow.isVisible {
+            mainPanelResizeTopEdge = detailsWindow.frame.maxY
+        }
+    }
+
+    private func keepWindowTopEdge(_ window: NSWindow, at topEdge: CGFloat) {
+        let frame = MainPanelLayout.frameKeepingTopEdge(
+            window.frame,
+            size: window.frame.size,
+            topEdge: topEdge)
+        guard frame.origin != window.frame.origin else { return }
+        window.setFrameOrigin(frame.origin)
+    }
+
+    /// The resize handle represents the bottom edge, so keep a fallback window's
+    /// top edge fixed while its bottom follows the pointer.
+    private func resizeDetailsWindow(
+        _ window: NSWindow,
+        contentSize: NSSize,
+        topEdge: CGFloat? = nil
+    ) {
+        let contentRect = NSRect(origin: .zero, size: contentSize)
+        let frameSize = window.frameRect(forContentRect: contentRect).size
+        let frame = MainPanelLayout.frameKeepingTopEdge(
+            window.frame,
+            size: frameSize,
+            topEdge: topEdge ?? window.frame.maxY)
+        window.setFrame(frame, display: true)
     }
 
     /// Re-show relative to the status button after any geometry glitch.
@@ -354,6 +449,8 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         // Visible before show so the first frame already renders with shimmer unpaused;
         // fresh hosting per open (dropped on close) keeps presentation state clean.
         mainPanelVisibility.isVisible = true
+        liveMainPanelHeight = resolvedMainPanelHeight(
+            CGFloat(settings.preferences.mainPanelHeight))
         if popover.contentViewController == nil {
             popover.contentViewController = makePopoverHostingController()
         }
@@ -489,6 +586,8 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         mainPanelVisibility.isVisible = false
         popover.contentViewController = nil
         detailsWindow?.contentViewController = nil
+        liveMainPanelHeight = nil
+        mainPanelResizeTopEdge = nil
     }
 
     private func eventHitsStatusButtonScreen(_ event: NSEvent) -> Bool {
@@ -519,9 +618,12 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     }
 
     private func showDetailsWindow() {
+        liveMainPanelHeight = resolvedMainPanelHeight(
+            CGFloat(settings.preferences.mainPanelHeight))
+        let contentSize = mainPanelContentSize()
         let isNew = detailsWindow == nil
         let window = detailsWindow ?? NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: RunwayPopoverView.panelSize.width, height: RunwayPopoverView.panelSize.height),
+            contentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false)
@@ -531,8 +633,11 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         // Title-bar close must run the same teardown as outside-clicks, or the
         // hosted tree (and its 30fps sheen timers) survives behind a closed window.
         window.delegate = self
-        window.contentViewController = NSHostingController(rootView: popoverRootView())
+        window.contentViewController = makePopoverHostingController()
         detailsWindow = window
+        if !isNew {
+            resizeDetailsWindow(window, contentSize: contentSize)
+        }
         mainPanelVisibility.isVisible = true
         applyAppearance()
         NSApp.activate(ignoringOtherApps: true)

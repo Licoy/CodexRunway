@@ -11,6 +11,10 @@ struct RunwayPopoverRootView: View {
     var checkForUpdates: () -> Void
     var openGitHub: () -> Void
     var openControlPanel: (ControlPanelTab) -> Void
+    var initialPanelHeight: CGFloat = MainPanelLayout.defaultHeight
+    var resizeMainPanel: (CGFloat, Bool) -> CGFloat = { height, _ in
+        MainPanelLayout.clampedHeight(height)
+    }
     /// Dev mock renders only: start on a detail page instead of the summary.
     var initialDetailPage: RunwaySidePanel? = nil
 
@@ -21,23 +25,27 @@ struct RunwayPopoverRootView: View {
             checkForUpdates: checkForUpdates,
             openGitHub: openGitHub,
             openControlPanel: openControlPanel,
+            initialPanelHeight: initialPanelHeight,
+            resizeMainPanel: resizeMainPanel,
             initialDetailPage: initialDetailPage)
             .environment(\.runwayPanelVisible, mainPanelVisibility.isVisible)
     }
 }
 
 struct RunwayPopoverView: View {
-    static let panelSize = CGSize(width: 400, height: 584)
+    static let panelSize = MainPanelLayout.defaultSize
 
     @ObservedObject var model: RunwayModel
     @ObservedObject var settings: RunwaySettings
     var checkForUpdates: () -> Void
     var openGitHub: () -> Void
     var openControlPanel: (ControlPanelTab) -> Void
+    var resizeMainPanel: (CGFloat, Bool) -> CGFloat
 
     @State private var confirmRepair = false
     @State private var detailPage: RunwaySidePanel?
     @State private var apiCostDetailRange = ApiCostSummaryRange.today
+    @State private var panelHeight: CGFloat
     private var l10n: L10n { settings.l10n }
     private var visibleSections: [RunwayMainPanelSection] {
         RunwayMainPanelSections.orderedVisible(
@@ -65,6 +73,10 @@ struct RunwayPopoverView: View {
         checkForUpdates: @escaping () -> Void,
         openGitHub: @escaping () -> Void,
         openControlPanel: @escaping (ControlPanelTab) -> Void,
+        initialPanelHeight: CGFloat = MainPanelLayout.defaultHeight,
+        resizeMainPanel: @escaping (CGFloat, Bool) -> CGFloat = { height, _ in
+            MainPanelLayout.clampedHeight(height)
+        },
         initialDetailPage: RunwaySidePanel? = nil)
     {
         self.model = model
@@ -72,7 +84,9 @@ struct RunwayPopoverView: View {
         self.checkForUpdates = checkForUpdates
         self.openGitHub = openGitHub
         self.openControlPanel = openControlPanel
+        self.resizeMainPanel = resizeMainPanel
         _detailPage = State(initialValue: initialDetailPage)
+        _panelHeight = State(initialValue: MainPanelLayout.clampedHeight(initialPanelHeight))
         // Mock renders land on the api-cost page without a user tap; current-cycle
         // is the only range whose data is seeded on the model.
         if initialDetailPage == .apiCost {
@@ -125,7 +139,12 @@ struct RunwayPopoverView: View {
                 footer
             }
         }
-        .frame(width: Self.panelSize.width, height: Self.panelSize.height, alignment: .topLeading)
+        .frame(width: Self.panelSize.width, height: panelHeight, alignment: .topLeading)
+        .overlay(alignment: .bottom) {
+            MainPanelResizeHandle(
+                panelHeight: $panelHeight,
+                onResize: resizeMainPanel)
+        }
         .preferredColorScheme(settings.colorScheme)
         .alert(l10n.text(.repairConfirmTitle), isPresented: $confirmRepair) {
             Button(l10n.text(.repair), role: .destructive) { model.repairSessions() }
@@ -426,6 +445,64 @@ struct RunwayPopoverView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+    }
+}
+
+private struct MainPanelResizeHandle: View {
+    @Binding var panelHeight: CGFloat
+    var onResize: (CGFloat, Bool) -> CGFloat
+
+    @State private var dragStartHeight: CGFloat?
+    @State private var dragStartPointerY: CGFloat?
+    @State private var isHovered = false
+    @State private var isResizing = false
+
+    var body: some View {
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .frame(height: 10)
+            .contentShape(Rectangle())
+            .overlay {
+                Capsule()
+                    .fill(Color.secondary.opacity(isHovered || isResizing ? 0.55 : 0))
+                    .frame(width: 36, height: 3)
+            }
+            .verticalResizeCursor()
+            .onHover { isHovered = $0 }
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged(resize)
+                    .onEnded(finishResizing))
+            .animation(.easeOut(duration: 0.12), value: isHovered)
+            .animation(.easeOut(duration: 0.12), value: isResizing)
+            .accessibilityHidden(true)
+    }
+
+    private func resize(_ value: DragGesture.Value) {
+        _ = value
+        updateHeight(currentPointerY: NSEvent.mouseLocation.y, persist: false)
+    }
+
+    private func finishResizing(_ value: DragGesture.Value) {
+        _ = value
+        updateHeight(currentPointerY: NSEvent.mouseLocation.y, persist: true)
+        dragStartHeight = nil
+        dragStartPointerY = nil
+        isResizing = false
+    }
+
+    private func updateHeight(currentPointerY: CGFloat, persist: Bool) {
+        let startHeight = dragStartHeight ?? panelHeight
+        if dragStartHeight == nil {
+            dragStartHeight = startHeight
+            dragStartPointerY = currentPointerY
+            isResizing = true
+        }
+        let proposed = MainPanelLayout.proposedHeight(
+            startHeight: startHeight,
+            initialPointerY: dragStartPointerY ?? currentPointerY,
+            currentPointerY: currentPointerY)
+        panelHeight = onResize(proposed, persist)
     }
 }
 

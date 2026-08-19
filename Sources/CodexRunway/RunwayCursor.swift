@@ -1,11 +1,12 @@
 import AppKit
 import SwiftUI
 
-/// Balanced pointing-hand cursor for hoverable controls. `NSCursor.push/pop` is an
+/// Balanced cursor for hoverable controls. `NSCursor.push/pop` is an
 /// app-global stack, so every push must be matched even when the hovered view is
 /// removed by its own click action (SwiftUI delivers no closing onHover then) or
 /// the control becomes disabled mid-hover.
-private struct PointingHandCursor: ViewModifier {
+private struct RunwayCursor: ViewModifier {
+    var cursor: NSCursor
     var isEnabled: Bool
 
     @State private var isHovering = false
@@ -31,7 +32,7 @@ private struct PointingHandCursor: ViewModifier {
         guard wantsCursor != pushed else { return }
         pushed = wantsCursor
         if wantsCursor {
-            NSCursor.pointingHand.push()
+            cursor.push()
         } else {
             NSCursor.pop()
         }
@@ -42,6 +43,11 @@ extension View {
     /// Shows the pointing-hand cursor while hovered; pops it when the pointer
     /// leaves, the control disables, or the view unmounts.
     func pointingHandCursor(enabled: Bool = true) -> some View {
-        modifier(PointingHandCursor(isEnabled: enabled))
+        modifier(RunwayCursor(cursor: .pointingHand, isEnabled: enabled))
+    }
+
+    /// Shows the vertical resize cursor while hovering a draggable panel edge.
+    func verticalResizeCursor(enabled: Bool = true) -> some View {
+        modifier(RunwayCursor(cursor: .resizeUpDown, isEnabled: enabled))
     }
 }

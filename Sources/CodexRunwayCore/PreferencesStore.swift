@@ -95,6 +95,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     public var refreshIntervalSeconds: Int
     public var widgetRefreshIntervalSeconds: Int
     public var apiCostSummaryRange: ApiCostSummaryRange
+    public var mainPanelHeight: Double
     public var mainPanelModuleOrder: [MainPanelModule]
     public var showsQuotaSummary: Bool
     public var showsResetCreditsSummary: Bool
@@ -114,6 +115,9 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
 
     public static let widgetRefreshIntervalOptions: [Int] = [60, 300, 600, 900, 1_800]
     public static let defaultWidgetRefreshIntervalSeconds = 60
+    public static let defaultMainPanelHeight = 584.0
+    public static let minimumMainPanelHeight = 360.0
+    public static let maximumMainPanelHeight = 900.0
     public static let rateLimitResetTodayRefreshIntervalOptions: [Int] = [900, 1_800, 3_600, 7_200, 21_600]
     public static let defaultRateLimitResetTodayRefreshIntervalSeconds = 3_600
     public static let defaultMainPanelModuleOrder: [MainPanelModule] = [
@@ -138,6 +142,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         refreshIntervalSeconds: Int = 300,
         widgetRefreshIntervalSeconds: Int = RunwayPreferences.defaultWidgetRefreshIntervalSeconds,
         apiCostSummaryRange: ApiCostSummaryRange = .today,
+        mainPanelHeight: Double = RunwayPreferences.defaultMainPanelHeight,
         mainPanelModuleOrder: [MainPanelModule] = RunwayPreferences.defaultMainPanelModuleOrder,
         showsQuotaSummary: Bool = true,
         showsResetCreditsSummary: Bool = true,
@@ -166,6 +171,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         self.refreshIntervalSeconds = refreshIntervalSeconds
         self.widgetRefreshIntervalSeconds = Self.clampWidgetRefreshInterval(widgetRefreshIntervalSeconds)
         self.apiCostSummaryRange = apiCostSummaryRange
+        self.mainPanelHeight = Self.clampMainPanelHeight(mainPanelHeight)
         self.mainPanelModuleOrder = Self.normalizedMainPanelModuleOrder(mainPanelModuleOrder)
         self.showsQuotaSummary = showsQuotaSummary
         self.showsResetCreditsSummary = showsResetCreditsSummary
@@ -191,6 +197,11 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
 
     public static func clampWidgetRefreshInterval(_ seconds: Int) -> Int {
         max(60, min(1_800, seconds))
+    }
+
+    public static func clampMainPanelHeight(_ height: Double) -> Double {
+        guard height.isFinite else { return defaultMainPanelHeight }
+        return max(minimumMainPanelHeight, min(maximumMainPanelHeight, height))
     }
 
     public static func normalizedMainPanelModuleOrder(
@@ -226,6 +237,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         case refreshIntervalSeconds
         case widgetRefreshIntervalSeconds
         case apiCostSummaryRange
+        case mainPanelHeight
         case mainPanelModuleOrder
         case showsQuotaSummary
         case showsResetCreditsSummary
@@ -259,6 +271,9 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
             try container.decodeIfPresent(Int.self, forKey: .widgetRefreshIntervalSeconds)
                 ?? Self.defaultWidgetRefreshIntervalSeconds)
         apiCostSummaryRange = try container.decodeIfPresent(ApiCostSummaryRange.self, forKey: .apiCostSummaryRange) ?? .today
+        mainPanelHeight = Self.clampMainPanelHeight(
+            try container.decodeIfPresent(Double.self, forKey: .mainPanelHeight)
+                ?? Self.defaultMainPanelHeight)
         let storedModuleIDs = try container.decodeIfPresent(
             [String].self,
             forKey: .mainPanelModuleOrder)

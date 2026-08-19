@@ -75,6 +75,14 @@ final class RunwaySettings: ObservableObject {
         update { $0.apiCostSummaryRange = range }
     }
 
+    /// Panel geometry only affects the hosted view. Avoid the broader settings
+    /// callback, which relabels models and rebuilds unrelated status-bar content.
+    func updateMainPanelHeight(_ height: CGFloat) {
+        update(notify: false) {
+            $0.mainPanelHeight = RunwayPreferences.clampMainPanelHeight(Double(height))
+        }
+    }
+
     func moveMainPanelModule(_ module: MainPanelModule, by offset: Int) {
         update { $0.moveMainPanelModule(module, by: offset) }
     }
@@ -146,11 +154,16 @@ final class RunwaySettings: ObservableObject {
         update { $0.exportsStatusJSON = isEnabled }
     }
 
-    private func update(_ change: (inout RunwayPreferences) -> Void) {
+    private func update(
+        notify: Bool = true,
+        _ change: (inout RunwayPreferences) -> Void
+    ) {
         var next = preferences
         change(&next)
         preferences = next
         store.save(preferences)
-        onChange?()
+        if notify {
+            onChange?()
+        }
     }
 }
