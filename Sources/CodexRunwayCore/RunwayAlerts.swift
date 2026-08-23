@@ -14,6 +14,7 @@ public struct RunwayAlert: Codable, Sendable, Equatable, Identifiable {
     public var threshold: Int?
     public var date: Date?
     public var endDate: Date?
+    public var resetType: RateLimitResetType?
 
     public init(
         id: String,
@@ -21,7 +22,8 @@ public struct RunwayAlert: Codable, Sendable, Equatable, Identifiable {
         name: String,
         threshold: Int?,
         date: Date?,
-        endDate: Date? = nil)
+        endDate: Date? = nil,
+        resetType: RateLimitResetType? = nil)
     {
         self.id = id
         self.kind = kind
@@ -29,6 +31,7 @@ public struct RunwayAlert: Codable, Sendable, Equatable, Identifiable {
         self.threshold = threshold
         self.date = date
         self.endDate = endDate
+        self.resetType = resetType
     }
 }
 
@@ -79,23 +82,21 @@ public enum RunwayAlertDecider {
     {
         var alerts: [RunwayAlert] = []
 
-        // "Detected" means a reset has already become effective today — not merely scheduled.
-        // Skip the very first successful load so app launch does not spam when a reset already exists.
-        // Compare both snapshots against the same `now` so a new local-day reset is still detected.
+        // Skip the first successful load so app launch does not spam for existing resets.
+        // Identity, rather than type, owns detection so a classification correction does not re-alert.
         if let previous {
-            let previousEffective = previous.hasAlreadyEffectiveResetToday(now: now, calendar: calendar)
-            let currentEffective = current.hasAlreadyEffectiveResetToday(now: now, calendar: calendar)
-            if currentEffective, !previousEffective {
-                let postID = current.primaryEvidenceEvent(now: now, calendar: calendar)?.source.postID
-                    ?? current.latestEvent?.source.postID
-                    ?? "unknown"
-                let day = calendar.startOfDay(for: now).timeIntervalSince1970
+            let previousIDs = Set(resetOccurrences(in: previous, now: now, calendar: calendar).map(\.id))
+            let day = Int(calendar.startOfDay(for: now).timeIntervalSince1970)
+            for occurrence in resetOccurrences(in: current, now: now, calendar: calendar)
+                where !previousIDs.contains(occurrence.id)
+            {
                 alerts.append(RunwayAlert(
-                    id: "rate-limit-reset:detected:\(postID):\(Int(day))",
+                    id: "rate-limit-reset:detected:\(occurrence.id):\(day)",
                     kind: .rateLimitResetDetected,
-                    name: postID,
+                    name: occurrence.name,
                     threshold: nil,
-                    date: current.latestResetAt(now: now)))
+                    date: occurrence.date,
+                    resetType: occurrence.resetType))
             }
         }
 
@@ -121,11 +122,51 @@ public enum RunwayAlertDecider {
                     name: postID,
                     threshold: threshold,
                     date: next.effectiveAt,
-                    endDate: next.isRange ? next.effectiveUntil : nil))
+                    endDate: next.isRange ? next.effectiveUntil : nil,
+                    resetType: next.event.resetType))
             }
         }
 
         return alerts
+    }
+
+    private struct ResetOccurrence {
+        var id: String
+        var name: String
+        var date: Date
+        var resetType: RateLimitResetType
+    }
+
+    private static func resetOccurrences(
+        in snapshot: RateLimitResetTodaySnapshot,
+        now: Date,
+        calendar: Calendar) -> [ResetOccurrence]
+    {
+        var occurrences = snapshot.events.compactMap { event -> ResetOccurrence? in
+            guard event.kind == .resetCompleted else { return nil }
+            let date = event.effectiveAt ?? event.announcedAt
+            guard date <= now, calendar.isDate(date, inSameDayAs: now) else { return nil }
+            return ResetOccurrence(
+                id: event.source.postID,
+                name: event.source.postID,
+                date: date,
+                resetType: event.resetType)
+        }
+        occurrences += snapshot.visibleManualCompletions(now: now).compactMap { completion in
+            guard completion.completedAt <= now,
+                  calendar.isDate(completion.completedAt, inSameDayAs: now)
+            else { return nil }
+            return ResetOccurrence(
+                id: completion.id,
+                name: completion.representativePostID,
+                date: completion.completedAt,
+                resetType: completion.resetType)
+        }
+        occurrences.sort { lhs, rhs in
+            lhs.date == rhs.date ? lhs.id < rhs.id : lhs.date < rhs.date
+        }
+        var seen = Set<String>()
+        return occurrences.filter { seen.insert($0.id).inserted }
     }
 }
 

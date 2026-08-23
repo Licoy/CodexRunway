@@ -3,6 +3,7 @@ import Foundation
 
 struct ResetStatusEventFixture {
     var kind: String
+    var resetType: String? = nil
     var announcedAt: String
     var effectiveAt: String? = nil
     var schedulePrecision: String? = nil
@@ -12,6 +13,9 @@ struct ResetStatusEventFixture {
     var json: String {
         let effectiveValue = effectiveAt.map { "\"\($0)\"" } ?? "null"
         var extra = ""
+        if let resetType {
+            extra += ",\n          \"resetType\": \"\(resetType)\""
+        }
         if let schedulePrecision {
             extra += ",\n          \"schedulePrecision\": \"\(schedulePrecision)\""
         }
@@ -39,12 +43,33 @@ struct ResetStatusEventFixture {
     private var rationale: String {
         switch kind {
         case "reset_completed":
-            "Explicit Codex quota reset announcement."
+            switch resetType {
+            case "banked":
+                "Explicit Codex reset-bank credit announcement."
+            case "global_and_banked":
+                "Explicit Codex global reset and reset-bank credit announcement."
+            default:
+                "Explicit Codex quota reset announcement."
+            }
         case "reset_scheduled":
             if scheduleBasis == "contextual_inference" {
-                "High-probability Codex quota reset preview inferred from context."
+                switch resetType {
+                case "banked":
+                    "High-probability Codex reset-bank credit preview inferred from context."
+                case "global_and_banked":
+                    "High-probability Codex global reset and reset-bank credit preview inferred from context."
+                default:
+                    "High-probability Codex quota reset preview inferred from context."
+                }
             } else {
-                "Explicit Codex quota reset schedule."
+                switch resetType {
+                case "banked":
+                    "Explicit Codex reset-bank credit schedule."
+                case "global_and_banked":
+                    "Explicit Codex global reset and reset-bank credit schedule."
+                default:
+                    "Explicit Codex quota reset schedule."
+                }
             }
         case "banked_reset":
             "Banked reset announcement; not a completed reset."

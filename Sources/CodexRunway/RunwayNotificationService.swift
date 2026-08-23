@@ -55,10 +55,25 @@ struct RunwayNotificationService {
         case .resetCredit:
             return l10n.text(.resetCreditAlertTitle)
         case .rateLimitResetDetected:
+            if let resetType = alert.resetType {
+                return String(
+                    format: l10n.text(.rateLimitResetDetectedTypedAlertTitle),
+                    resetType.localizedName(l10n: l10n))
+            }
             return l10n.text(.rateLimitResetDetectedAlertTitle)
         case .rateLimitResetUpcoming:
             if alert.endDate != nil {
+                if let resetType = alert.resetType {
+                    return String(
+                        format: l10n.text(.rateLimitResetUpcomingTypedRangeAlertTitle),
+                        resetType.localizedName(l10n: l10n))
+                }
                 return l10n.text(.rateLimitResetUpcomingRangeAlertTitle)
+            }
+            if let resetType = alert.resetType {
+                return String(
+                    format: l10n.text(.rateLimitResetUpcomingTypedAlertTitle),
+                    resetType.localizedName(l10n: l10n))
             }
             return l10n.text(.rateLimitResetUpcomingAlertTitle)
         }
@@ -78,7 +93,14 @@ struct RunwayNotificationService {
         case .resetCredit:
             return l10n.text(.resetCreditAlertBody)
         case .rateLimitResetDetected:
-            return l10n.text(.rateLimitResetDetectedAlertBody)
+            return switch alert.resetType {
+            case .banked:
+                l10n.text(.rateLimitResetDetectedBankedAlertBody)
+            case .globalAndBanked:
+                l10n.text(.rateLimitResetDetectedGlobalAndBankedAlertBody)
+            case .global, nil:
+                l10n.text(.rateLimitResetDetectedAlertBody)
+            }
         case .rateLimitResetUpcoming:
             if let startAt = alert.date, let endAt = alert.endDate {
                 let window = RateLimitResetScheduleWindow(

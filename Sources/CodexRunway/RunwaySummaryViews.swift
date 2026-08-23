@@ -360,37 +360,58 @@ struct RateLimitResetTodayView: View {
 
     @ViewBuilder
     private func heroSubtitleView(now: Date) -> some View {
-        // First row: keep absolute time only (no relative countdown) so it stays single-line aligned.
-        if let detail = heroYesTimeDetail(now: now) {
-            let prefix = heroYesPrefix(now: now)
-            (
-                Text("\(prefix) · ")
-                    .foregroundColor(Color(nsColor: .secondaryLabelColor))
-                + Text(detail.text)
-                    .foregroundColor(detail.color)
-            )
-            .font(.caption2)
-            .multilineTextAlignment(.leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .layoutPriority(1)
-        } else {
-            Text(heroSubtitle(now: now))
+        VStack(alignment: .leading, spacing: 4) {
+            if let resetType = snapshot?.displayResetType(now: now) {
+                resetTypeBadge(resetType)
+            }
+
+            // Keep the absolute time free of a live countdown so the hero stays stable.
+            if let detail = heroYesTimeDetail(now: now) {
+                let prefix = heroYesPrefix(now: now)
+                (
+                    Text("\(prefix) · ")
+                        .foregroundColor(Color(nsColor: .secondaryLabelColor))
+                    + Text(detail.text)
+                        .foregroundColor(detail.color)
+                )
                 .font(.caption2)
-                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
-                .layoutPriority(1)
+            } else {
+                Text(heroSubtitle(now: now))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+        .layoutPriority(1)
+    }
+
+    private func resetTypeBadge(_ resetType: RateLimitResetType) -> some View {
+        let label = resetType.localizedName(l10n: l10n)
+        let color = resetTypeColor(resetType)
+        return Text(label)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(color)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .accessibilityLabel(Text(label))
     }
 
     /// "Already reset" vs "scheduled later today" prefix for the yes hero line.
     private func heroYesPrefix(now: Date) -> String {
         guard let snapshot else { return l10n.text(.rateLimitResetTodayYesHint) }
         let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-        if snapshot.prefersSameDayScheduleExplanation(now: now, calendar: calendar) {
-            return l10n.text(.rateLimitResetTodayYesHintScheduled)
+        if snapshot.prefersSameDayScheduleExplanation(now: now, calendar: calendar),
+           let next = snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar)
+        {
+            return scheduledHint(for: next.event.resetType)
         }
-        return l10n.text(.rateLimitResetTodayYesHint)
+        return completedHint(for: snapshot.displayResetType(now: now, calendar: calendar) ?? .global)
     }
 
     private func heroYesTimeDetail(now: Date) -> (text: String, color: Color)? {
@@ -472,6 +493,9 @@ struct RateLimitResetTodayView: View {
                     (
                         Text("\(l10n.text(.rateLimitResetTodayNextScheduled))\(separator)")
                             .foregroundColor(Color(nsColor: .secondaryLabelColor))
+                        + Text("\(next.event.resetType.localizedName(l10n: l10n)) · ")
+                            .foregroundColor(resetTypeColor(next.event.resetType))
+                            .fontWeight(.semibold)
                         + Text(absolute)
                             .foregroundColor(Color(nsColor: .systemBlue))
                             .fontWeight(.bold)
@@ -611,11 +635,11 @@ struct RateLimitResetTodayView: View {
             // Time detail is rendered separately in small type via heroYesTimeDetail.
             // When only a same-day schedule remains (no past reset yet), use scheduled copy.
             if snapshot.prefersSameDayScheduleExplanation(now: now, calendar: calendar),
-               snapshot.latestResetAt(now: now) == nil
+               let next = snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar)
             {
-                return l10n.text(.rateLimitResetTodayYesHintScheduled)
+                return scheduledHint(for: next.event.resetType)
             }
-            return l10n.text(.rateLimitResetTodayYesHint)
+            return completedHint(for: snapshot.displayResetType(now: now, calendar: calendar) ?? .global)
         case .no:
             if let next = snapshot.nextScheduledReset(now: now) {
                 let window = RateLimitResetScheduleWindow(
@@ -656,6 +680,43 @@ struct RateLimitResetTodayView: View {
             return Color(nsColor: .systemOrange)
         case .unknown:
             return Color(nsColor: .secondaryLabelColor)
+        }
+    }
+
+    private func completedHint(for resetType: RateLimitResetType) -> String {
+        switch resetType {
+        case .global:
+            l10n.text(.rateLimitResetTodayYesHint)
+        case .banked:
+            l10n.text(.rateLimitResetTodayBankedCompletedHint)
+        case .globalAndBanked:
+            l10n.text(.rateLimitResetTodayGlobalAndBankedCompletedHint)
+        }
+    }
+
+    private func scheduledHint(for resetType: RateLimitResetType) -> String {
+        switch resetType {
+        case .global:
+            l10n.text(.rateLimitResetTodayYesHintScheduled)
+        case .banked:
+            l10n.text(.rateLimitResetTodayBankedScheduledHint)
+        case .globalAndBanked:
+            l10n.text(.rateLimitResetTodayGlobalAndBankedScheduledHint)
+        }
+    }
+
+    private func resetTypeColor(_ resetType: RateLimitResetType) -> Color {
+        Color(nsColor: resetTypeNSColor(resetType))
+    }
+
+    private func resetTypeNSColor(_ resetType: RateLimitResetType) -> NSColor {
+        switch resetType {
+        case .global:
+            .systemGreen
+        case .banked:
+            .systemBlue
+        case .globalAndBanked:
+            .systemPurple
         }
     }
 }

@@ -244,12 +244,34 @@ struct RunwayResetTodayWidgetView: View {
                 Text(stateText(reset.state, l10n: l10n))
                     .font(.system(size: family == .systemSmall ? 34 : 42, weight: .bold, design: .rounded))
                     .foregroundStyle(stateColor(reset.state))
+                if let resetType = reset.resetType {
+                    Text(resetType.localizedName(l10n: l10n))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(resetTypeColor(resetType))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.75)
+                }
                 if let next = reset.nextScheduledAt {
                     HStack(spacing: 5) {
-                        Text(l10n.text(.rateLimitResetTodayNextScheduled))
+                        if let resetType = reset.nextScheduledResetType {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .foregroundStyle(.secondary)
+                            Text(resetType.localizedName(l10n: l10n))
+                                .fontWeight(.semibold)
+                                .foregroundStyle(resetTypeColor(resetType))
+                        } else {
+                            Text(l10n.text(.rateLimitResetTodayNextScheduled))
+                        }
+                        Spacer(minLength: 4)
                         Text(next, style: .timer).monospacedDigit()
                     }
                     .font(.caption)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.75)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(
+                        Text(nextScheduleAccessibilityLabel(reset.nextScheduledResetType, l10n: l10n)))
+                    .accessibilityValue(Text(next, style: .timer))
                 }
                 if family == .systemMedium, let checked = reset.lastSuccessfulCheckAt {
                     HStack(spacing: 4) {
@@ -289,5 +311,22 @@ struct RunwayResetTodayWidgetView: View {
         case .no: .primary
         case .unknown: .yellow
         }
+    }
+
+    private func resetTypeColor(_ resetType: RateLimitResetType) -> Color {
+        switch resetType {
+        case .global: Color(nsColor: .systemGreen)
+        case .banked: Color(nsColor: .systemBlue)
+        case .globalAndBanked: Color(nsColor: .systemPurple)
+        }
+    }
+
+    private func nextScheduleAccessibilityLabel(
+        _ resetType: RateLimitResetType?,
+        l10n: L10n
+    ) -> String {
+        let label = l10n.text(.rateLimitResetTodayNextScheduled)
+        guard let resetType else { return label }
+        return "\(label) · \(resetType.localizedName(l10n: l10n))"
     }
 }

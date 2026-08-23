@@ -64,6 +64,9 @@ extension RateLimitResetTodaySnapshot {
             guard next.kind == .resetScheduled else {
                 throw invalidPayload("nextSchedule must be a scheduled reset.")
             }
+            guard next.resetType.includes(.global) else {
+                throw invalidPayload("nextSchedule must include a global reset.")
+            }
         }
         if let postID = timeline.recentNonCompletedPostId {
             try validatePostID(postID, label: "recentNonCompletedPostId")
@@ -179,7 +182,20 @@ extension RateLimitResetTodaySnapshot {
             guard event.effectiveAt != nil else {
                 throw invalidPayload("A scheduled reset must include its effective time.")
             }
-        case .bankedReset, .limitIncrease, .uncertain:
+        case .bankedReset:
+            guard event.resetType != .globalAndBanked else {
+                throw invalidPayload("A banked reset origin cannot combine reset types.")
+            }
+            guard event.effectiveAt == nil else {
+                throw invalidPayload("This event kind cannot include an effective time.")
+            }
+            guard event.schedulePrecision == nil, event.scheduleBasis == nil else {
+                throw invalidPayload("Schedule metadata is only allowed for scheduled events.")
+            }
+        case .limitIncrease, .uncertain:
+            guard event.resetType == .global else {
+                throw invalidPayload("This event kind cannot publish a reset type.")
+            }
             guard event.effectiveAt == nil else {
                 throw invalidPayload("This event kind cannot include an effective time.")
             }
@@ -210,12 +226,33 @@ private extension RateLimitResetTodayEvent {
     var acceptedRationales: Set<String> {
         switch kind {
         case .resetCompleted:
-            ["Explicit Codex quota reset announcement."]
+            switch resetType {
+            case .global:
+                ["Explicit Codex quota reset announcement."]
+            case .banked:
+                ["Explicit Codex reset-bank credit announcement."]
+            case .globalAndBanked:
+                ["Explicit Codex global reset and reset-bank credit announcement."]
+            }
         case .resetScheduled:
             if scheduleBasis == .contextualInference {
-                ["High-probability Codex quota reset preview inferred from context."]
+                switch resetType {
+                case .global:
+                    ["High-probability Codex quota reset preview inferred from context."]
+                case .banked:
+                    ["High-probability Codex reset-bank credit preview inferred from context."]
+                case .globalAndBanked:
+                    ["High-probability Codex global reset and reset-bank credit preview inferred from context."]
+                }
             } else {
-                ["Explicit Codex quota reset schedule."]
+                switch resetType {
+                case .global:
+                    ["Explicit Codex quota reset schedule."]
+                case .banked:
+                    ["Explicit Codex reset-bank credit schedule."]
+                case .globalAndBanked:
+                    ["Explicit Codex global reset and reset-bank credit schedule."]
+                }
             }
         case .bankedReset:
             ["Banked reset announcement; not a completed reset."]

@@ -119,18 +119,24 @@ public struct RunwayWidgetResetTodaySnapshot: Codable, Equatable, Sendable {
     }
 
     public var state: State
+    public var resetType: RateLimitResetType?
     public var nextScheduledAt: Date?
+    public var nextScheduledResetType: RateLimitResetType?
     public var lastSuccessfulCheckAt: Date?
     public var fetchedAt: Date
 
     public init(
         state: State,
+        resetType: RateLimitResetType? = nil,
         nextScheduledAt: Date?,
+        nextScheduledResetType: RateLimitResetType? = nil,
         lastSuccessfulCheckAt: Date?,
         fetchedAt: Date)
     {
         self.state = state
+        self.resetType = resetType
         self.nextScheduledAt = nextScheduledAt
+        self.nextScheduledResetType = nextScheduledResetType
         self.lastSuccessfulCheckAt = lastSuccessfulCheckAt
         self.fetchedAt = fetchedAt
     }

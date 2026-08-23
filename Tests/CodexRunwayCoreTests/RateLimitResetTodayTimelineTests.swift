@@ -262,6 +262,7 @@ struct RateLimitResetTodayTimelineTests {
           "events": [
             {
               "kind": "reset_completed",
+              "resetType": "global",
               "announcedAt": "2026-08-11T00:27:44.000Z",
               "effectiveAt": null,
               "scope": {"plans": ["all"], "windows": ["unknown"]},
@@ -288,6 +289,7 @@ struct RateLimitResetTodayTimelineTests {
                   {
                     "postId": "2087706104814023111",
                     "kind": "reset_completed",
+                    "resetType": "banked",
                     "announcedAt": "2026-08-13T04:35:00.000Z",
                     "effectiveAt": "2026-08-13T04:35:00.000Z",
                     "url": "https://x.com/thsottiaux/status/2087706104814023111",
@@ -304,6 +306,7 @@ struct RateLimitResetTodayTimelineTests {
               {
                 "schedule": {
                   "kind": "reset_scheduled",
+                  "resetType": "global",
                   "announcedAt": "2026-08-08T20:34:50.000Z",
                   "effectiveAt": "2026-08-10T07:00:00.000Z",
                   "schedulePrecision": "date",
@@ -327,6 +330,28 @@ struct RateLimitResetTodayTimelineTests {
                 "visibleUntil": "2026-08-21T00:27:44.000Z"
               }
             ],
+            "fulfilledBanked": [
+              {
+                "banked": {
+                  "kind": "banked_reset",
+                  "resetType": "banked",
+                  "announcedAt": "2026-08-11T00:20:00.000Z",
+                  "effectiveAt": null,
+                  "scope": {"plans": ["all"], "windows": ["unknown"]},
+                  "source": {
+                    "handle": "thsottiaux",
+                    "postId": "2086972802457063400",
+                    "url": "https://x.com/thsottiaux/status/2086972802457063400"
+                  },
+                  "confidence": 0.97,
+                  "rationale": "Banked reset announcement; not a completed reset.",
+                  "text": "A reset-bank credit will be available."
+                },
+                "completionPostId": "2086972802457063486",
+                "completedAt": "2026-08-11T00:27:44.000Z",
+                "visibleUntil": "2026-08-21T00:27:44.000Z"
+              }
+            ],
             "manualCompletions": [
               {
                 "id": "manual:cl_abd57edf90eb450aa54bd48c010854af",
@@ -337,6 +362,7 @@ struct RateLimitResetTodayTimelineTests {
                 "schedules": [
                   {
                     "kind": "reset_scheduled",
+                    "resetType": "global",
                     "announcedAt": "2026-08-13T01:01:37.000Z",
                     "effectiveAt": "2026-08-13T02:01:37.000Z",
                     "schedulePrecision": "datetime",
@@ -366,7 +392,9 @@ struct RateLimitResetTodayTimelineTests {
 
         #expect(snapshot.hasResetTimeline)
         #expect(snapshot.resetTimeline?.fulfilledSchedules.count == 1)
+        #expect(snapshot.resetTimeline?.fulfilledSchedules.first?.schedule.resetType == .global)
         #expect(snapshot.resetTimeline?.manualCompletions.count == 1)
+        #expect(snapshot.resetTimeline?.manualCompletions.first?.schedules.first?.resetType == .global)
         let completedAt = try resetStatusDate("2026-08-13T04:35:00Z")
         #expect(snapshot.resetTimeline?.suppressedPostIds.count == 2)
         #expect(snapshot.resolvedState(now: now, calendar: shanghai) == .yes)

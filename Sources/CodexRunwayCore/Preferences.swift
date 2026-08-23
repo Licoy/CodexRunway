@@ -255,7 +255,10 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case quotaAlertsDescription
     case quotaAlerts
     case rateLimitResetDetectedAlertBody
+    case rateLimitResetDetectedBankedAlertBody
+    case rateLimitResetDetectedGlobalAndBankedAlertBody
     case rateLimitResetDetectedAlertTitle
+    case rateLimitResetDetectedTypedAlertTitle
     case rateLimitResetTodayAlerts
     case rateLimitResetTodayAlertsDescription
     case rateLimitResetUpcomingAlertBody1h
@@ -263,14 +266,24 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case rateLimitResetUpcomingRangeAlertBody
     case rateLimitResetUpcomingRangeAlertTitle
     case rateLimitResetUpcomingAlertTitle
+    case rateLimitResetUpcomingTypedAlertTitle
+    case rateLimitResetUpcomingTypedRangeAlertTitle
     case quit
     case rawAnalyticsCredits
     case rateLimitResetToday
     case rateLimitResetTodayAwaiting
+    case rateLimitResetTodayBankedCompletedHint
+    case rateLimitResetTodayBankedScheduledHint
     case rateLimitResetTodayCheckCost
     case rateLimitResetTodayConfidence
     case rateLimitResetTodayDescription
     case rateLimitResetTodayEvidenceBankedReset
+    case rateLimitResetTodayEvidenceBankedCompleted
+    case rateLimitResetTodayEvidenceBankedPreview
+    case rateLimitResetTodayEvidenceBankedScheduled
+    case rateLimitResetTodayEvidenceGlobalAndBankedCompleted
+    case rateLimitResetTodayEvidenceGlobalAndBankedPreview
+    case rateLimitResetTodayEvidenceGlobalAndBankedScheduled
     case rateLimitResetTodayEvidenceLimitIncrease
     case rateLimitResetTodayEvidenceResetCompleted
     case rateLimitResetTodayEvidenceResetScheduled
@@ -305,6 +318,11 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case rateLimitResetTodaySource
     case rateLimitResetTodaySourceInfo
     case rateLimitResetTodaySourceTitle
+    case rateLimitResetTodayGlobalAndBankedCompletedHint
+    case rateLimitResetTodayGlobalAndBankedScheduledHint
+    case rateLimitResetTypeBanked
+    case rateLimitResetTypeGlobal
+    case rateLimitResetTypeGlobalAndBanked
     case rateLimitResetTodayUnknown
     case rateLimitResetTodayUnknownHint
     case rateLimitResetTodayVerdict

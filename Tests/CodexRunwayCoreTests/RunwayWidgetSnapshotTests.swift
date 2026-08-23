@@ -21,6 +21,29 @@ struct RunwayWidgetSnapshotTests {
         #expect(!text.contains("refreshToken"))
         #expect(!text.contains("rationale"))
         #expect(!text.contains("text"))
+        #expect(text.contains("\"resetType\":\"global_and_banked\""))
+        #expect(text.contains("\"nextScheduledResetType\":\"banked\""))
+    }
+
+    @Test("legacy snapshots decode without reset type fields")
+    func legacySnapshotWithoutResetTypes() throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(fixture())
+        var object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var resetToday = try #require(object["resetToday"] as? [String: Any])
+        resetToday.removeValue(forKey: "resetType")
+        resetToday.removeValue(forKey: "nextScheduledResetType")
+        object["resetToday"] = resetToday
+
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(RunwayWidgetSnapshot.self, from: legacyData)
+
+        #expect(decoded.schemaVersion == 1)
+        #expect(decoded.resetToday?.resetType == nil)
+        #expect(decoded.resetToday?.nextScheduledResetType == nil)
     }
 
     @Test("store writes atomically with owner-only permissions")
@@ -184,7 +207,9 @@ struct RunwayWidgetSnapshotTests {
             ],
             resetToday: RunwayWidgetResetTodaySnapshot(
                 state: .unknown,
-                nextScheduledAt: nil,
+                resetType: .globalAndBanked,
+                nextScheduledAt: date.addingTimeInterval(3_600),
+                nextScheduledResetType: .banked,
                 lastSuccessfulCheckAt: nil,
                 fetchedAt: date))
     }

@@ -29,6 +29,28 @@ public enum RateLimitResetTodayEventKind: String, Decodable, Sendable, Equatable
     case uncertain
 }
 
+public enum RateLimitResetType: String, Codable, Sendable, Equatable {
+    case global
+    case banked
+    case globalAndBanked = "global_and_banked"
+
+    public func includes(_ resetType: RateLimitResetType) -> Bool {
+        self == resetType || self == .globalAndBanked
+    }
+
+    static func merging(_ resetTypes: [RateLimitResetType]) -> RateLimitResetType? {
+        var hasGlobal = false
+        var hasBanked = false
+        for resetType in resetTypes {
+            hasGlobal = hasGlobal || resetType.includes(.global)
+            hasBanked = hasBanked || resetType.includes(.banked)
+        }
+        if hasGlobal, hasBanked { return .globalAndBanked }
+        if hasBanked { return .banked }
+        return hasGlobal ? .global : nil
+    }
+}
+
 public enum RateLimitResetSchedulePrecision: String, Decodable, Sendable, Equatable {
     case date
     case datetime
@@ -69,6 +91,7 @@ public struct RateLimitResetTodaySource: Decodable, Sendable, Equatable {
 
 public struct RateLimitResetTodayEvent: Decodable, Sendable, Equatable {
     public var kind: RateLimitResetTodayEventKind
+    public var resetType: RateLimitResetType
     public var announcedAt: Date
     public var effectiveAt: Date? = nil
     public var schedulePrecision: RateLimitResetSchedulePrecision? = nil
@@ -82,6 +105,7 @@ public struct RateLimitResetTodayEvent: Decodable, Sendable, Equatable {
 
     public init(
         kind: RateLimitResetTodayEventKind,
+        resetType: RateLimitResetType = .global,
         announcedAt: Date,
         effectiveAt: Date? = nil,
         schedulePrecision: RateLimitResetSchedulePrecision? = nil,
@@ -93,6 +117,7 @@ public struct RateLimitResetTodayEvent: Decodable, Sendable, Equatable {
         text: String)
     {
         self.kind = kind
+        self.resetType = resetType
         self.announcedAt = announcedAt
         self.effectiveAt = effectiveAt
         self.schedulePrecision = schedulePrecision
@@ -102,6 +127,43 @@ public struct RateLimitResetTodayEvent: Decodable, Sendable, Equatable {
         self.confidence = confidence
         self.rationale = rationale
         self.text = text
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case resetType
+        case announcedAt
+        case effectiveAt
+        case schedulePrecision
+        case scheduleBasis
+        case scope
+        case source
+        case confidence
+        case rationale
+        case text
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try container.decode(RateLimitResetTodayEventKind.self, forKey: .kind)
+        // schemaVersion 1 feeds published before reset types are global. An
+        // explicit null is invalid and must not be treated as an omitted field.
+        resetType = container.contains(.resetType)
+            ? try container.decode(RateLimitResetType.self, forKey: .resetType)
+            : .global
+        announcedAt = try container.decode(Date.self, forKey: .announcedAt)
+        effectiveAt = try container.decodeIfPresent(Date.self, forKey: .effectiveAt)
+        schedulePrecision = try container.decodeIfPresent(
+            RateLimitResetSchedulePrecision.self,
+            forKey: .schedulePrecision)
+        scheduleBasis = try container.decodeIfPresent(
+            RateLimitResetScheduleBasis.self,
+            forKey: .scheduleBasis)
+        scope = try container.decode(RateLimitResetTodayScope.self, forKey: .scope)
+        source = try container.decode(RateLimitResetTodaySource.self, forKey: .source)
+        confidence = try container.decode(Double.self, forKey: .confidence)
+        rationale = try container.decode(String.self, forKey: .rationale)
+        text = try container.decode(String.self, forKey: .text)
     }
 }
 
@@ -211,6 +273,10 @@ public struct RateLimitResetManualCompletion: Decodable, Sendable, Equatable {
 
     public var representativeEvent: RateLimitResetTodayEvent? {
         schedules.first { $0.source.postID == representativePostID } ?? schedules.first
+    }
+
+    public var resetType: RateLimitResetType {
+        RateLimitResetType.merging(schedules.map(\.resetType)) ?? .global
     }
 }
 
@@ -467,11 +533,34 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         guard let event = primaryEvidenceEvent(now: now, calendar: calendar) else { return nil }
         let key: L10nKey = switch event.kind {
         case .resetCompleted:
-            .rateLimitResetTodayEvidenceResetCompleted
+            switch event.resetType {
+            case .global:
+                .rateLimitResetTodayEvidenceResetCompleted
+            case .banked:
+                .rateLimitResetTodayEvidenceBankedCompleted
+            case .globalAndBanked:
+                .rateLimitResetTodayEvidenceGlobalAndBankedCompleted
+            }
         case .resetScheduled:
-            event.scheduleBasis == .contextualInference
-                ? .rateLimitResetTodayEvidenceResetPreview
-                : .rateLimitResetTodayEvidenceResetScheduled
+            if event.scheduleBasis == .contextualInference {
+                switch event.resetType {
+                case .global:
+                    .rateLimitResetTodayEvidenceResetPreview
+                case .banked:
+                    .rateLimitResetTodayEvidenceBankedPreview
+                case .globalAndBanked:
+                    .rateLimitResetTodayEvidenceGlobalAndBankedPreview
+                }
+            } else {
+                switch event.resetType {
+                case .global:
+                    .rateLimitResetTodayEvidenceResetScheduled
+                case .banked:
+                    .rateLimitResetTodayEvidenceBankedScheduled
+                case .globalAndBanked:
+                    .rateLimitResetTodayEvidenceGlobalAndBankedScheduled
+                }
+            }
         case .bankedReset:
             .rateLimitResetTodayEvidenceBankedReset
         case .limitIncrease:
@@ -482,15 +571,41 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         return l10n.text(key)
     }
 
-    public func latestResetAt(now: Date = Date()) -> Date? {
-        let fromEvents = events.compactMap { event -> Date? in
+    public func displayResetType(
+        now: Date = Date(),
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> RateLimitResetType?
+    {
+        guard resolvedState(now: now, calendar: calendar) != .unknown else { return nil }
+        let completedTypes = completedResetEventsToday(now: now, calendar: calendar).map(\.resetType)
+            + visibleManualCompletions(now: now)
+            .filter { $0.completedAt <= now && calendar.isDate($0.completedAt, inSameDayAs: now) }
+            .map(\.resetType)
+        if let completedType = RateLimitResetType.merging(completedTypes) {
+            return completedType
+        }
+        return nextScheduledReset(onLocalDayOf: now, calendar: calendar)?.event.resetType
+    }
+
+    public func latestReset(now: Date = Date()) -> (at: Date, resetType: RateLimitResetType)? {
+        let fromEvents = events.compactMap { event -> (Date, RateLimitResetType)? in
             guard let occurredAt = event.resetOccurrenceAt, occurredAt <= now else { return nil }
-            return occurredAt
+            return (occurredAt, event.resetType)
         }
         let fromManual = (resetTimeline?.manualCompletions ?? [])
-            .map(\.completedAt)
-            .filter { $0 <= now }
-        return (fromEvents + fromManual).max()
+            .filter { $0.completedAt <= now }
+            .map { ($0.completedAt, $0.resetType) }
+        let occurrences = fromEvents + fromManual
+        guard let latestAt = occurrences.map({ $0.0 }).max(),
+              let resetType = RateLimitResetType.merging(
+                  occurrences.filter { $0.0 == latestAt }.map { $0.1 })
+        else {
+            return nil
+        }
+        return (latestAt, resetType)
+    }
+
+    public func latestResetAt(now: Date = Date()) -> Date? {
+        latestReset(now: now)?.at
     }
 
     /// Next pending `reset_scheduled` window, if any.
@@ -573,8 +688,26 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         calendar: Calendar?)
         -> (effectiveAt: Date, effectiveUntil: Date, isRange: Bool, event: RateLimitResetTodayEvent)?
     {
-        guard let event = resetTimeline?.nextSchedule else { return nil }
-        return pendingSchedule(event, after: now, matchingLocalDayOf: day, calendar: calendar)
+        guard let timeline = resetTimeline else { return nil }
+        var best = timeline.nextSchedule.flatMap {
+            pendingSchedule($0, after: now, matchingLocalDayOf: day, calendar: calendar)
+        }
+        let suppressedPostIDs = Set(timeline.suppressedPostIds)
+        for event in events where event.kind == .resetScheduled && event.resetType == .banked {
+            guard !suppressedPostIDs.contains(event.source.postID),
+                  let candidate = pendingSchedule(
+                      event,
+                      after: now,
+                      matchingLocalDayOf: day,
+                      calendar: calendar)
+            else {
+                continue
+            }
+            if best == nil || candidate.effectiveAt < best!.effectiveAt {
+                best = candidate
+            }
+        }
+        return best
     }
 
     private func pendingSchedule(
