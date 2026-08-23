@@ -170,6 +170,7 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
     public var email: String?
     public var username: String?
     public var userId: String?
+    public var subjectId: String?
     public var accountId: String?
     public var workspaceName: String?
     public var displayName: String
@@ -191,6 +192,7 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
         email: String? = nil,
         username: String? = nil,
         userId: String? = nil,
+        subjectId: String? = nil,
         accountId: String? = nil,
         workspaceName: String? = nil,
         displayName: String,
@@ -211,6 +213,7 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
         self.email = email
         self.username = username
         self.userId = userId
+        self.subjectId = subjectId
         self.accountId = accountId
         self.workspaceName = workspaceName
         self.displayName = displayName
@@ -271,6 +274,7 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
                 email: nil,
                 username: nil,
                 userId: nil,
+                subjectId: nil,
                 accountId: accountId,
                 workspaceName: nil,
                 displayName: "API ···\(fingerprint.suffix(4))",
@@ -305,6 +309,7 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
             email: display.email,
             username: display.username,
             userId: AccountIdentity.oauthUserId(for: auth),
+            subjectId: AccountIdentity.oauthSubjectId(for: auth),
             accountId: display.accountId,
             workspaceName: AccountIdentity.oauthWorkspaceName(for: auth),
             displayName: display.displayName.isEmpty ? stableId : display.displayName,
@@ -334,6 +339,7 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
         copy.email = rebuilt.email
         copy.username = rebuilt.username
         copy.userId = rebuilt.userId
+        copy.subjectId = rebuilt.subjectId
         copy.accountId = rebuilt.accountId
         copy.workspaceName = firstNonEmpty(rebuilt.workspaceName, workspaceName)
         if alias == nil {
@@ -387,47 +393,25 @@ public enum AccountIdentity {
     }
 
     static func oauthUserId(for auth: CodexAuth) -> String? {
-        let idClaims = CodexIdentityClaims.decode(auth.tokens.idToken)
-        let accessClaims = CodexIdentityClaims.decode(auth.tokens.accessToken)
-        let explicitIds = [idClaims?.userId, accessClaims?.userId]
-        if explicitIds.contains(where: { normalizedIdentifier($0) != nil }) {
-            return uniqueIdentifier(explicitIds)
-        }
-        return uniqueIdentifier([idClaims?.subject, accessClaims?.subject])
+        oauthIdentity(for: auth).userId
     }
 
-    static func oauthAccountId(for auth: CodexAuth) -> String? {
-        let idClaims = CodexIdentityClaims.decode(auth.tokens.idToken)
-        let accessClaims = CodexIdentityClaims.decode(auth.tokens.accessToken)
-        let explicitIds = [
-            auth.tokens.accountId,
-            idClaims?.accountId,
-            accessClaims?.accountId,
-        ]
-        if explicitIds.contains(where: { normalizedIdentifier($0) != nil }) {
-            return uniqueIdentifier(explicitIds)
-        }
-        return uniqueIdentifier([idClaims?.organizationId, accessClaims?.organizationId])
+    static func oauthSubjectId(for auth: CodexAuth) -> String? {
+        oauthIdentity(for: auth).subjectId
+    }
+
+    /// Workspace used to route authenticated ChatGPT requests. The top-level auth value is the
+    /// selected workspace and must win even when stale JWT claims disagree with it.
+    static func routingWorkspaceId(for auth: CodexAuth) -> String? {
+        oauthIdentity(for: auth).routingWorkspaceId
     }
 
     static func oauthEmail(for auth: CodexAuth) -> String? {
-        let idClaims = CodexIdentityClaims.decode(auth.tokens.idToken)
-        let accessClaims = CodexIdentityClaims.decode(auth.tokens.accessToken)
-        let emails = [idClaims?.email, accessClaims?.email]
-            .compactMap(normalizedEmail)
-        guard Set(emails).count <= 1 else { return nil }
-        return emails.first
+        oauthIdentity(for: auth).email
     }
 
     static func oauthWorkspaceName(for auth: CodexAuth) -> String? {
-        let idClaims = CodexIdentityClaims.decode(auth.tokens.idToken)
-        let accessClaims = CodexIdentityClaims.decode(auth.tokens.accessToken)
-        let hasExplicitAccountId = firstNonEmpty(
-            auth.tokens.accountId,
-            idClaims?.accountId,
-            accessClaims?.accountId) != nil
-        guard !hasExplicitAccountId else { return nil }
-        return firstNonEmpty(idClaims?.organizationName, accessClaims?.organizationName)
+        oauthIdentity(for: auth).workspaceName
     }
 
     public static func managedAccountId(for auth: CodexAuth) -> String {
@@ -441,12 +425,17 @@ public enum AccountIdentity {
         if account.authMode == .apiKey, let accountId = firstNonEmpty(account.accountId) {
             return "id:\(accountId.lowercased())"
         }
+        if let subjectId = normalizedIdentifier(account.subjectId),
+           let accountId = normalizedIdentifier(account.accountId)
+        {
+            return "oauth:subject:\(subjectId)|account:\(accountId)"
+        }
         if let userId = normalizedIdentifier(account.userId),
            let accountId = normalizedIdentifier(account.accountId)
         {
             return "oauth:user:\(userId)|account:\(accountId)"
         }
-        if account.userId == nil,
+        if account.userId == nil, account.subjectId == nil,
            let email = normalizedEmail(account.email),
            let accountId = normalizedIdentifier(account.accountId)
         {
@@ -459,19 +448,23 @@ public enum AccountIdentity {
         if auth.isAPIKeyAuth, let key = auth.openAIAPIKey {
             return "id:api-\(apiKeyFingerprint(key))"
         }
-        if oauthUserIdentityHasConflict(for: auth) {
-            return "oauth:credential:\(oauthFingerprint(auth))"
+        let identity = oauthIdentity(for: auth)
+        if identity.hasUserConflict || identity.hasWorkspaceConflict {
+            return credentialMatchKey(for: auth, workspaceId: identity.routingWorkspaceId)
         }
-        let userId = normalizedIdentifier(oauthUserId(for: auth))
-        let accountId = normalizedIdentifier(oauthAccountId(for: auth))
-        let email = normalizedEmail(oauthEmail(for: auth))
-        if let userId, let accountId {
+        if let subjectId = identity.subjectId, let accountId = identity.routingWorkspaceId {
+            return "oauth:subject:\(subjectId)|account:\(accountId)"
+        }
+        if let userId = identity.userId, let accountId = identity.routingWorkspaceId {
             return "oauth:user:\(userId)|account:\(accountId)"
         }
-        if userId == nil, let email, let accountId {
+        if identity.userId == nil, identity.subjectId == nil,
+           let email = identity.email,
+           let accountId = identity.routingWorkspaceId
+        {
             return "oauth:email:\(email)|account:\(accountId)"
         }
-        return "oauth:credential:\(oauthFingerprint(auth))"
+        return credentialMatchKey(for: auth, workspaceId: identity.routingWorkspaceId)
     }
 
     /// Matches current compound identities while allowing a legacy row without `userId`
@@ -482,28 +475,33 @@ public enum AccountIdentity {
             return matchKey(for: account) == matchKey(for: auth)
         }
 
-        if oauthUserIdentityHasConflict(for: auth) {
+        let identity = oauthIdentity(for: auth)
+        if identity.hasUserConflict || identity.hasWorkspaceConflict {
             return account.id == managedAccountId(for: auth)
         }
 
-        let accountUserId = normalizedIdentifier(account.userId)
-        let authUserId = normalizedIdentifier(oauthUserId(for: auth))
         let accountWorkspaceId = normalizedIdentifier(account.accountId)
-        let authWorkspaceId = normalizedIdentifier(oauthAccountId(for: auth))
+        let authWorkspaceId = identity.routingWorkspaceId
         let accountEmail = normalizedEmail(account.email)
-        let authEmail = normalizedEmail(oauthEmail(for: auth))
+        let authEmail = identity.email
 
-        if let accountUserId, let authUserId,
-           let accountWorkspaceId, let authWorkspaceId
-        {
-            return accountUserId == authUserId && accountWorkspaceId == authWorkspaceId
+        guard let accountWorkspaceId, let authWorkspaceId,
+              accountWorkspaceId == authWorkspaceId
+        else {
+            return account.id == managedAccountId(for: auth)
         }
 
-        if accountUserId == nil,
-           let accountWorkspaceId, let authWorkspaceId,
-           let accountEmail, let authEmail
-        {
-            return accountWorkspaceId == authWorkspaceId && accountEmail == authEmail
+        let accountSubjectId = normalizedIdentifier(account.subjectId)
+        let accountUserId = normalizedIdentifier(account.userId)
+        if let accountSubjectId, let authSubjectId = identity.subjectId {
+            return accountSubjectId == authSubjectId
+        }
+        if let accountUserId, let authUserId = identity.userId {
+            return accountUserId == authUserId
+        }
+        if accountSubjectId != nil || accountUserId != nil { return false }
+        if let accountEmail, let authEmail {
+            return accountEmail == authEmail
         }
 
         return account.id == managedAccountId(for: auth)
@@ -517,23 +515,78 @@ public enum AccountIdentity {
         firstNonEmpty(value)?.lowercased()
     }
 
-    private static func uniqueIdentifier(_ values: [String?]) -> String? {
-        let identifiers = values.compactMap(normalizedIdentifier)
-        guard Set(identifiers).count <= 1 else { return nil }
-        return identifiers.first
+    private static func normalizedIdentifiers(_ values: [String?]) -> [String] {
+        Array(Set(values.compactMap(normalizedIdentifier))).sorted()
     }
 
-    private static func oauthUserIdentityHasConflict(for auth: CodexAuth) -> Bool {
+    private static func credentialMatchKey(for auth: CodexAuth, workspaceId: String?) -> String {
+        let credential = oauthFingerprint(auth)
+        if let workspaceId = normalizedIdentifier(workspaceId) {
+            return "oauth:workspace:\(workspaceId)|credential:\(credential)"
+        }
+        return "oauth:credential:\(credential)"
+    }
+
+    private static func oauthIdentity(for auth: CodexAuth) -> OAuthIdentity {
         let idClaims = CodexIdentityClaims.decode(auth.tokens.idToken)
         let accessClaims = CodexIdentityClaims.decode(auth.tokens.accessToken)
-        let explicitIds = [idClaims?.userId, accessClaims?.userId]
-            .compactMap(normalizedIdentifier)
-        if !explicitIds.isEmpty {
-            return Set(explicitIds).count > 1
+        let explicitUserIds = normalizedIdentifiers([idClaims?.userId, accessClaims?.userId])
+        let subjectIds = normalizedIdentifiers([idClaims?.subject, accessClaims?.subject])
+        let emails = Array(Set([idClaims?.email, accessClaims?.email].compactMap(normalizedEmail))).sorted()
+        let topLevelWorkspaceId = normalizedIdentifier(auth.tokens.accountId)
+        let jwtWorkspaceIds = normalizedIdentifiers([idClaims?.accountId, accessClaims?.accountId])
+        let organizationIds = normalizedIdentifiers([idClaims?.organizationId, accessClaims?.organizationId])
+
+        let routingWorkspaceId: String? = if let topLevelWorkspaceId {
+            topLevelWorkspaceId
+        } else if jwtWorkspaceIds.count == 1 {
+            jwtWorkspaceIds[0]
+        } else if jwtWorkspaceIds.isEmpty, organizationIds.count == 1 {
+            organizationIds[0]
+        } else {
+            nil
         }
-        let subjects = [idClaims?.subject, accessClaims?.subject]
-            .compactMap(normalizedIdentifier)
-        return Set(subjects).count > 1
+
+        let topLevelDisagreesWithJWT = topLevelWorkspaceId.map { selected in
+            jwtWorkspaceIds.contains { $0 != selected }
+        } ?? false
+        let hasWorkspaceConflict = jwtWorkspaceIds.count > 1
+            || topLevelDisagreesWithJWT
+            || (topLevelWorkspaceId == nil && jwtWorkspaceIds.isEmpty && organizationIds.count > 1)
+        let organizationId = organizationIds.count == 1 ? organizationIds[0] : nil
+        let organizationNames = normalizedIdentifiers([
+            idClaims?.organizationId == organizationId ? idClaims?.organizationName : nil,
+            accessClaims?.organizationId == organizationId ? accessClaims?.organizationName : nil,
+        ])
+        let workspaceName: String? = if organizationId == routingWorkspaceId, organizationNames.count == 1 {
+            organizationNames[0]
+        } else {
+            nil
+        }
+        let userId: String? = if explicitUserIds.isEmpty {
+            subjectIds.count == 1 ? subjectIds[0] : nil
+        } else {
+            explicitUserIds.count == 1 ? explicitUserIds[0] : nil
+        }
+
+        return OAuthIdentity(
+            userId: userId,
+            subjectId: subjectIds.count == 1 ? subjectIds[0] : nil,
+            email: emails.count == 1 ? emails[0] : nil,
+            routingWorkspaceId: routingWorkspaceId,
+            workspaceName: workspaceName,
+            hasUserConflict: explicitUserIds.count > 1 || subjectIds.count > 1,
+            hasWorkspaceConflict: hasWorkspaceConflict)
+    }
+
+    private struct OAuthIdentity {
+        var userId: String?
+        var subjectId: String?
+        var email: String?
+        var routingWorkspaceId: String?
+        var workspaceName: String?
+        var hasUserConflict: Bool
+        var hasWorkspaceConflict: Bool
     }
 
     /// Stable short hex hash (not cryptographic; for ids/dedup only).

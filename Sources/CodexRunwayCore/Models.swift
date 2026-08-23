@@ -259,10 +259,13 @@ public struct CodexIdentityClaims: Sendable, Equatable {
 
     private static func defaultOrganization(in auth: [String: Any]?) -> [String: Any]? {
         guard let organizations = auth?["organizations"] as? [[String: Any]] else { return nil }
-        return organizations.first { organization in
+        let defaults = organizations.filter { organization in
             organization["is_default"] as? Bool == true
                 && firstNonEmpty(organization["id"] as? String) != nil
-        } ?? organizations.first { firstNonEmpty($0["id"] as? String) != nil }
+        }
+        let ids = Set(defaults.compactMap { firstNonEmpty($0["id"] as? String) })
+        guard ids.count == 1, let id = ids.first else { return nil }
+        return defaults.first { firstNonEmpty($0["id"] as? String) == id }
     }
 
     private static func parseDate(_ value: Any?) -> Date? {
@@ -352,7 +355,7 @@ public struct CodexAccountDisplay: Sendable, Equatable {
             accessClaims?.subject)
         // `tokens.account_id` is the workspace selected for this credential. JWT claims
         // are fallbacks for imported/session auth shapes that omit the top-level value.
-        let accountId = AccountIdentity.oauthAccountId(for: auth)
+        let accountId = AccountIdentity.routingWorkspaceId(for: auth)
         let plan = firstNonEmpty(quotaPlan, idClaims?.planType, accessClaims?.planType, auth.authFilePlanType, auth.planType)
         let tier = CodexSubscriptionTier.resolve(planType: plan, fallbackPlanType: nil)
         let rawExpiry = idClaims?.subscriptionActiveUntil ?? accessClaims?.subscriptionActiveUntil

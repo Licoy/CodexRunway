@@ -47,7 +47,7 @@ public struct QuotaClient: Sendable {
     /// Best-effort display metadata. Failure must never block quota refresh or account switching.
     public func fetchWorkspaceName(auth: CodexAuth) async -> String? {
         guard !auth.tokens.accessToken.isEmpty,
-              let accountId = AccountIdentity.oauthAccountId(for: auth)
+              let accountId = AccountIdentity.routingWorkspaceId(for: auth)
         else { return nil }
         do {
             let payload = try await data(path: "accounts", auth: auth, timeoutInterval: 8)
@@ -101,7 +101,7 @@ public struct QuotaClient: Sendable {
         request.setValue("Bearer \(auth.tokens.accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("CodexRunway/1", forHTTPHeaderField: "User-Agent")
-        if let accountId = AccountIdentity.oauthAccountId(for: auth), !accountId.isEmpty {
+        if let accountId = AccountIdentity.routingWorkspaceId(for: auth), !accountId.isEmpty {
             request.setValue(accountId, forHTTPHeaderField: "ChatGPT-Account-Id")
         }
         let (data, response) = try await session.data(for: request)

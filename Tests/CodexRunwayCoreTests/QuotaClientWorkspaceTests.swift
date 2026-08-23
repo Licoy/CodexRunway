@@ -38,10 +38,40 @@ struct QuotaClientWorkspaceTests {
         #expect(request.value(forHTTPHeaderField: "ChatGPT-Account-Id") == "workspace-selected")
         #expect(request.value(forHTTPHeaderField: "User-Agent") == "CodexRunway/1")
 
+        let conflictingAuth = CodexAuth(
+            authMode: "chatgpt",
+            tokens: .init(
+                idToken: Self.jwt(payload: [
+                    "https://api.openai.com/auth": [
+                        "chatgpt_account_id": "workspace-stale-claim",
+                    ],
+                ]),
+                accessToken: "test-access-token-not-for-production",
+                refreshToken: "",
+                accountId: "workspace-selected"),
+            lastRefresh: nil)
+        let conflictingName = await client.fetchWorkspaceName(auth: conflictingAuth)
+        #expect(conflictingName == "Selected Workspace")
+        let conflictingRequest = try #require(WorkspaceMetadataURLProtocol.lastRequest)
+        #expect(conflictingRequest.value(forHTTPHeaderField: "ChatGPT-Account-Id") == "workspace-selected")
+
         WorkspaceMetadataURLProtocol.statusCode = 403
         WorkspaceMetadataURLProtocol.responseData = Data(#"{"error":"challenge"}"#.utf8)
         let failedName = await client.fetchWorkspaceName(auth: auth)
         #expect(failedName == nil)
+    }
+
+    private static func jwt(payload: [String: Any]) -> String {
+        let header = #"{"alg":"none"}"#.data(using: .utf8)!
+        let payloadData = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        return [header, payloadData, Data()]
+            .map {
+                $0.base64EncodedString()
+                    .replacingOccurrences(of: "+", with: "-")
+                    .replacingOccurrences(of: "/", with: "_")
+                    .replacingOccurrences(of: "=", with: "")
+            }
+            .joined(separator: ".")
     }
 }
 

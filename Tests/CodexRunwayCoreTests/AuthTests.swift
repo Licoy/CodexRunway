@@ -173,6 +173,18 @@ struct AuthTests {
         let managed = ManagedAccount.make(auth: organizationAuth)
         #expect(managed.accountId == "org-selected")
         #expect(managed.workspaceName == "Selected Workspace")
+
+        let ambiguous = Self.jwt(payload: [
+            "https://api.openai.com/auth": [
+                "organizations": [
+                    ["id": "org-first", "title": "First"],
+                    ["id": "org-second", "title": "Second"],
+                ],
+            ],
+        ])
+        let ambiguousClaims = try #require(CodexIdentityClaims.decode(ambiguous))
+        #expect(ambiguousClaims.organizationId == nil)
+        #expect(ambiguousClaims.organizationName == nil)
     }
 
     @Test("conflicting OAuth identity claims use credential fingerprint matching")
@@ -197,7 +209,9 @@ struct AuthTests {
                 refreshToken: "conflicting-user-refresh-token",
                 accountId: "workspace-shared"),
             lastRefresh: nil)
-        #expect(AccountIdentity.matchKey(for: userConflict).hasPrefix("oauth:credential:"))
+        #expect(
+            AccountIdentity.matchKey(for: userConflict)
+                .hasPrefix("oauth:workspace:workspace-shared|credential:"))
 
         let workspaceConflict = CodexAuth(
             authMode: "chatgpt",
@@ -212,7 +226,10 @@ struct AuthTests {
                 refreshToken: "conflicting-workspace-refresh-token",
                 accountId: "workspace-selected"),
             lastRefresh: nil)
-        #expect(AccountIdentity.matchKey(for: workspaceConflict).hasPrefix("oauth:credential:"))
+        #expect(AccountIdentity.routingWorkspaceId(for: workspaceConflict) == "workspace-selected")
+        #expect(
+            AccountIdentity.matchKey(for: workspaceConflict)
+                .hasPrefix("oauth:workspace:workspace-selected|credential:"))
     }
 
     @Test("maps Codex subscription tiers")

@@ -55,6 +55,7 @@ public struct AccountStore: Sendable {
         // credential without renaming ids/directories or changing active/sort metadata.
         for position in index.accounts.indices where index.accounts[position].authMode == .oauth {
             let needsIdentityMetadata = index.accounts[position].userId == nil
+                || index.accounts[position].subjectId == nil
                 || index.accounts[position].accountId == nil
                 || index.accounts[position].email == nil
                 || index.accounts[position].workspaceName == nil
@@ -64,7 +65,10 @@ public struct AccountStore: Sendable {
             if index.accounts[position].userId == nil {
                 index.accounts[position].userId = AccountIdentity.oauthUserId(for: auth)
             }
-            if let workspaceId = AccountIdentity.oauthAccountId(for: auth) {
+            if index.accounts[position].subjectId == nil {
+                index.accounts[position].subjectId = AccountIdentity.oauthSubjectId(for: auth)
+            }
+            if let workspaceId = AccountIdentity.routingWorkspaceId(for: auth) {
                 index.accounts[position].accountId = workspaceId
             }
             if index.accounts[position].email == nil {
