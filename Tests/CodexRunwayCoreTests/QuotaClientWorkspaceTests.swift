@@ -117,7 +117,7 @@ struct QuotaClientWorkspaceTests {
     }
 }
 
-private final class WorkspaceMetadataURLProtocol: URLProtocol, @unchecked Sendable {
+private final class WorkspaceMetadataURLProtocol: URLProtocol {
     nonisolated(unsafe) static var statusCode = 200
     nonisolated(unsafe) static var responseData = Data()
     nonisolated(unsafe) static var lastRequest: URLRequest?
