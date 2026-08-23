@@ -197,6 +197,74 @@ struct AccountTransferTests {
         #expect(preview.items.isEmpty)
     }
 
+    @Test("credential packs are written with owner-only permissions")
+    func writesCredentialPackWithOwnerOnlyPermissions() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-transfer-permissions-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let url = root.appendingPathComponent("accounts.json")
+        try Data("old-export".utf8).write(to: url)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: NSNumber(value: UInt16(0o644))],
+            ofItemAtPath: url.path)
+        let pack = AccountTransferPack(
+            provider: .codex,
+            accounts: [AccountTransferEntry(credential: Data(#"{"refresh_token":"test-secret"}"#.utf8))])
+
+        try AccountTransferCodec.write(pack, to: url)
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        let permissions = attributes[.posixPermissions] as? NSNumber
+        #expect(permissions?.uint16Value == 0o600)
+        let decoded = try AccountTransferCodec.decode(Data(contentsOf: url))
+        #expect(decoded.provider == pack.provider)
+        #expect(decoded.accounts == pack.accounts)
+    }
+
+    @Test("permission failures do not leave an exported credential pack")
+    func permissionFailureDoesNotLeaveCredentialPack() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-transfer-permission-failure-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let url = root.appendingPathComponent("accounts.json")
+        let pack = AccountTransferPack(
+            provider: .codex,
+            accounts: [AccountTransferEntry(credential: Data(#"{"refresh_token":"test-secret"}"#.utf8))])
+
+        #expect(throws: AccountTransferError.self) {
+            try AccountTransferCodec.write(pack, to: url, fileManager: PermissionFailureFileManager())
+        }
+        #expect(FileManager.default.fileExists(atPath: url.path) == false)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
+    }
+
+    @Test("final permission failures remove a replaced credential pack")
+    func finalPermissionFailureRemovesReplacedCredentialPack() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-transfer-final-permission-failure-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let url = root.appendingPathComponent("accounts.json")
+        try Data("old-export".utf8).write(to: url)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: NSNumber(value: UInt16(0o644))],
+            ofItemAtPath: url.path)
+        let pack = AccountTransferPack(
+            provider: .codex,
+            accounts: [AccountTransferEntry(credential: Data(#"{"refresh_token":"test-secret"}"#.utf8))])
+
+        #expect(throws: AccountTransferError.self) {
+            try AccountTransferCodec.write(
+                pack,
+                to: url,
+                fileManager: FinalPermissionFailureFileManager(destinationPath: url.path))
+        }
+        #expect(FileManager.default.fileExists(atPath: url.path) == false)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
+    }
+
     @Test("grok export pack round-trips")
     func grokRoundTrip() throws {
         let root = FileManager.default.temporaryDirectory
@@ -328,5 +396,33 @@ struct AccountTransferTests {
               }
             }
             """.utf8)
+    }
+}
+
+private final class PermissionFailureFileManager: FileManager, @unchecked Sendable {
+    override func setAttributes(
+        _ attributes: [FileAttributeKey: Any] = [:],
+        ofItemAtPath path: String) throws
+    {
+        throw CocoaError(.fileWriteNoPermission)
+    }
+}
+
+private final class FinalPermissionFailureFileManager: FileManager, @unchecked Sendable {
+    private let destinationPath: String
+
+    init(destinationPath: String) {
+        self.destinationPath = destinationPath
+        super.init()
+    }
+
+    override func setAttributes(
+        _ attributes: [FileAttributeKey: Any] = [:],
+        ofItemAtPath path: String) throws
+    {
+        if path == destinationPath {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+        try super.setAttributes(attributes, ofItemAtPath: path)
     }
 }

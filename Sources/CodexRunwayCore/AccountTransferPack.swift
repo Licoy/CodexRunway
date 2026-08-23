@@ -218,15 +218,101 @@ public enum AccountTransferCodec {
     }
 
     public static func write(_ pack: AccountTransferPack, to url: URL) throws {
+        try write(pack, to: url, fileManager: .default)
+    }
+
+    static func write(_ pack: AccountTransferPack, to url: URL, fileManager: FileManager) throws {
         let data = try encode(pack)
+        let temporary = url.deletingLastPathComponent()
+            .appendingPathComponent(".\(url.lastPathComponent).tmp-\(UUID().uuidString)")
+        var installed = false
         do {
-            try data.write(to: url, options: .atomic)
-            try? FileManager.default.setAttributes(
-                [.posixPermissions: NSNumber(value: Int16(0o600))],
-                ofItemAtPath: url.path)
+            guard fileManager.createFile(
+                atPath: temporary.path,
+                contents: nil,
+                attributes: [.posixPermissions: NSNumber(value: UInt16(0o600))])
+            else {
+                throw AccountTransferError.io("Unable to create a protected account export.")
+            }
+            try enforceOwnerOnlyPermissions(temporary, fileManager: fileManager)
+            try write(data, to: temporary)
+            if fileManager.fileExists(atPath: url.path) {
+                _ = try fileManager.replaceItemAt(
+                    url,
+                    withItemAt: temporary,
+                    backupItemName: nil,
+                    options: .usingNewMetadataOnly)
+            } else {
+                try fileManager.moveItem(at: temporary, to: url)
+            }
+            installed = true
+            try enforceOwnerOnlyPermissions(url, fileManager: fileManager)
+        } catch let error as AccountTransferError {
+            try cleanup(
+                temporary,
+                installedURL: installed ? url : nil,
+                after: error,
+                fileManager: fileManager)
         } catch {
-            throw AccountTransferError.io(error.localizedDescription)
+            try cleanup(
+                temporary,
+                installedURL: installed ? url : nil,
+                after: AccountTransferError.io(error.localizedDescription),
+                fileManager: fileManager)
         }
+    }
+
+    private static func enforceOwnerOnlyPermissions(_ url: URL, fileManager: FileManager) throws {
+        try fileManager.setAttributes(
+            [.posixPermissions: NSNumber(value: UInt16(0o600))],
+            ofItemAtPath: url.path)
+        let attributes = try fileManager.attributesOfItem(atPath: url.path)
+        guard (attributes[.posixPermissions] as? NSNumber)?.uint16Value == 0o600 else {
+            throw AccountTransferError.io("Unable to enforce owner-only permissions for account export.")
+        }
+    }
+
+    private static func write(_ data: Data, to url: URL) throws {
+        let handle = try FileHandle(forWritingTo: url)
+        var operationError: (any Error)?
+        do {
+            try handle.write(contentsOf: data)
+            try handle.synchronize()
+        } catch {
+            operationError = error
+        }
+        var closeError: (any Error)?
+        do {
+            try handle.close()
+        } catch {
+            closeError = error
+        }
+        if let operationError {
+            throw operationError
+        }
+        if let closeError {
+            throw closeError
+        }
+    }
+
+    private static func cleanup(
+        _ temporary: URL,
+        installedURL: URL?,
+        after error: AccountTransferError,
+        fileManager: FileManager) throws -> Never
+    {
+        do {
+            if let installedURL, fileManager.fileExists(atPath: installedURL.path) {
+                try fileManager.removeItem(at: installedURL)
+            }
+            if fileManager.fileExists(atPath: temporary.path) {
+                try fileManager.removeItem(at: temporary)
+            }
+        } catch {
+            throw AccountTransferError.io(
+                "Account export failed and its protected output could not be removed.")
+        }
+        throw error
     }
 
     // MARK: - JSON helpers

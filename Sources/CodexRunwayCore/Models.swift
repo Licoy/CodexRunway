@@ -238,7 +238,7 @@ public struct CodexIdentityClaims: Sendable, Equatable {
         else { return nil }
         let profile = object["https://api.openai.com/profile"] as? [String: Any]
         let auth = object["https://api.openai.com/auth"] as? [String: Any]
-        let organization = Self.defaultOrganization(in: auth)
+        let organization = Self.selectedOrganization(in: auth)
         return CodexIdentityClaims(
             email: firstNonEmpty(object["email"] as? String, profile?["email"] as? String),
             username: firstNonEmpty(object["preferred_username"] as? String, object["name"] as? String),
@@ -257,12 +257,14 @@ public struct CodexIdentityClaims: Sendable, Equatable {
             subscriptionActiveUntil: Self.parseDate(auth?["chatgpt_subscription_active_until"]))
     }
 
-    private static func defaultOrganization(in auth: [String: Any]?) -> [String: Any]? {
+    private static func selectedOrganization(in auth: [String: Any]?) -> [String: Any]? {
         guard let organizations = auth?["organizations"] as? [[String: Any]] else { return nil }
-        return organizations.first { organization in
-            organization["is_default"] as? Bool == true
-                && firstNonEmpty(organization["id"] as? String) != nil
-        } ?? organizations.first { firstNonEmpty($0["id"] as? String) != nil }
+        let valid = organizations.filter { firstNonEmpty($0["id"] as? String) != nil }
+        let defaults = valid.filter { $0["is_default"] as? Bool == true }
+        if defaults.count == 1 {
+            return defaults[0]
+        }
+        return defaults.isEmpty && valid.count == 1 ? valid[0] : nil
     }
 
     private static func parseDate(_ value: Any?) -> Date? {

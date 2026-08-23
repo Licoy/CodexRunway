@@ -45,16 +45,12 @@ public struct QuotaClient: Sendable {
     }
 
     /// Best-effort display metadata. Failure must never block quota refresh or account switching.
-    public func fetchWorkspaceName(auth: CodexAuth) async -> String? {
+    public func fetchWorkspaceName(auth: CodexAuth) async throws -> String? {
         guard !auth.tokens.accessToken.isEmpty,
               let accountId = AccountIdentity.oauthAccountId(for: auth)
         else { return nil }
-        do {
-            let payload = try await data(path: "accounts", auth: auth, timeoutInterval: 8)
-            return try Self.decodeWorkspaceName(from: payload, accountId: accountId)
-        } catch {
-            return nil
-        }
+        let payload = try await data(path: "accounts", auth: auth, timeoutInterval: 8)
+        return try Self.decodeWorkspaceName(from: payload, accountId: accountId)
     }
 
     static func decodeWorkspaceName(from data: Data, accountId: String) throws -> String? {

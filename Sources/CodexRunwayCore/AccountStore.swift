@@ -54,15 +54,39 @@ public struct AccountStore: Sendable {
         // Legacy rows may not persist identity display metadata. Hydrate it from the row's existing
         // credential without renaming ids/directories or changing active/sort metadata.
         for position in index.accounts.indices where index.accounts[position].authMode == .oauth {
-            let needsIdentityMetadata = index.accounts[position].userId == nil
+            let needsIdentityMetadata = index.accounts[position].subjectId == nil
                 || index.accounts[position].accountId == nil
                 || index.accounts[position].email == nil
-                || index.accounts[position].workspaceName == nil
-            guard needsIdentityMetadata,
-                  let auth = try? loadCredential(id: index.accounts[position].id)
-            else { continue }
+            guard needsIdentityMetadata else { continue }
+            let auth: CodexAuth
+            do {
+                auth = try loadCredential(id: index.accounts[position].id)
+            } catch let error as AccountStoreError {
+                switch error {
+                case .credentialMissing:
+                    index.accounts[position].requiresReauth = true
+                    index.accounts[position].lastError = "credential_missing"
+                    continue
+                case .invalidCredential:
+                    index.accounts[position].requiresReauth = true
+                    index.accounts[position].lastError = "invalid_credential"
+                    continue
+                default:
+                    throw error
+                }
+            }
+            let explicitUserId = AccountIdentity.oauthUserId(for: auth)
+            let subjectId = AccountIdentity.oauthSubjectId(for: auth)
+            if index.accounts[position].subjectId == nil {
+                index.accounts[position].subjectId = subjectId
+                if let subjectId,
+                   firstNonEmpty(index.accounts[position].userId) == subjectId
+                {
+                    index.accounts[position].userId = explicitUserId
+                }
+            }
             if index.accounts[position].userId == nil {
-                index.accounts[position].userId = AccountIdentity.oauthUserId(for: auth)
+                index.accounts[position].userId = explicitUserId
             }
             if let workspaceId = AccountIdentity.oauthAccountId(for: auth) {
                 index.accounts[position].accountId = workspaceId
@@ -168,6 +192,8 @@ public struct AccountStore: Sendable {
             account.createdAt = existing.createdAt
             account.lastUsedAt = existing.lastUsedAt
             account.sortIndex = existing.sortIndex
+            account.userId = firstNonEmpty(account.userId, existing.userId)
+            account.subjectId = firstNonEmpty(account.subjectId, existing.subjectId)
             account.workspaceName = firstNonEmpty(account.workspaceName, existing.workspaceName)
             // Drop stale meters / errors so the row refreshes immediately after re-import.
             account.cachedQuota = nil

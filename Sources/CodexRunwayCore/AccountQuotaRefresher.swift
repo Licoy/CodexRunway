@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 public struct AccountQuotaRefreshResult: Sendable, Equatable {
     public var accountId: String
@@ -8,6 +9,10 @@ public struct AccountQuotaRefreshResult: Sendable, Equatable {
 
 /// Refreshes quota for all managed OAuth accounts with bounded concurrency.
 public struct AccountQuotaRefresher: Sendable {
+    private static let logger = Logger(
+        subsystem: "com.github.codex-runway",
+        category: "account-quota")
+
     public var store: AccountStore
     public var switcher: AccountSwitcher
     public var quotaClient: QuotaClient
@@ -108,15 +113,24 @@ public struct AccountQuotaRefresher: Sendable {
             let auth = try await switcher.ensureValidCredential(accountId: account.id)
             let quota = try await quotaClient.fetchQuota(auth: auth)
             var updated = account.withIdentity(from: auth, quotaPlan: quota.plan).applying(quota: quota)
-            if shouldFetchWorkspaceName(for: updated),
-               let workspaceName = await quotaClient.fetchWorkspaceName(auth: auth)
-            {
-                updated.workspaceName = workspaceName
+            var metadataError: String?
+            if shouldFetchWorkspaceName(for: updated) {
+                do {
+                    if let workspaceName = try await quotaClient.fetchWorkspaceName(auth: auth) {
+                        updated.workspaceName = workspaceName
+                    }
+                } catch {
+                    metadataError = "workspace_metadata_unavailable"
+                    Self.logger.warning("workspace_metadata_unavailable")
+                }
             }
             try store.updateMetadata(updated)
             // Keep credential identity fields in sync after refresh.
             try? store.saveCredential(id: account.id, auth: auth)
-            return AccountQuotaRefreshResult(accountId: account.id, account: updated, errorDescription: nil)
+            return AccountQuotaRefreshResult(
+                accountId: account.id,
+                account: updated,
+                errorDescription: metadataError)
         } catch {
             let message = error.localizedDescription
             let needsReauth = (error as? URLError)?.code == .userAuthenticationRequired

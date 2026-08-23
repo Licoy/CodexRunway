@@ -170,6 +170,7 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
     public var email: String?
     public var username: String?
     public var userId: String?
+    public var subjectId: String?
     public var accountId: String?
     public var workspaceName: String?
     public var displayName: String
@@ -191,6 +192,7 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
         email: String? = nil,
         username: String? = nil,
         userId: String? = nil,
+        subjectId: String? = nil,
         accountId: String? = nil,
         workspaceName: String? = nil,
         displayName: String,
@@ -211,6 +213,7 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
         self.email = email
         self.username = username
         self.userId = userId
+        self.subjectId = subjectId
         self.accountId = accountId
         self.workspaceName = workspaceName
         self.displayName = displayName
@@ -235,7 +238,7 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
     }
 
     public var identityMarkerUserId: String? {
-        firstNonEmpty(userId)
+        firstNonEmpty(userId, subjectId)
     }
 
     public var identityMarkerWorkspaceId: String? {
@@ -271,6 +274,7 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
                 email: nil,
                 username: nil,
                 userId: nil,
+                subjectId: nil,
                 accountId: accountId,
                 workspaceName: nil,
                 displayName: "API ···\(fingerprint.suffix(4))",
@@ -305,6 +309,7 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
             email: display.email,
             username: display.username,
             userId: AccountIdentity.oauthUserId(for: auth),
+            subjectId: AccountIdentity.oauthSubjectId(for: auth),
             accountId: display.accountId,
             workspaceName: AccountIdentity.oauthWorkspaceName(for: auth),
             displayName: display.displayName.isEmpty ? stableId : display.displayName,
@@ -333,7 +338,8 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
         copy.authMode = rebuilt.authMode
         copy.email = rebuilt.email
         copy.username = rebuilt.username
-        copy.userId = rebuilt.userId
+        copy.userId = firstNonEmpty(rebuilt.userId, userId)
+        copy.subjectId = firstNonEmpty(rebuilt.subjectId, subjectId)
         copy.accountId = rebuilt.accountId
         copy.workspaceName = firstNonEmpty(rebuilt.workspaceName, workspaceName)
         if alias == nil {
@@ -389,18 +395,22 @@ public enum AccountIdentity {
     static func oauthUserId(for auth: CodexAuth) -> String? {
         let idClaims = CodexIdentityClaims.decode(auth.tokens.idToken)
         let accessClaims = CodexIdentityClaims.decode(auth.tokens.accessToken)
-        let explicitIds = [idClaims?.userId, accessClaims?.userId]
-        if explicitIds.contains(where: { normalizedIdentifier($0) != nil }) {
-            return uniqueIdentifier(explicitIds)
-        }
+        return uniqueIdentifier([idClaims?.userId, accessClaims?.userId])
+    }
+
+    static func oauthSubjectId(for auth: CodexAuth) -> String? {
+        let idClaims = CodexIdentityClaims.decode(auth.tokens.idToken)
+        let accessClaims = CodexIdentityClaims.decode(auth.tokens.accessToken)
         return uniqueIdentifier([idClaims?.subject, accessClaims?.subject])
     }
 
     static func oauthAccountId(for auth: CodexAuth) -> String? {
+        if let selectedAccountId = normalizedIdentifier(auth.tokens.accountId) {
+            return selectedAccountId
+        }
         let idClaims = CodexIdentityClaims.decode(auth.tokens.idToken)
         let accessClaims = CodexIdentityClaims.decode(auth.tokens.accessToken)
         let explicitIds = [
-            auth.tokens.accountId,
             idClaims?.accountId,
             accessClaims?.accountId,
         ]
@@ -447,6 +457,12 @@ public enum AccountIdentity {
             return "oauth:user:\(userId)|account:\(accountId)"
         }
         if account.userId == nil,
+           let subjectId = normalizedIdentifier(account.subjectId),
+           let accountId = normalizedIdentifier(account.accountId)
+        {
+            return "oauth:subject:\(subjectId)|account:\(accountId)"
+        }
+        if account.userId == nil, account.subjectId == nil,
            let email = normalizedEmail(account.email),
            let accountId = normalizedIdentifier(account.accountId)
         {
@@ -463,12 +479,16 @@ public enum AccountIdentity {
             return "oauth:credential:\(oauthFingerprint(auth))"
         }
         let userId = normalizedIdentifier(oauthUserId(for: auth))
+        let subjectId = normalizedIdentifier(oauthSubjectId(for: auth))
         let accountId = normalizedIdentifier(oauthAccountId(for: auth))
         let email = normalizedEmail(oauthEmail(for: auth))
         if let userId, let accountId {
             return "oauth:user:\(userId)|account:\(accountId)"
         }
-        if userId == nil, let email, let accountId {
+        if userId == nil, let subjectId, let accountId {
+            return "oauth:subject:\(subjectId)|account:\(accountId)"
+        }
+        if userId == nil, subjectId == nil, let email, let accountId {
             return "oauth:email:\(email)|account:\(accountId)"
         }
         return "oauth:credential:\(oauthFingerprint(auth))"
@@ -488,6 +508,8 @@ public enum AccountIdentity {
 
         let accountUserId = normalizedIdentifier(account.userId)
         let authUserId = normalizedIdentifier(oauthUserId(for: auth))
+        let accountSubjectId = normalizedIdentifier(account.subjectId)
+        let authSubjectId = normalizedIdentifier(oauthSubjectId(for: auth))
         let accountWorkspaceId = normalizedIdentifier(account.accountId)
         let authWorkspaceId = normalizedIdentifier(oauthAccountId(for: auth))
         let accountEmail = normalizedEmail(account.email)
@@ -499,7 +521,13 @@ public enum AccountIdentity {
             return accountUserId == authUserId && accountWorkspaceId == authWorkspaceId
         }
 
-        if accountUserId == nil,
+        if let accountSubjectId, let authSubjectId,
+           let accountWorkspaceId, let authWorkspaceId
+        {
+            return accountSubjectId == authSubjectId && accountWorkspaceId == authWorkspaceId
+        }
+
+        if accountUserId == nil, accountSubjectId == nil,
            let accountWorkspaceId, let authWorkspaceId,
            let accountEmail, let authEmail
         {

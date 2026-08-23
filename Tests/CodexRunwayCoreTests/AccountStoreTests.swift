@@ -109,19 +109,23 @@ struct AccountStoreTests {
         let first = try store.upsert(auth: sampleAuth(
             accountId: "workspace-one",
             email: "member@example.com",
-            refresh: "refresh-workspace-one",
-            userId: "user-shared"))
+            refresh: "refresh-shared-workspaces",
+            userId: "user-shared",
+            claimAccountId: "workspace-stale-claim"))
         let second = try store.upsert(auth: sampleAuth(
             accountId: "workspace-two",
             email: "member@example.com",
-            refresh: "refresh-workspace-two",
-            userId: "user-shared"))
+            refresh: "refresh-shared-workspaces",
+            userId: "user-shared",
+            claimAccountId: "workspace-stale-claim"))
 
         #expect(first.id != second.id)
         #expect(first.userId == second.userId)
         #expect(first.accountId != second.accountId)
         #expect(first.identityMarkerWorkspaceId != second.identityMarkerWorkspaceId)
         #expect(try store.loadIndex().accounts.count == 2)
+        #expect(try store.loadCredential(id: first.id).tokens.accountId == "workspace-one")
+        #expect(try store.loadCredential(id: second.id).tokens.accountId == "workspace-two")
     }
 
     @Test("same user and workspace re-import updates the existing credential")
@@ -149,7 +153,7 @@ struct AccountStoreTests {
         #expect(try store.loadCredential(id: first.id).tokens.refreshToken == "refresh-rotated-token")
     }
 
-    @Test("legacy email and workspace identity upgrades when user id becomes available")
+    @Test("subject fallback upgrades without duplication when user id becomes available")
     func upgradesLegacyIdentityWithNewUserId() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("codex-runway-legacy-user-upgrade-\(UUID().uuidString)", isDirectory: true)
@@ -158,20 +162,63 @@ struct AccountStoreTests {
             rootURL: root.appendingPathComponent("accounts"),
             officialAuthURL: root.appendingPathComponent("auth.json"))
 
-        let legacy = try store.upsert(auth: sampleAuth(
+        let legacyAuth = sampleAuth(
             accountId: "workspace-one",
             email: "member@example.com",
-            refresh: "refresh-before-user-id"))
+            refresh: "refresh-before-user-id",
+            subject: "legacy-subject")
+        let legacy = ManagedAccount(
+            id: "legacy-subject-row",
+            email: "member@example.com",
+            userId: "legacy-subject",
+            accountId: "workspace-one",
+            displayName: "member@example.com")
+        try store.saveCredential(id: legacy.id, auth: legacyAuth)
+        try store.saveIndex(AccountIndex(activeAccountId: legacy.id, accounts: [legacy]))
+
+        let migrated = try #require(try store.loadIndex().account(id: legacy.id))
+        #expect(migrated.userId == nil)
+        #expect(migrated.subjectId == "legacy-subject")
+
         let upgraded = try store.upsert(auth: sampleAuth(
             accountId: "workspace-one",
             email: "member@example.com",
             refresh: "refresh-after-user-id",
-            userId: "user-one"))
+            userId: "user-one",
+            subject: "legacy-subject"))
 
         #expect(upgraded.id == legacy.id)
         #expect(upgraded.userId == "user-one")
         #expect(try store.loadIndex().accounts.count == 1)
         #expect(try store.loadCredential(id: legacy.id).tokens.refreshToken == "refresh-after-user-id")
+
+        let refreshedWithoutExplicitUser = try store.upsert(auth: sampleAuth(
+            accountId: "workspace-one",
+            email: "member@example.com",
+            refresh: "refresh-without-explicit-user",
+            subject: "legacy-subject"))
+        #expect(refreshedWithoutExplicitUser.id == upgraded.id)
+        #expect(refreshedWithoutExplicitUser.userId == "user-one")
+        #expect(try store.loadIndex().accounts.count == 1)
+
+        let differentSubject = try store.upsert(auth: sampleAuth(
+            accountId: "workspace-one",
+            email: "member@example.com",
+            refresh: "refresh-different-subject",
+            userId: "user-two",
+            subject: "different-subject"))
+        #expect(differentSubject.id != upgraded.id)
+        #expect(try store.loadIndex().accounts.count == 2)
+        #expect(try store.loadCredential(id: upgraded.id).tokens.refreshToken == "refresh-without-explicit-user")
+
+        let differentSubjectOnly = try store.upsert(auth: sampleAuth(
+            accountId: "workspace-one",
+            email: "member@example.com",
+            refresh: "refresh-different-subject-only",
+            subject: "subject-without-explicit-user"))
+        #expect(differentSubjectOnly.id != upgraded.id)
+        #expect(try store.loadIndex().accounts.count == 3)
+        #expect(try store.loadCredential(id: upgraded.id).tokens.refreshToken == "refresh-without-explicit-user")
     }
 
     @Test("hydrates legacy identity metadata without moving the managed credential")
@@ -219,6 +266,48 @@ struct AccountStoreTests {
         #expect(FileManager.default.fileExists(atPath: store.credentialURL(id: legacy.id).path))
     }
 
+    @Test("legacy hydration exposes a missing credential")
+    func legacyHydrationReportsMissingCredential() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-runway-missing-legacy-credential-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AccountStore(
+            rootURL: root.appendingPathComponent("accounts"),
+            officialAuthURL: root.appendingPathComponent("auth.json"))
+        let legacy = ManagedAccount(
+            id: "missing-credential",
+            displayName: "Missing Credential")
+        try store.saveIndex(AccountIndex(accounts: [legacy]))
+
+        let loaded = try #require(try store.loadIndex().account(id: legacy.id))
+
+        #expect(loaded.requiresReauth)
+        #expect(loaded.lastError == "credential_missing")
+    }
+
+    @Test("legacy hydration exposes an invalid credential without decoding details")
+    func legacyHydrationReportsInvalidCredential() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-runway-invalid-legacy-credential-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AccountStore(
+            rootURL: root.appendingPathComponent("accounts"),
+            officialAuthURL: root.appendingPathComponent("auth.json"))
+        let legacy = ManagedAccount(
+            id: "invalid-credential",
+            displayName: "Invalid Credential")
+        try store.saveIndex(AccountIndex(accounts: [legacy]))
+        try FileManager.default.createDirectory(
+            at: store.accountDirectory(id: legacy.id),
+            withIntermediateDirectories: true)
+        try Data("not valid auth json".utf8).write(to: store.credentialURL(id: legacy.id))
+
+        let loaded = try #require(try store.loadIndex().account(id: legacy.id))
+
+        #expect(loaded.requiresReauth)
+        #expect(loaded.lastError == "invalid_credential")
+    }
+
     @Test("weak OAuth identities never merge on a workspace-only key")
     func weakIdentitiesDoNotMergeByWorkspace() throws {
         let root = FileManager.default.temporaryDirectory
@@ -250,6 +339,44 @@ struct AccountStoreTests {
         #expect(firstAccount.id != secondAccount.id)
         #expect(firstAgain.id == firstAccount.id)
         #expect(try store.loadIndex().accounts.count == 2)
+    }
+
+    @Test("ambiguous organization claims never overwrite credentials")
+    func ambiguousOrganizationsRemainSeparate() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-runway-ambiguous-organizations-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AccountStore(
+            rootURL: root.appendingPathComponent("accounts"),
+            officialAuthURL: root.appendingPathComponent("auth.json"))
+        let idToken = Self.jwt(payload: [
+            "email": "member@example.com",
+            "https://api.openai.com/auth": [
+                "chatgpt_user_id": "user-shared",
+                "organizations": [
+                    ["id": "org-first", "is_default": false],
+                    ["id": "org-second", "is_default": false],
+                ],
+            ],
+        ])
+        let firstAuth = CodexAuth(
+            authMode: "chatgpt",
+            tokens: .init(
+                idToken: idToken,
+                accessToken: Self.jwt(exp: 4_100_000_000),
+                refreshToken: "ambiguous-refresh-token-one",
+                accountId: nil),
+            lastRefresh: nil)
+        var secondAuth = firstAuth
+        secondAuth.tokens.refreshToken = "ambiguous-refresh-token-two"
+
+        let first = try store.upsert(auth: firstAuth)
+        let second = try store.upsert(auth: secondAuth)
+
+        #expect(first.id != second.id)
+        #expect(try store.loadIndex().accounts.count == 2)
+        #expect(try store.loadCredential(id: first.id).tokens.refreshToken == "ambiguous-refresh-token-one")
+        #expect(try store.loadCredential(id: second.id).tokens.refreshToken == "ambiguous-refresh-token-two")
     }
 
     @Test("session access-token-only credentials are usable while JWT is valid")
@@ -562,10 +689,12 @@ struct AccountStoreTests {
         refresh: String,
         plan: String = "plus",
         userId: String? = nil,
+        subject: String? = nil,
+        claimAccountId: String? = nil,
         workspaceName: String? = nil) -> CodexAuth
     {
         var authClaims: [String: Any] = [
-            "chatgpt_account_id": accountId,
+            "chatgpt_account_id": claimAccountId ?? accountId,
             "chatgpt_plan_type": plan,
         ]
         if let userId {
@@ -578,10 +707,14 @@ struct AccountStoreTests {
                 "title": workspaceName,
             ]]
         }
-        let idToken = Self.jwt(payload: [
+        var payload: [String: Any] = [
             "email": email,
             "https://api.openai.com/auth": authClaims,
-        ])
+        ]
+        if let subject {
+            payload["sub"] = subject
+        }
+        let idToken = Self.jwt(payload: payload)
         // loginUsability requires a long refresh token so short fixtures pad out.
         let refreshToken = refresh.count >= 20 ? refresh : (refresh + String(repeating: "x", count: 24))
         return CodexAuth(

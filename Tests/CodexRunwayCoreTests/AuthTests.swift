@@ -175,7 +175,37 @@ struct AuthTests {
         #expect(managed.workspaceName == "Selected Workspace")
     }
 
-    @Test("conflicting OAuth identity claims use credential fingerprint matching")
+    @Test("does not guess a workspace when multiple organizations have no default")
+    func rejectsAmbiguousOrganizationFallback() throws {
+        let token = Self.jwt(payload: [
+            "email": "member@example.com",
+            "https://api.openai.com/auth": [
+                "chatgpt_user_id": "user-shared",
+                "organizations": [
+                    ["id": "org-first", "is_default": false, "title": "First"],
+                    ["id": "org-second", "is_default": false, "title": "Second"],
+                ],
+            ],
+        ])
+        let claims = try #require(CodexIdentityClaims.decode(token))
+        let auth = CodexAuth(
+            authMode: "chatgpt",
+            tokens: .init(
+                idToken: token,
+                accessToken: Self.jwt(payload: [:]),
+                refreshToken: "ambiguous-organizations-refresh-token",
+                accountId: nil),
+            lastRefresh: nil)
+        let managed = ManagedAccount.make(auth: auth)
+
+        #expect(claims.organizationId == nil)
+        #expect(claims.organizationName == nil)
+        #expect(managed.accountId == nil)
+        #expect(managed.workspaceName == nil)
+        #expect(AccountIdentity.matchKey(for: auth).hasPrefix("oauth:credential:"))
+    }
+
+    @Test("user claim conflicts fall back while selected workspace remains authoritative")
     func conflictingIdentityClaimsUseCredentialFingerprint() {
         let userConflict = CodexAuth(
             authMode: "chatgpt",
@@ -212,7 +242,9 @@ struct AuthTests {
                 refreshToken: "conflicting-workspace-refresh-token",
                 accountId: "workspace-selected"),
             lastRefresh: nil)
-        #expect(AccountIdentity.matchKey(for: workspaceConflict).hasPrefix("oauth:credential:"))
+        #expect(AccountIdentity.oauthAccountId(for: workspaceConflict) == "workspace-selected")
+        #expect(AccountIdentity.matchKey(for: workspaceConflict)
+            == "oauth:user:user-one|account:workspace-selected")
     }
 
     @Test("maps Codex subscription tiers")
