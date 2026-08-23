@@ -512,9 +512,18 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
 
     public func evidenceURL(
         now: Date = Date(),
-        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> URL?
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar,
+        language: ResolvedLanguage = .english) -> URL?
     {
-        primaryEvidenceEvent(now: now, calendar: calendar)?.source.url
+        guard let event = primaryEvidenceEvent(now: now, calendar: calendar) else { return nil }
+        let timestamp = Int64((event.announcedAt.timeIntervalSince1970 * 1_000).rounded())
+        var url = RateLimitResetTodayClient.siteURL
+        if language == .simplifiedChinese || language == .traditionalChinese {
+            url.appendPathComponent("zh", isDirectory: true)
+        }
+        url.appendPathComponent("history", isDirectory: true)
+        url.appendPathComponent("\(timestamp).html", isDirectory: false)
+        return url
     }
 
     /// Maps the event kind to app-owned copy; feed text is never shown directly.

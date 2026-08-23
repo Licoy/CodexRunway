@@ -161,6 +161,8 @@ struct TokenUsageHeatmapView: View {
     /// Cached line/bar series; rebuilt with the same fingerprint.
     @State private var series: TokenUsageChartSeries?
     @StateObject private var hover = HeatmapHoverStore()
+    @State private var isChartStyleHovered = false
+    @State private var isRefreshHovered = false
 
     private var dataFingerprint: String {
         let allTotal = allDevicesTokens.values.reduce(0, +)
@@ -247,29 +249,15 @@ struct TokenUsageHeatmapView: View {
         }
     }
 
-    /// Header stays on two rows so the section's intrinsic width never exceeds the
-    /// panel content width: a single row (title + as-of caption + mode picker +
-    /// style popup + refresh) measures ~394pt in English and ~516pt in Russian,
-    /// which made the whole section lay out at its ideal width and pushed the
-    /// heatmap grid (and the controls) outside the 368pt popover content area.
+    /// The compact controls share the title row; the wider mode picker stays below
+    /// so localized labels cannot push the section beyond the popover width.
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: 4) {
                 VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 5) {
-                        Text(l10n.text(.tokenUsageHeatmap))
-                            .font(.headline)
-                            .lineLimit(1)
-                        Image(systemName: "info.circle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .help(TokenUsageSourcePresentation.disclosure(
-                                l10n: l10n,
-                                showsOfficialStats: showsOfficialStats))
-                            .accessibilityLabel(TokenUsageSourcePresentation.disclosure(
-                                l10n: l10n,
-                                showsOfficialStats: showsOfficialStats))
-                    }
+                    Text(l10n.text(.tokenUsageHeatmap))
+                        .font(.headline)
+                        .lineLimit(1)
                     if showsOfficialStats, let officialAsOfText {
                         Text(officialAsOfText)
                             .font(.caption2)
@@ -281,30 +269,36 @@ struct TokenUsageHeatmapView: View {
                 // widening the section past the panel.
                 .frame(maxWidth: 320, alignment: .leading)
                 Spacer(minLength: 4)
-            }
-            HStack(spacing: 4) {
-                Picker("", selection: $mode) {
-                    Text(l10n.text(.heatmapDaily)).tag(TokenUsageHeatmapMode.daily)
-                    Text(l10n.text(.heatmapWeekly)).tag(TokenUsageHeatmapMode.weekly)
-                    Text(modeThirdSegmentTitle).tag(TokenUsageHeatmapMode.cumulative)
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .controlSize(.small)
-                // Cap first so long locale labels compress, then hug that size.
-                // The reverse order left a 252pt hole between the segments and
-                // the trailing controls, so the row never used the panel width.
-                .frame(maxWidth: 252, alignment: .leading)
-                .fixedSize(horizontal: true, vertical: false)
 
-                Spacer(minLength: 4)
+                HeaderPopoverButton(
+                    systemImage: "info.circle",
+                    help: TokenUsageSourcePresentation.disclosure(
+                        l10n: l10n,
+                        showsOfficialStats: showsOfficialStats),
+                    accessibilityIdentifier: "token-usage-info")
+                {
+                    TokenUsageSourcePopover(
+                        l10n: l10n,
+                        disclosure: TokenUsageSourcePresentation.disclosure(
+                            l10n: l10n,
+                            showsOfficialStats: showsOfficialStats),
+                        officialAsOfText: showsOfficialStats ? officialAsOfText : nil)
+                }
 
                 // AppKit popup avoids SwiftUI Menu, which can collapse / mis-place NSPopover.
                 ChartStylePopUpButton(
                     style: $chartStyle,
                     titles: chartStyleTitles,
                     helpText: l10n.text(.tokenUsageChartStyle))
-                    .frame(width: 34, height: 22)
+                    .frame(width: 34, height: 24)
+                    .background(
+                        isChartStyleHovered ? RunwaySurface.hoverNeutral : Color.clear,
+                        in: RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
+                    .animation(.easeOut(duration: 0.12), value: isChartStyleHovered)
+                    .accessibilityLabel(l10n.text(.tokenUsageChartStyle))
+                    .pointingHandCursor()
+                    .onHover { isChartStyleHovered = $0 }
 
                 Button(action: onRefresh) {
                     Group {
@@ -316,16 +310,33 @@ struct TokenUsageHeatmapView: View {
                                 .font(.callout.weight(.medium))
                         }
                     }
-                    .foregroundStyle(Color.secondary)
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
+                    .foregroundStyle(
+                        isRefreshHovered && !isRefreshing ? Color.primary : Color.secondary)
+                    .frame(width: 24, height: 24)
+                    .background(
+                        isRefreshHovered && !isRefreshing ? RunwaySurface.hoverNeutral : Color.clear,
+                        in: RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
+                    .animation(.easeOut(duration: 0.12), value: isRefreshHovered)
                 }
                 .buttonStyle(.plain)
                 .disabled(isRefreshing)
                 .help(l10n.text(.refresh))
-                .pointingHandCursor()
+                .accessibilityLabel(l10n.text(.refresh))
+                .pointingHandCursor(enabled: !isRefreshing)
+                .onHover { isRefreshHovered = $0 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Picker("", selection: $mode) {
+                Text(l10n.text(.heatmapDaily)).tag(TokenUsageHeatmapMode.daily)
+                Text(l10n.text(.heatmapWeekly)).tag(TokenUsageHeatmapMode.weekly)
+                Text(modeThirdSegmentTitle).tag(TokenUsageHeatmapMode.cumulative)
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .controlSize(.small)
+            .frame(maxWidth: 252, alignment: .leading)
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 
@@ -514,6 +525,38 @@ struct TokenUsageHeatmapView: View {
 
     private static func tooltipDateFormatter(language: ResolvedLanguage) -> DateFormatter {
         TokenUsageDateFormatting.mediumDateFormatter(language: language)
+    }
+}
+
+private struct TokenUsageSourcePopover: View {
+    var l10n: L10n
+    var disclosure: String
+    var officialAsOfText: String?
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(l10n.text(.tokenUsageHeatmap))
+                .font(.title3.weight(.semibold))
+            Text(disclosure)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let officialAsOfText {
+                Text(officialAsOfText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            HStack {
+                Spacer()
+                Button(l10n.text(.ok)) { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(18)
+        .frame(width: 300)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 }
 

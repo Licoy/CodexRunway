@@ -273,8 +273,6 @@ struct RateLimitResetTodayView: View {
     var onOpenSource: () -> Void
     var onOpenEvidence: ((URL) -> Void)?
 
-    @State private var showsSourceInfo = false
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             TimelineView(.periodic(from: .now, by: 30)) { context in
@@ -284,8 +282,13 @@ struct RateLimitResetTodayView: View {
                     isRefreshing: isRefreshing,
                     onRefresh: onRefresh,
                     trailingCaption: lastFetchedCaption(now: context.date),
-                    onInfo: { showsSourceInfo = true },
-                    infoHelp: l10n.text(.rateLimitResetTodaySourceTitle))
+                    infoHelp: l10n.text(.rateLimitResetTodaySourceTitle),
+                    infoAccessibilityIdentifier: "rate-limit-reset-today-info",
+                    infoContent: {
+                        AnyView(RateLimitResetTodaySourcePopover(
+                            l10n: l10n,
+                            onOpenSource: onOpenSource))
+                    })
             }
 
             // The expected reset window is a live, second-level countdown.
@@ -313,15 +316,6 @@ struct RateLimitResetTodayView: View {
             .padding(12)
             .frame(maxWidth: .infinity)
             .runwayCard(.raised)
-        }
-        .sheet(isPresented: $showsSourceInfo) {
-            RateLimitResetTodaySourceSheet(
-                l10n: l10n,
-                onOpenSource: {
-                    showsSourceInfo = false
-                    onOpenSource()
-                },
-                onDismiss: { showsSourceInfo = false })
         }
     }
 
@@ -528,18 +522,25 @@ struct RateLimitResetTodayView: View {
 
             Spacer(minLength: 4)
 
-            if snapshot?.evidenceURL(now: now, calendar: calendar) != nil {
+            if snapshot?.evidenceURL(
+                now: now,
+                calendar: calendar,
+                language: l10n.language) != nil
+            {
                 Image(systemName: "arrow.up.right")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
         }
-        if let url = snapshot?.evidenceURL(now: now, calendar: calendar),
+        if let url = snapshot?.evidenceURL(
+            now: now,
+            calendar: calendar,
+            language: l10n.language),
            let onOpenEvidence
         {
             EvidenceRowButton(
                 action: { onOpenEvidence(url) },
-                help: l10n.text(.rateLimitResetTodayOpenEvidence))
+                help: l10n.text(.showDetails))
             {
                 row
             }
@@ -593,7 +594,10 @@ struct RateLimitResetTodayView: View {
 
     private func hasEvidenceRow(now: Date) -> Bool {
         let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-        return snapshot?.evidenceURL(now: now, calendar: calendar) != nil
+        return snapshot?.evidenceURL(
+            now: now,
+            calendar: calendar,
+            language: l10n.language) != nil
             || snapshot?.evidenceLine(l10n: l10n, now: now, calendar: calendar) != nil
     }
 
@@ -834,6 +838,39 @@ struct CostSummaryView: View {
     }
 }
 
+struct HeaderPopoverButton<PopoverContent: View>: View {
+    var systemImage: String
+    var help: String
+    var accessibilityIdentifier: String
+    @ViewBuilder var popoverContent: () -> PopoverContent
+
+    @State private var isHovered = false
+    @State private var isPresented = false
+
+    var body: some View {
+        Button { isPresented = true } label: {
+            Image(systemName: systemImage)
+                .font(.callout.weight(.medium))
+                .foregroundStyle(isHovered ? Color.primary : Color.secondary)
+                .frame(width: 24, height: 24)
+                .background(
+                    isHovered ? RunwaySurface.hoverNeutral : Color.clear,
+                    in: RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
+                .animation(.easeOut(duration: 0.12), value: isHovered)
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(help)
+        .accessibilityIdentifier(accessibilityIdentifier)
+        .pointingHandCursor()
+        .onHover { isHovered = $0 }
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            popoverContent()
+        }
+    }
+}
+
 /// Typographic section header: title, optional trailing caption, info + refresh
 /// controls with monochrome hover.
 struct RefreshableSectionHeader: View {
@@ -845,6 +882,8 @@ struct RefreshableSectionHeader: View {
     var trailingCaption: String? = nil
     var onInfo: (() -> Void)? = nil
     var infoHelp: String? = nil
+    var infoAccessibilityIdentifier: String? = nil
+    var infoContent: (() -> AnyView)? = nil
 
     @State private var isRefreshHovered = false
     @State private var isInfoHovered = false
@@ -863,7 +902,13 @@ struct RefreshableSectionHeader: View {
                     .truncationMode(.tail)
                     .layoutPriority(-1)
             }
-            if let onInfo {
+            if let infoContent, let infoAccessibilityIdentifier {
+                HeaderPopoverButton(
+                    systemImage: "exclamationmark.circle",
+                    help: infoHelp ?? l10n.text(.rateLimitResetTodaySourceTitle),
+                    accessibilityIdentifier: infoAccessibilityIdentifier,
+                    popoverContent: infoContent)
+            } else if let onInfo {
                 headerIconButton(
                     systemImage: "exclamationmark.circle",
                     isHovered: isInfoHovered,
@@ -888,6 +933,7 @@ struct RefreshableSectionHeader: View {
                     isRefreshHovered && !isRefreshing ? RunwaySurface.hoverNeutral : Color.clear,
                     in: RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
+                .animation(.easeOut(duration: 0.12), value: isRefreshHovered)
             }
             .buttonStyle(.plain)
             .disabled(isRefreshing)
@@ -913,6 +959,7 @@ struct RefreshableSectionHeader: View {
                     isHovered ? RunwaySurface.hoverNeutral : Color.clear,
                     in: RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
+                .animation(.easeOut(duration: 0.12), value: isHovered)
         }
         .buttonStyle(.plain)
         .help(help)
@@ -920,10 +967,11 @@ struct RefreshableSectionHeader: View {
     }
 }
 
-private struct RateLimitResetTodaySourceSheet: View {
+private struct RateLimitResetTodaySourcePopover: View {
     var l10n: L10n
     var onOpenSource: () -> Void
-    var onDismiss: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -940,7 +988,10 @@ private struct RateLimitResetTodaySourceSheet: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button(action: onOpenSource) {
+            Button {
+                dismiss()
+                onOpenSource()
+            } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "link")
                     Text(l10n.text(.rateLimitResetTodaySource))
@@ -956,7 +1007,7 @@ private struct RateLimitResetTodaySourceSheet: View {
 
             HStack {
                 Spacer()
-                Button(l10n.text(.ok), action: onDismiss)
+                Button(l10n.text(.ok)) { dismiss() }
                     .keyboardShortcut(.defaultAction)
             }
         }

@@ -108,6 +108,22 @@ struct TokenUsageHeatmapLayoutTests {
     }
 
     @MainActor
+    @Test("style popup is in the title row while mode segments stay below")
+    func stylePopupIsInTitleRow() throws {
+        let host = makeHost(language: .simplifiedChinese, chartStyle: .heatmap)
+        guard hostAvailable(host) else { return }
+        let popup = try #require(
+            platformHostFramesInRoot(in: host, containing: "PopUpButton").first)
+        let segments = try #require(
+            platformHostFramesInRoot(in: host, containing: "SegmentedControl").first)
+        let overlap = min(popup.maxY, segments.maxY) - max(popup.minY, segments.minY)
+
+        #expect(overlap <= 1, "style popup must not share the mode-selector row")
+        #expect(popup.midY < segments.midY, "title-row controls should sit above the mode selector")
+        #expect(popup.maxX >= Self.hostWidth - 40, "style popup should stay on the trailing edge")
+    }
+
+    @MainActor
     @Test("trend charts share the same bounded header (Russian line/bar)")
     func trendChartsStayInsidePanel() throws {
         for style in [TokenUsageChartStyle.line, .bar] {
@@ -166,6 +182,31 @@ struct TokenUsageHeatmapLayoutTests {
         }
         for child in view.subviews {
             result.append(contentsOf: platformHostFrames(in: child, containing: token))
+        }
+        return result
+    }
+
+    @MainActor
+    private func platformHostFramesInRoot(in root: NSView, containing token: String) -> [CGRect] {
+        platformHostFramesInRoot(in: root, relativeTo: root, containing: token)
+    }
+
+    @MainActor
+    private func platformHostFramesInRoot(
+        in view: NSView,
+        relativeTo root: NSView,
+        containing token: String
+    ) -> [CGRect] {
+        var result: [CGRect] = []
+        let name = String(describing: type(of: view))
+        if name.contains("PlatformViewHost"), name.contains(token) {
+            result.append(view.convert(view.bounds, to: root))
+        }
+        for child in view.subviews {
+            result.append(contentsOf: platformHostFramesInRoot(
+                in: child,
+                relativeTo: root,
+                containing: token))
         }
         return result
     }
