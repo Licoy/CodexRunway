@@ -46,6 +46,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case accountsImportSucceeded
     case accountsImportWillAdd
     case accountsImportWillUpdate
+    case accountsUserIdLabel
+    case accountsWorkspaceIdLabel
+    case accountsWorkspaceNameLabel
     case accountsIsCurrentLogin
     case accountsMakeCurrent
     case accountsMoveDown

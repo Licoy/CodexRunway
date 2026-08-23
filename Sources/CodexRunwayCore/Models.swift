@@ -221,8 +221,11 @@ public struct CodexIdentityClaims: Sendable, Equatable {
     public var email: String?
     public var username: String?
     public var subject: String?
+    public var userId: String?
     public var planType: String?
     public var accountId: String?
+    public var organizationId: String?
+    public var organizationName: String?
     /// Billing period end from JWT `chatgpt_subscription_active_until` when present.
     public var subscriptionActiveUntil: Date?
 
@@ -235,15 +238,31 @@ public struct CodexIdentityClaims: Sendable, Equatable {
         else { return nil }
         let profile = object["https://api.openai.com/profile"] as? [String: Any]
         let auth = object["https://api.openai.com/auth"] as? [String: Any]
+        let organization = Self.defaultOrganization(in: auth)
         return CodexIdentityClaims(
             email: firstNonEmpty(object["email"] as? String, profile?["email"] as? String),
             username: firstNonEmpty(object["preferred_username"] as? String, object["name"] as? String),
             subject: firstNonEmpty(object["sub"] as? String),
+            userId: firstNonEmpty(
+                auth?["chatgpt_user_id"] as? String,
+                auth?["user_id"] as? String),
             planType: firstNonEmpty(auth?["chatgpt_plan_type"] as? String),
             accountId: firstNonEmpty(
                 auth?["chatgpt_account_id"] as? String,
                 auth?["account_id"] as? String),
+            organizationId: firstNonEmpty(organization?["id"] as? String),
+            organizationName: firstNonEmpty(
+                organization?["title"] as? String,
+                organization?["name"] as? String),
             subscriptionActiveUntil: Self.parseDate(auth?["chatgpt_subscription_active_until"]))
+    }
+
+    private static func defaultOrganization(in auth: [String: Any]?) -> [String: Any]? {
+        guard let organizations = auth?["organizations"] as? [[String: Any]] else { return nil }
+        return organizations.first { organization in
+            organization["is_default"] as? Bool == true
+                && firstNonEmpty(organization["id"] as? String) != nil
+        } ?? organizations.first { firstNonEmpty($0["id"] as? String) != nil }
     }
 
     private static func parseDate(_ value: Any?) -> Date? {
@@ -324,8 +343,16 @@ public struct CodexAccountDisplay: Sendable, Equatable {
         let idClaims = CodexIdentityClaims.decode(auth.tokens.idToken)
         let accessClaims = CodexIdentityClaims.decode(auth.tokens.accessToken)
         let email = firstNonEmpty(idClaims?.email, accessClaims?.email)
-        let username = firstNonEmpty(idClaims?.username, accessClaims?.username, idClaims?.subject, accessClaims?.subject)
-        let accountId = firstNonEmpty(idClaims?.accountId, accessClaims?.accountId, auth.tokens.accountId)
+        let username = firstNonEmpty(
+            idClaims?.username,
+            accessClaims?.username,
+            idClaims?.userId,
+            accessClaims?.userId,
+            idClaims?.subject,
+            accessClaims?.subject)
+        // `tokens.account_id` is the workspace selected for this credential. JWT claims
+        // are fallbacks for imported/session auth shapes that omit the top-level value.
+        let accountId = AccountIdentity.oauthAccountId(for: auth)
         let plan = firstNonEmpty(quotaPlan, idClaims?.planType, accessClaims?.planType, auth.authFilePlanType, auth.planType)
         let tier = CodexSubscriptionTier.resolve(planType: plan, fallbackPlanType: nil)
         let rawExpiry = idClaims?.subscriptionActiveUntil ?? accessClaims?.subscriptionActiveUntil

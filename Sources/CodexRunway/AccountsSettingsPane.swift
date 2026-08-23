@@ -333,6 +333,7 @@ struct AccountsSettingsPane: View {
                     if let email = account.email, email != account.resolvedDisplayName {
                         Text(email).font(.caption).foregroundStyle(.secondary)
                     }
+                    AccountIdentityDetailsLabel(account: account, l10n: l10n)
                     if account.requiresReauth {
                         Text(l10n.text(.accountsNeedsReauth))
                             .font(.caption)

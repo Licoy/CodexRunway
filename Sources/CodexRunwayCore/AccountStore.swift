@@ -50,7 +50,31 @@ public struct AccountStore: Sendable {
         let data = try Data(contentsOf: indexURL)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .accountStoreDates
-        return try decoder.decode(AccountIndex.self, from: data)
+        var index = try decoder.decode(AccountIndex.self, from: data)
+        // Legacy rows may not persist identity display metadata. Hydrate it from the row's existing
+        // credential without renaming ids/directories or changing active/sort metadata.
+        for position in index.accounts.indices where index.accounts[position].authMode == .oauth {
+            let needsIdentityMetadata = index.accounts[position].userId == nil
+                || index.accounts[position].accountId == nil
+                || index.accounts[position].email == nil
+                || index.accounts[position].workspaceName == nil
+            guard needsIdentityMetadata,
+                  let auth = try? loadCredential(id: index.accounts[position].id)
+            else { continue }
+            if index.accounts[position].userId == nil {
+                index.accounts[position].userId = AccountIdentity.oauthUserId(for: auth)
+            }
+            if let workspaceId = AccountIdentity.oauthAccountId(for: auth) {
+                index.accounts[position].accountId = workspaceId
+            }
+            if index.accounts[position].email == nil {
+                index.accounts[position].email = AccountIdentity.oauthEmail(for: auth)
+            }
+            if index.accounts[position].workspaceName == nil {
+                index.accounts[position].workspaceName = AccountIdentity.oauthWorkspaceName(for: auth)
+            }
+        }
+        return index
     }
 
     public func saveIndex(_ index: AccountIndex) throws {
@@ -129,8 +153,7 @@ public struct AccountStore: Sendable {
         now: Date = Date()) throws -> ManagedAccount
     {
         var index = try loadIndex()
-        let match = AccountIdentity.matchKey(for: auth)
-        let existing = index.accounts.first { AccountIdentity.matchKey(for: $0) == match }
+        let existing = index.accounts.first { AccountIdentity.matches(account: $0, auth: auth) }
         let sortIndex = existing?.sortIndex ?? (index.accounts.map(\.sortIndex).max() ?? -1) + 1
         // Always rebuild identity (email / displayName / plan) from the new credential.
         var account = ManagedAccount.make(
@@ -145,6 +168,7 @@ public struct AccountStore: Sendable {
             account.createdAt = existing.createdAt
             account.lastUsedAt = existing.lastUsedAt
             account.sortIndex = existing.sortIndex
+            account.workspaceName = firstNonEmpty(account.workspaceName, existing.workspaceName)
             // Drop stale meters / errors so the row refreshes immediately after re-import.
             account.cachedQuota = nil
             account.lastQuotaAt = nil
@@ -242,8 +266,7 @@ public struct AccountStore: Sendable {
             return try loadIndex()
         }
 
-        let match = AccountIdentity.matchKey(for: official)
-        if let existing = index.accounts.first(where: { AccountIdentity.matchKey(for: $0) == match }) {
+        if let existing = index.accounts.first(where: { AccountIdentity.matches(account: $0, auth: official) }) {
             // Official is usable (gated above). Still avoid clobbering a managed credential that
             // already has a refresh_token when official is access-token-only (session), etc.
             let existingCred = try? loadCredential(id: existing.id)

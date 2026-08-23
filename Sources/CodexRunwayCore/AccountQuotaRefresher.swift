@@ -107,7 +107,12 @@ public struct AccountQuotaRefresher: Sendable {
         do {
             let auth = try await switcher.ensureValidCredential(accountId: account.id)
             let quota = try await quotaClient.fetchQuota(auth: auth)
-            let updated = account.withIdentity(from: auth, quotaPlan: quota.plan).applying(quota: quota)
+            var updated = account.withIdentity(from: auth, quotaPlan: quota.plan).applying(quota: quota)
+            if shouldFetchWorkspaceName(for: updated),
+               let workspaceName = await quotaClient.fetchWorkspaceName(auth: auth)
+            {
+                updated.workspaceName = workspaceName
+            }
             try store.updateMetadata(updated)
             // Keep credential identity fields in sync after refresh.
             try? store.saveCredential(id: account.id, auth: auth)
@@ -118,6 +123,16 @@ public struct AccountQuotaRefresher: Sendable {
             let updated = account.applying(error: message, requiresReauth: needsReauth)
             try? store.updateMetadata(updated)
             return AccountQuotaRefreshResult(accountId: account.id, account: updated, errorDescription: message)
+        }
+    }
+
+    private static func shouldFetchWorkspaceName(for account: ManagedAccount) -> Bool {
+        guard account.workspaceName == nil else { return false }
+        switch account.subscriptionTier {
+        case .team, .business, .enterprise, .edu:
+            return true
+        default:
+            return false
         }
     }
 }

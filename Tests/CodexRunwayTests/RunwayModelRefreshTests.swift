@@ -172,6 +172,57 @@ struct RunwayModelRefreshTests {
         #expect(model.tokenHeatmapOfficialGeneratedAt == Date(timeIntervalSince1970: 1_785_225_820))
     }
 
+    @Test("refresh never mirrors another same-workspace user into the active managed credential")
+    func refreshDoesNotOverwriteActiveSameWorkspaceUser() async throws {
+        let firstAuth = Self.auth(
+            accountId: "workspace-shared",
+            userId: "user-one",
+            email: "one@example.com")
+        let secondAuth = Self.auth(
+            accountId: "workspace-shared",
+            userId: "user-two",
+            email: "two@example.com")
+        let store = isolatedAccountStore()
+        let first = try store.upsert(auth: firstAuth, makeActive: true)
+        let settings = RunwaySettings(store: PreferencesStore(defaults: scopedDefaults()))
+        let services = RunwayModelServices(
+            loadValidAuth: { _, _ in secondAuth },
+            fetchQuota: { _ in Self.quotaSnapshot() },
+            fetchResetCredits: { _ in ResetCreditsSnapshot(availableCount: 0, credits: [], updatedAt: Date()) },
+            fetchRateLimitResetToday: {
+                RateLimitResetTodaySnapshot(state: .no, fetchedAt: Date())
+            },
+            scanAPIEquivalent: { queries, now, _, _ in
+                Dictionary(uniqueKeysWithValues: queries.map {
+                    ($0.id, ApiEquivalentSummary.unavailable(window: $0.window, calculatedAt: now))
+                })
+            },
+            fetchDailyWorkspaceUsage: { _, _, _, window, now in
+                Self.costSummary(window: window, calculatedAt: now)
+            },
+            fetchCodexProfileTokenUsage: { _ in
+                CodexProfileTokenUsage(dailyTokens: [:], statsAsOf: nil, generatedAt: nil)
+            },
+            dryRunSessions: {
+                SessionRepairReport(
+                    missingIndexIDs: [],
+                    orphanIndexIDs: [],
+                    duplicateIndexIDs: [],
+                    staleTitleIDs: [],
+                    backupPath: nil,
+                    plannedEntries: 0)
+            },
+            scanRecentSessions: { _ in SessionActivitySummary(items: []) })
+        let model = RunwayModel(settings: settings, services: services, accountStore: store)
+
+        model.refreshQuota()
+        try await waitForQuota(in: model)
+
+        let stored = try store.loadCredential(id: first.id)
+        #expect(CodexIdentityClaims.decode(stored.tokens.idToken)?.userId == "user-one")
+        #expect(model.activeAccountId == first.id)
+    }
+
     @Test("switching accounts cancels an in-flight old-account heatmap")
     func accountSwitchCancelsInFlightHeatmap() async throws {
         let firstAuth = Self.auth(accountId: "acct-a")
@@ -881,15 +932,23 @@ struct RunwayModelRefreshTests {
             updatedAt: now)
     }
 
-    nonisolated private static func auth(accountId: String = "acct-test") -> CodexAuth {
+    nonisolated private static func auth(
+        accountId: String = "acct-test",
+        userId: String? = nil,
+        email: String = "test@example.com") -> CodexAuth
+    {
         // Long JWT + refresh so loginUsability stays .usable (must never mirror into real ~/.codex).
+        var authClaims: [String: Any] = [
+            "chatgpt_account_id": accountId,
+            "chatgpt_plan_type": "pro",
+        ]
+        if let userId {
+            authClaims["chatgpt_user_id"] = userId
+        }
         let access = jwt(payload: [
             "exp": 4_100_000_000,
-            "email": "test@example.com",
-            "https://api.openai.com/auth": [
-                "chatgpt_account_id": accountId,
-                "chatgpt_plan_type": "pro",
-            ],
+            "email": email,
+            "https://api.openai.com/auth": authClaims,
         ])
         return CodexAuth(
             authMode: "chatgpt",

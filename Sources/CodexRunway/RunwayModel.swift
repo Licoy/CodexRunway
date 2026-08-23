@@ -1956,7 +1956,11 @@ final class RunwayModel: ObservableObject {
             //
             // Also never overwrite a *better* managed credential with a worse/unusable one
             // (this is how unit-test fixtures previously wiped ~/.codex-runway/accounts).
-            if let activeAccountId, auth.loginUsability == .usable {
+            if let activeAccountId,
+               auth.loginUsability == .usable,
+               let activeAccount = managedAccounts.first(where: { $0.id == activeAccountId }),
+               AccountIdentity.matches(account: activeAccount, auth: auth)
+            {
                 let previous = try? accountStore.loadCredential(id: activeAccountId)
                 let shouldMirror: Bool = {
                     guard let previous else { return true }

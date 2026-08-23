@@ -239,7 +239,7 @@ extension AccountImporter {
                 let auth = try JSONDecoder().decode(CodexAuth.self, from: entry.credential)
                 let display = ManagedAccount.make(auth: auth, alias: entry.alias)
                 let match = AccountIdentity.matchKey(for: auth)
-                let existing = index.accounts.first { AccountIdentity.matchKey(for: $0) == match }
+                let existing = index.accounts.first { AccountIdentity.matches(account: $0, auth: auth) }
                 let conflict: AccountImportConflict = if let existing {
                     .willUpdate(existingDisplayName: existing.resolvedDisplayName)
                 } else {
@@ -278,7 +278,7 @@ extension AccountImporter {
             if let auth = candidate.auth {
                 let display = ManagedAccount.make(auth: auth)
                 let match = AccountIdentity.matchKey(for: auth)
-                let existing = index.accounts.first { AccountIdentity.matchKey(for: $0) == match }
+                let existing = index.accounts.first { AccountIdentity.matches(account: $0, auth: auth) }
                 let conflict: AccountImportConflict = if let existing {
                     .willUpdate(existingDisplayName: existing.resolvedDisplayName)
                 } else {

@@ -261,19 +261,19 @@ public struct AccountImporter: Sendable {
         // OR a clearly named accessToken field (already matched).
         let accountObject = object["account"] as? [String: Any]
         let userObject = object["user"] as? [String: Any]
+        let accessClaims = CodexIdentityClaims.decode(accessToken)
+        let idClaims = CodexIdentityClaims.decode(idToken)
         let accountId = firstNonEmpty(
             firstString(in: object, keys: ["account_id", "accountId", "chatgpt_account_id"]),
             firstString(in: accountObject ?? [:], keys: ["id", "account_id", "accountId"]),
-            CodexIdentityClaims.decode(accessToken)?.accountId,
-            CodexIdentityClaims.decode(idToken)?.accountId)
+            accessClaims?.accountId,
+            idClaims?.accountId,
+            accessClaims?.organizationId,
+            idClaims?.organizationId)
 
         let plan = firstNonEmpty(
             firstString(in: object, keys: ["plan_type", "planType", "chatgpt_plan_type"]),
             firstString(in: accountObject ?? [:], keys: ["planType", "plan_type", "chatgpt_plan_type"]))
-
-        let email = firstNonEmpty(
-            firstString(in: object, keys: ["email"]),
-            firstString(in: userObject ?? [:], keys: ["email"]))
 
         // If this is only an access token string field with no other session shape, still accept
         // when the key was explicitly accessToken/access_token (handled by caller keys).
@@ -286,7 +286,7 @@ public struct AccountImporter: Sendable {
             || refresh != nil
         guard hasSessionShape else { return nil }
 
-        var auth = CodexAuth(
+        return CodexAuth(
             authMode: "chatgpt",
             tokens: .init(
                 idToken: firstNonEmpty(idToken, accessToken),
@@ -296,15 +296,6 @@ public struct AccountImporter: Sendable {
             lastRefresh: nil,
             planType: plan,
             authFilePlanType: plan)
-
-        // Stamp email into display via id token claims when possible; otherwise ManagedAccount
-        // still gets accountId/plan. If JWT has no email but session does, keep accountId path.
-        if auth.tokens.accountId == nil, let email {
-            // Synthetic short id from email so the account is stable without account id.
-            auth.tokens.accountId = "email-\(AccountIdentity.stableHash(email.lowercased()))"
-        }
-        _ = email // used for identity fallback above
-        return auth
     }
 
     private func nestedRefreshToken(_ value: Any?) -> String? {
