@@ -163,6 +163,7 @@ struct PreferencesTests {
             refreshIntervalSeconds: 120,
             widgetRefreshIntervalSeconds: 300,
             apiCostSummaryRange: .thisMonth,
+            mainPanelHeight: 712.5,
             mainPanelModuleOrder: [.apiCost, .quota, .tokenUsage],
             showsQuotaSummary: false,
             showsResetCreditsSummary: false,
@@ -186,6 +187,7 @@ struct PreferencesTests {
         #expect(store.load().refreshIntervalSeconds == 120)
         #expect(store.load().widgetRefreshIntervalSeconds == 300)
         #expect(store.load().apiCostSummaryRange == .thisMonth)
+        #expect(store.load().mainPanelHeight == 712.5)
         #expect(store.load().mainPanelModuleOrder == [
             .apiCost,
             .quota,
@@ -225,9 +227,26 @@ struct PreferencesTests {
 
         #expect(preferences.selectedProvider == .codex)
         #expect(RunwayProvider.allCases == [.codex, .grok])
+        #expect(preferences.mainPanelHeight == RunwayPreferences.defaultMainPanelHeight)
         #expect(preferences.mainPanelModuleOrder == RunwayPreferences.defaultMainPanelModuleOrder)
         #expect(preferences.showsQuotaSummary)
         #expect(preferences.showsResetCreditsSummary)
+    }
+
+    @Test("main panel height is clamped when initialized or decoded")
+    func mainPanelHeightBounds() throws {
+        #expect(RunwayPreferences(mainPanelHeight: 100).mainPanelHeight
+            == RunwayPreferences.minimumMainPanelHeight)
+        #expect(RunwayPreferences(mainPanelHeight: 2_000).mainPanelHeight
+            == RunwayPreferences.maximumMainPanelHeight)
+        #expect(RunwayPreferences(mainPanelHeight: .infinity).mainPanelHeight
+            == RunwayPreferences.defaultMainPanelHeight)
+
+        let data = """
+        { "mainPanelHeight": 1200 }
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(RunwayPreferences.self, from: data)
+        #expect(decoded.mainPanelHeight == RunwayPreferences.maximumMainPanelHeight)
     }
 
     @Test("main panel order repairs duplicates, unknown values, and new modules")
