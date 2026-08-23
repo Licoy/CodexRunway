@@ -124,6 +124,49 @@ struct AccountTransferTests {
         #expect(try store.loadIndex().accounts.count == 2)
     }
 
+    @Test("codex preview and import keep same-workspace users separate")
+    func codexSameWorkspaceUsersRemainDistinct() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-same-workspace-transfer-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AccountStore(
+            rootURL: root.appendingPathComponent("accounts"),
+            officialAuthURL: root.appendingPathComponent("auth.json"))
+        _ = try store.upsert(auth: sampleAuth(
+            accountId: "workspace-shared",
+            email: "one@example.com",
+            refresh: "refresh-member-one-old",
+            userId: "user-one"))
+        let pack = AccountTransferPack(
+            provider: .codex,
+            accounts: [
+                AccountTransferEntry(credential: try JSONEncoder().encode(sampleAuth(
+                    accountId: "workspace-shared",
+                    email: "one@example.com",
+                    refresh: "refresh-member-one-token",
+                    userId: "user-one"))),
+                AccountTransferEntry(credential: try JSONEncoder().encode(sampleAuth(
+                    accountId: "workspace-shared",
+                    email: "two@example.com",
+                    refresh: "refresh-member-two-token",
+                    userId: "user-two"))),
+            ])
+        let importer = AccountImporter(store: store)
+        let preview = try importer.previewPack(pack)
+
+        #expect(preview.items.count == 2)
+        #expect(preview.items.filter { $0.preview.conflict == .willAdd }.count == 1)
+        #expect(preview.items.filter {
+            if case .willUpdate = $0.preview.conflict { return true }
+            return false
+        }.count == 1)
+        let batch = await importer.importPreviewSelection(
+            preview.items,
+            selectedIDs: Set(preview.items.map(\.id)))
+        #expect(batch.successCount == 2)
+        #expect(try store.loadIndex().accounts.count == 2)
+    }
+
     @Test("rejects unsupported pack format and version")
     func rejectsBadPack() {
         let badFormat = Data(#"{"format":"other","version":1,"provider":"codex","accounts":[]}"#.utf8)
@@ -224,14 +267,19 @@ struct AccountTransferTests {
         accountId: String,
         email: String,
         refresh: String,
-        plan: String = "plus") -> CodexAuth
+        plan: String = "plus",
+        userId: String? = nil) -> CodexAuth
     {
+        var authClaims: [String: Any] = [
+            "chatgpt_account_id": accountId,
+            "chatgpt_plan_type": plan,
+        ]
+        if let userId {
+            authClaims["chatgpt_user_id"] = userId
+        }
         let idToken = jwt(payload: [
             "email": email,
-            "https://api.openai.com/auth": [
-                "chatgpt_account_id": accountId,
-                "chatgpt_plan_type": plan,
-            ],
+            "https://api.openai.com/auth": authClaims,
         ])
         let refreshToken = refresh.count >= 20 ? refresh : (refresh + String(repeating: "x", count: 24))
         return CodexAuth(

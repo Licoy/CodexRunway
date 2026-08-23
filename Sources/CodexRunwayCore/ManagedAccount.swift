@@ -169,7 +169,9 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
     public var authMode: ManagedAuthMode
     public var email: String?
     public var username: String?
+    public var userId: String?
     public var accountId: String?
+    public var workspaceName: String?
     public var displayName: String
     public var alias: String?
     public var note: String?
@@ -188,7 +190,9 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
         authMode: ManagedAuthMode = .oauth,
         email: String? = nil,
         username: String? = nil,
+        userId: String? = nil,
         accountId: String? = nil,
+        workspaceName: String? = nil,
         displayName: String,
         alias: String? = nil,
         note: String? = nil,
@@ -206,7 +210,9 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
         self.authMode = authMode
         self.email = email
         self.username = username
+        self.userId = userId
         self.accountId = accountId
+        self.workspaceName = workspaceName
         self.displayName = displayName
         self.alias = alias
         self.note = note
@@ -228,6 +234,23 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
         CodexSubscriptionTier.resolve(planType: planType ?? cachedQuota?.plan, fallbackPlanType: nil)
     }
 
+    public var identityMarkerUserId: String? {
+        firstNonEmpty(userId)
+    }
+
+    public var identityMarkerWorkspaceId: String? {
+        firstNonEmpty(accountId)
+    }
+
+    public var displaysWorkspaceIdentity: Bool {
+        switch subscriptionTier {
+        case .team, .business, .enterprise, .edu:
+            return true
+        default:
+            return false
+        }
+    }
+
     public static func make(
         id: String? = nil,
         auth: CodexAuth,
@@ -247,7 +270,9 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
                 authMode: .apiKey,
                 email: nil,
                 username: nil,
+                userId: nil,
                 accountId: accountId,
+                workspaceName: nil,
                 displayName: "API ···\(fingerprint.suffix(4))",
                 alias: alias,
                 note: note,
@@ -265,8 +290,7 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
         let idClaims = CodexIdentityClaims.decode(auth.tokens.idToken)
         let accessClaims = CodexIdentityClaims.decode(auth.tokens.accessToken)
         let stableId = id
-            ?? firstNonEmpty(display.accountId, display.email, display.username)
-            ?? AccountIdentity.oauthFingerprint(auth)
+            ?? AccountIdentity.managedAccountId(for: auth)
         // Prefer live quota plan, then JWT claims, then auth-file fields — never invent from nowhere.
         let resolvedPlan = firstNonEmpty(
             quotaPlan,
@@ -280,7 +304,9 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
             authMode: .oauth,
             email: display.email,
             username: display.username,
+            userId: AccountIdentity.oauthUserId(for: auth),
             accountId: display.accountId,
+            workspaceName: AccountIdentity.oauthWorkspaceName(for: auth),
             displayName: display.displayName.isEmpty ? stableId : display.displayName,
             alias: alias,
             note: note,
@@ -307,7 +333,9 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
         copy.authMode = rebuilt.authMode
         copy.email = rebuilt.email
         copy.username = rebuilt.username
+        copy.userId = rebuilt.userId
         copy.accountId = rebuilt.accountId
+        copy.workspaceName = firstNonEmpty(rebuilt.workspaceName, workspaceName)
         if alias == nil {
             copy.displayName = rebuilt.displayName
         }
@@ -358,28 +386,154 @@ public enum AccountIdentity {
         return "unknown-\(stableHash(UUID().uuidString))"
     }
 
+    static func oauthUserId(for auth: CodexAuth) -> String? {
+        let idClaims = CodexIdentityClaims.decode(auth.tokens.idToken)
+        let accessClaims = CodexIdentityClaims.decode(auth.tokens.accessToken)
+        let explicitIds = [idClaims?.userId, accessClaims?.userId]
+        if explicitIds.contains(where: { normalizedIdentifier($0) != nil }) {
+            return uniqueIdentifier(explicitIds)
+        }
+        return uniqueIdentifier([idClaims?.subject, accessClaims?.subject])
+    }
+
+    static func oauthAccountId(for auth: CodexAuth) -> String? {
+        let idClaims = CodexIdentityClaims.decode(auth.tokens.idToken)
+        let accessClaims = CodexIdentityClaims.decode(auth.tokens.accessToken)
+        let explicitIds = [
+            auth.tokens.accountId,
+            idClaims?.accountId,
+            accessClaims?.accountId,
+        ]
+        if explicitIds.contains(where: { normalizedIdentifier($0) != nil }) {
+            return uniqueIdentifier(explicitIds)
+        }
+        return uniqueIdentifier([idClaims?.organizationId, accessClaims?.organizationId])
+    }
+
+    static func oauthEmail(for auth: CodexAuth) -> String? {
+        let idClaims = CodexIdentityClaims.decode(auth.tokens.idToken)
+        let accessClaims = CodexIdentityClaims.decode(auth.tokens.accessToken)
+        let emails = [idClaims?.email, accessClaims?.email]
+            .compactMap(normalizedEmail)
+        guard Set(emails).count <= 1 else { return nil }
+        return emails.first
+    }
+
+    static func oauthWorkspaceName(for auth: CodexAuth) -> String? {
+        let idClaims = CodexIdentityClaims.decode(auth.tokens.idToken)
+        let accessClaims = CodexIdentityClaims.decode(auth.tokens.accessToken)
+        let hasExplicitAccountId = firstNonEmpty(
+            auth.tokens.accountId,
+            idClaims?.accountId,
+            accessClaims?.accountId) != nil
+        guard !hasExplicitAccountId else { return nil }
+        return firstNonEmpty(idClaims?.organizationName, accessClaims?.organizationName)
+    }
+
+    public static func managedAccountId(for auth: CodexAuth) -> String {
+        if auth.isAPIKeyAuth, let key = auth.openAIAPIKey {
+            return "api-\(apiKeyFingerprint(key))"
+        }
+        return "oauth-\(stableHash(matchKey(for: auth)))"
+    }
+
     public static func matchKey(for account: ManagedAccount) -> String {
-        if let accountId = firstNonEmpty(account.accountId) {
+        if account.authMode == .apiKey, let accountId = firstNonEmpty(account.accountId) {
             return "id:\(accountId.lowercased())"
         }
-        if let email = firstNonEmpty(account.email) {
-            return "email:\(email.lowercased())"
+        if let userId = normalizedIdentifier(account.userId),
+           let accountId = normalizedIdentifier(account.accountId)
+        {
+            return "oauth:user:\(userId)|account:\(accountId)"
+        }
+        if account.userId == nil,
+           let email = normalizedEmail(account.email),
+           let accountId = normalizedIdentifier(account.accountId)
+        {
+            return "oauth:email:\(email)|account:\(accountId)"
         }
         return "row:\(account.id)"
     }
 
     public static func matchKey(for auth: CodexAuth) -> String {
-        let display = CodexAccountDisplay.make(auth: auth, quotaPlan: nil)
-        if let accountId = firstNonEmpty(display.accountId, auth.tokens.accountId) {
-            return "id:\(accountId.lowercased())"
-        }
-        if let email = firstNonEmpty(display.email) {
-            return "email:\(email.lowercased())"
-        }
         if auth.isAPIKeyAuth, let key = auth.openAIAPIKey {
             return "id:api-\(apiKeyFingerprint(key))"
         }
-        return "rt:\(oauthFingerprint(auth))"
+        if oauthUserIdentityHasConflict(for: auth) {
+            return "oauth:credential:\(oauthFingerprint(auth))"
+        }
+        let userId = normalizedIdentifier(oauthUserId(for: auth))
+        let accountId = normalizedIdentifier(oauthAccountId(for: auth))
+        let email = normalizedEmail(oauthEmail(for: auth))
+        if let userId, let accountId {
+            return "oauth:user:\(userId)|account:\(accountId)"
+        }
+        if userId == nil, let email, let accountId {
+            return "oauth:email:\(email)|account:\(accountId)"
+        }
+        return "oauth:credential:\(oauthFingerprint(auth))"
+    }
+
+    /// Matches current compound identities while allowing a legacy row without `userId`
+    /// to be upgraded by the same email + workspace credential. Never falls back to the
+    /// workspace id alone when either side has a user-level identity.
+    public static func matches(account: ManagedAccount, auth: CodexAuth) -> Bool {
+        if account.authMode == .apiKey || auth.isAPIKeyAuth {
+            return matchKey(for: account) == matchKey(for: auth)
+        }
+
+        if oauthUserIdentityHasConflict(for: auth) {
+            return account.id == managedAccountId(for: auth)
+        }
+
+        let accountUserId = normalizedIdentifier(account.userId)
+        let authUserId = normalizedIdentifier(oauthUserId(for: auth))
+        let accountWorkspaceId = normalizedIdentifier(account.accountId)
+        let authWorkspaceId = normalizedIdentifier(oauthAccountId(for: auth))
+        let accountEmail = normalizedEmail(account.email)
+        let authEmail = normalizedEmail(oauthEmail(for: auth))
+
+        if let accountUserId, let authUserId,
+           let accountWorkspaceId, let authWorkspaceId
+        {
+            return accountUserId == authUserId && accountWorkspaceId == authWorkspaceId
+        }
+
+        if accountUserId == nil,
+           let accountWorkspaceId, let authWorkspaceId,
+           let accountEmail, let authEmail
+        {
+            return accountWorkspaceId == authWorkspaceId && accountEmail == authEmail
+        }
+
+        return account.id == managedAccountId(for: auth)
+    }
+
+    private static func normalizedIdentifier(_ value: String?) -> String? {
+        firstNonEmpty(value)
+    }
+
+    private static func normalizedEmail(_ value: String?) -> String? {
+        firstNonEmpty(value)?.lowercased()
+    }
+
+    private static func uniqueIdentifier(_ values: [String?]) -> String? {
+        let identifiers = values.compactMap(normalizedIdentifier)
+        guard Set(identifiers).count <= 1 else { return nil }
+        return identifiers.first
+    }
+
+    private static func oauthUserIdentityHasConflict(for auth: CodexAuth) -> Bool {
+        let idClaims = CodexIdentityClaims.decode(auth.tokens.idToken)
+        let accessClaims = CodexIdentityClaims.decode(auth.tokens.accessToken)
+        let explicitIds = [idClaims?.userId, accessClaims?.userId]
+            .compactMap(normalizedIdentifier)
+        if !explicitIds.isEmpty {
+            return Set(explicitIds).count > 1
+        }
+        let subjects = [idClaims?.subject, accessClaims?.subject]
+            .compactMap(normalizedIdentifier)
+        return Set(subjects).count > 1
     }
 
     /// Stable short hex hash (not cryptographic; for ids/dedup only).

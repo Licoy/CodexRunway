@@ -344,6 +344,7 @@ private struct AccountDetailCard: View {
                             .truncationMode(.middle)
                     }
                 }
+                AccountIdentityDetailsLabel(account: account, l10n: l10n)
             }
             Spacer(minLength: 6)
             HStack(spacing: 2) {
@@ -494,6 +495,57 @@ struct SubscriptionTierTag: View {
             label: SubscriptionTierBadge.localizedTitle(for: tier, l10n: l10n),
             horizontalPadding: 5,
             verticalPadding: 1)
+    }
+}
+
+/// Workspace name plus separate user/workspace identifiers for managed Codex credentials.
+struct AccountIdentityDetailsLabel: View {
+    var account: ManagedAccount
+    var l10n: L10n
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let userId = account.identityMarkerUserId {
+                identityRow(
+                    label: l10n.text(.accountsUserIdLabel),
+                    value: userId,
+                    monospaced: true)
+            }
+            if account.displaysWorkspaceIdentity,
+               let workspaceId = account.identityMarkerWorkspaceId
+            {
+                identityRow(
+                    label: l10n.text(.accountsWorkspaceIdLabel),
+                    value: workspaceId,
+                    monospaced: true)
+                if let workspaceName = normalizedWorkspaceName {
+                    identityRow(
+                        label: l10n.text(.accountsWorkspaceNameLabel),
+                        value: workspaceName,
+                        monospaced: false)
+                }
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var normalizedWorkspaceName: String? {
+        guard let name = account.workspaceName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !name.isEmpty
+        else { return nil }
+        return name
+    }
+
+    private func identityRow(
+        label: String,
+        value: String,
+        monospaced: Bool) -> some View
+    {
+        (Text(label).font(.caption2)
+            + Text(value).font(monospaced ? .caption2.monospaced() : .caption2))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .help("\(label)\(value)")
     }
 }
 

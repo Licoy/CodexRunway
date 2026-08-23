@@ -102,6 +102,7 @@ struct AuthTests {
             "https://api.openai.com/auth": [
                 "chatgpt_plan_type": "prolite",
                 "chatgpt_account_id": "acct_123",
+                "chatgpt_user_id": "chat-user-id",
                 "chatgpt_subscription_active_until": "2026-06-20T11:08:02+00:00",
             ],
         ])
@@ -111,8 +112,11 @@ struct AuthTests {
         #expect(claims.email == "top@example.com")
         #expect(claims.username == "top-user")
         #expect(claims.subject == "user-sub")
+        #expect(claims.userId == "chat-user-id")
         #expect(claims.planType == "prolite")
         #expect(claims.accountId == "acct_123")
+        #expect(claims.organizationId == nil)
+        #expect(claims.organizationName == nil)
         #expect(claims.subscriptionActiveUntil == RunwayDates.parse("2026-06-20T11:08:02+00:00"))
         #expect(CodexIdentityClaims.decode("not-a-jwt") == nil)
     }
@@ -128,6 +132,87 @@ struct AuthTests {
         let claims = try #require(CodexIdentityClaims.decode(token))
 
         #expect(claims.email == "profile@example.com")
+    }
+
+    @Test("keeps explicit account and organization fallback identities separate")
+    func separatesAccountAndOrganizationIdentity() throws {
+        let explicit = Self.jwt(payload: [
+            "https://api.openai.com/auth": [
+                "chatgpt_account_id": "workspace-explicit",
+                "organizations": [
+                    ["id": "org-default", "is_default": true, "title": "Workspace Alpha"],
+                ],
+            ],
+        ])
+        let explicitClaims = try #require(CodexIdentityClaims.decode(explicit))
+        #expect(explicitClaims.accountId == "workspace-explicit")
+        #expect(explicitClaims.organizationId == "org-default")
+        #expect(explicitClaims.organizationName == "Workspace Alpha")
+
+        let fallback = Self.jwt(payload: [
+            "https://api.openai.com/auth": [
+                "organizations": [
+                    ["id": "org-first", "is_default": false, "title": "First"],
+                    ["id": "org-selected", "is_default": true, "title": "Selected Workspace"],
+                ],
+            ],
+        ])
+        let fallbackClaims = try #require(CodexIdentityClaims.decode(fallback))
+        #expect(fallbackClaims.accountId == nil)
+        #expect(fallbackClaims.organizationId == "org-selected")
+        #expect(fallbackClaims.organizationName == "Selected Workspace")
+
+        let organizationAuth = CodexAuth(
+            authMode: "chatgpt",
+            tokens: .init(
+                idToken: fallback,
+                accessToken: Self.jwt(payload: [:]),
+                refreshToken: "organization-fallback-refresh-token",
+                accountId: nil),
+            lastRefresh: nil)
+        let managed = ManagedAccount.make(auth: organizationAuth)
+        #expect(managed.accountId == "org-selected")
+        #expect(managed.workspaceName == "Selected Workspace")
+    }
+
+    @Test("conflicting OAuth identity claims use credential fingerprint matching")
+    func conflictingIdentityClaimsUseCredentialFingerprint() {
+        let userConflict = CodexAuth(
+            authMode: "chatgpt",
+            tokens: .init(
+                idToken: Self.jwt(payload: [
+                    "email": "same@example.com",
+                    "https://api.openai.com/auth": [
+                        "chatgpt_user_id": "user-one",
+                        "chatgpt_account_id": "workspace-shared",
+                    ],
+                ]),
+                accessToken: Self.jwt(payload: [
+                    "email": "same@example.com",
+                    "https://api.openai.com/auth": [
+                        "chatgpt_user_id": "user-two",
+                        "chatgpt_account_id": "workspace-shared",
+                    ],
+                ]),
+                refreshToken: "conflicting-user-refresh-token",
+                accountId: "workspace-shared"),
+            lastRefresh: nil)
+        #expect(AccountIdentity.matchKey(for: userConflict).hasPrefix("oauth:credential:"))
+
+        let workspaceConflict = CodexAuth(
+            authMode: "chatgpt",
+            tokens: .init(
+                idToken: Self.jwt(payload: [
+                    "https://api.openai.com/auth": [
+                        "chatgpt_user_id": "user-one",
+                        "chatgpt_account_id": "workspace-claim",
+                    ],
+                ]),
+                accessToken: Self.jwt(payload: [:]),
+                refreshToken: "conflicting-workspace-refresh-token",
+                accountId: "workspace-selected"),
+            lastRefresh: nil)
+        #expect(AccountIdentity.matchKey(for: workspaceConflict).hasPrefix("oauth:credential:"))
     }
 
     @Test("maps Codex subscription tiers")
@@ -163,7 +248,11 @@ struct AuthTests {
         let accessToken = Self.jwt(payload: ["preferred_username": "access-user"])
         let auth = CodexAuth(
             authMode: "chatgpt",
-            tokens: .init(idToken: idToken, accessToken: accessToken, refreshToken: "refresh", accountId: "acct_fallback"),
+            tokens: .init(
+                idToken: idToken,
+                accessToken: accessToken,
+                refreshToken: "refresh",
+                accountId: "acct_123456789"),
             lastRefresh: nil)
 
         let display = CodexAccountDisplay.make(auth: auth, quotaPlan: "pro", now: now)

@@ -17,7 +17,8 @@ struct AccountStoreTests {
 
         let accountA = try store.upsert(auth: authA, makeActive: true)
         let accountB = try store.upsert(auth: authB, makeActive: false)
-        #expect(accountA.id == "acct-a" || accountA.accountId == "acct-a")
+        #expect(accountA.accountId == "acct-a")
+        #expect(accountA.id != accountB.id)
         #expect(accountB.email == "b@example.com")
 
         var index = try store.loadIndex()
@@ -64,6 +65,193 @@ struct AccountStoreTests {
         #expect(cred.tokens.refreshToken.hasPrefix("rt-2"))
     }
 
+    @Test("keeps different users in the same workspace as separate managed accounts")
+    func separatesUsersInSameWorkspace() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-runway-same-workspace-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AccountStore(
+            rootURL: root.appendingPathComponent("accounts"),
+            officialAuthURL: root.appendingPathComponent("auth.json"))
+
+        let firstAuth = sampleAuth(
+            accountId: "workspace-shared",
+            email: "member-a@example.com",
+            refresh: "refresh-member-a",
+            userId: "user-Aa1")
+        let secondAuth = sampleAuth(
+            accountId: "workspace-shared",
+            email: "member-b@example.com",
+            refresh: "refresh-member-b",
+            userId: "user-Bb2")
+
+        let first = try store.upsert(auth: firstAuth, makeActive: true)
+        let second = try store.upsert(auth: secondAuth)
+
+        #expect(first.id != second.id)
+        #expect(first.userId == "user-Aa1")
+        #expect(second.userId == "user-Bb2")
+        #expect(first.identityMarkerUserId != second.identityMarkerUserId)
+        #expect(try store.loadIndex().accounts.count == 2)
+        #expect(try store.loadCredential(id: first.id).tokens.refreshToken.hasPrefix("refresh-member-a"))
+        #expect(try store.loadCredential(id: second.id).tokens.refreshToken.hasPrefix("refresh-member-b"))
+    }
+
+    @Test("keeps one user in different workspaces as separate managed accounts")
+    func separatesWorkspacesForSameUser() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-runway-multi-workspace-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AccountStore(
+            rootURL: root.appendingPathComponent("accounts"),
+            officialAuthURL: root.appendingPathComponent("auth.json"))
+
+        let first = try store.upsert(auth: sampleAuth(
+            accountId: "workspace-one",
+            email: "member@example.com",
+            refresh: "refresh-workspace-one",
+            userId: "user-shared"))
+        let second = try store.upsert(auth: sampleAuth(
+            accountId: "workspace-two",
+            email: "member@example.com",
+            refresh: "refresh-workspace-two",
+            userId: "user-shared"))
+
+        #expect(first.id != second.id)
+        #expect(first.userId == second.userId)
+        #expect(first.accountId != second.accountId)
+        #expect(first.identityMarkerWorkspaceId != second.identityMarkerWorkspaceId)
+        #expect(try store.loadIndex().accounts.count == 2)
+    }
+
+    @Test("same user and workspace re-import updates the existing credential")
+    func updatesSameCompoundIdentity() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-runway-compound-dedup-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AccountStore(
+            rootURL: root.appendingPathComponent("accounts"),
+            officialAuthURL: root.appendingPathComponent("auth.json"))
+
+        let first = try store.upsert(auth: sampleAuth(
+            accountId: "workspace-one",
+            email: "member@example.com",
+            refresh: "refresh-original-token",
+            userId: "user-one"))
+        let second = try store.upsert(auth: sampleAuth(
+            accountId: "workspace-one",
+            email: "renamed@example.com",
+            refresh: "refresh-rotated-token",
+            userId: "user-one"))
+
+        #expect(first.id == second.id)
+        #expect(try store.loadIndex().accounts.count == 1)
+        #expect(try store.loadCredential(id: first.id).tokens.refreshToken == "refresh-rotated-token")
+    }
+
+    @Test("legacy email and workspace identity upgrades when user id becomes available")
+    func upgradesLegacyIdentityWithNewUserId() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-runway-legacy-user-upgrade-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AccountStore(
+            rootURL: root.appendingPathComponent("accounts"),
+            officialAuthURL: root.appendingPathComponent("auth.json"))
+
+        let legacy = try store.upsert(auth: sampleAuth(
+            accountId: "workspace-one",
+            email: "member@example.com",
+            refresh: "refresh-before-user-id"))
+        let upgraded = try store.upsert(auth: sampleAuth(
+            accountId: "workspace-one",
+            email: "member@example.com",
+            refresh: "refresh-after-user-id",
+            userId: "user-one"))
+
+        #expect(upgraded.id == legacy.id)
+        #expect(upgraded.userId == "user-one")
+        #expect(try store.loadIndex().accounts.count == 1)
+        #expect(try store.loadCredential(id: legacy.id).tokens.refreshToken == "refresh-after-user-id")
+    }
+
+    @Test("hydrates legacy identity metadata without moving the managed credential")
+    func hydratesLegacyIdentityInPlace() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-runway-legacy-identity-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AccountStore(
+            rootURL: root.appendingPathComponent("accounts"),
+            officialAuthURL: root.appendingPathComponent("auth.json"))
+        let auth = sampleAuth(
+            accountId: "workspace-selected",
+            email: "legacy@example.com",
+            refresh: "refresh-legacy-token",
+            userId: "legacy-user",
+            workspaceName: "Unrelated Organization Title")
+        let createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let legacy = ManagedAccount(
+            id: "legacy-row-id",
+            sortIndex: 7,
+            email: "legacy@example.com",
+            userId: nil,
+            accountId: "stale-claim-workspace",
+            displayName: "Legacy",
+            alias: "Keep me",
+            note: "Keep note",
+            createdAt: createdAt)
+        try store.saveCredential(id: legacy.id, auth: auth)
+        try store.saveIndex(AccountIndex(activeAccountId: legacy.id, accounts: [legacy]))
+
+        let hydrated = try #require(try store.loadIndex().account(id: legacy.id))
+        #expect(hydrated.userId == "legacy-user")
+        #expect(hydrated.accountId == "workspace-selected")
+        #expect(hydrated.workspaceName == nil)
+        #expect(hydrated.alias == "Keep me")
+        #expect(hydrated.note == "Keep note")
+        #expect(hydrated.sortIndex == 7)
+        #expect(hydrated.createdAt == createdAt)
+
+        let updated = try store.upsert(auth: auth)
+        let updatedIndex = try store.loadIndex()
+        #expect(updated.id == legacy.id)
+        #expect(updatedIndex.activeAccountId == legacy.id)
+        #expect(updatedIndex.accounts.count == 1)
+        #expect(FileManager.default.fileExists(atPath: store.credentialURL(id: legacy.id).path))
+    }
+
+    @Test("weak OAuth identities never merge on a workspace-only key")
+    func weakIdentitiesDoNotMergeByWorkspace() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-runway-weak-identity-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AccountStore(
+            rootURL: root.appendingPathComponent("accounts"),
+            officialAuthURL: root.appendingPathComponent("auth.json"))
+        let first = CodexAuth(
+            authMode: "chatgpt",
+            tokens: .init(
+                idToken: Self.jwt(payload: [:]),
+                accessToken: Self.jwt(exp: 4_100_000_000),
+                refreshToken: "weak-refresh-token-first",
+                accountId: "workspace-only"),
+            lastRefresh: nil)
+        let second = CodexAuth(
+            authMode: "chatgpt",
+            tokens: .init(
+                idToken: Self.jwt(payload: [:]),
+                accessToken: Self.jwt(exp: 4_100_000_000),
+                refreshToken: "weak-refresh-token-second",
+                accountId: "workspace-only"),
+            lastRefresh: nil)
+
+        let firstAccount = try store.upsert(auth: first)
+        let secondAccount = try store.upsert(auth: second)
+        let firstAgain = try store.upsert(auth: first)
+        #expect(firstAccount.id != secondAccount.id)
+        #expect(firstAgain.id == firstAccount.id)
+        #expect(try store.loadIndex().accounts.count == 2)
+    }
+
     @Test("session access-token-only credentials are usable while JWT is valid")
     func sessionAccessTokenOnlyUsable() {
         let access = Self.jwt(payload: [
@@ -99,6 +287,33 @@ struct AccountStoreTests {
         account = account.withIdentity(from: freeAuth, quotaPlan: nil)
         #expect(account.planType?.lowercased().contains("free") == true)
         #expect(account.subscriptionTier == .free)
+    }
+
+    @Test("identity refresh preserves a cached workspace name")
+    func withIdentityPreservesWorkspaceName() {
+        let auth = sampleAuth(
+            accountId: "workspace-cached",
+            email: "cached@example.com",
+            refresh: "refresh-cached-workspace",
+            plan: "team",
+            userId: "user-cached")
+        var account = ManagedAccount.make(auth: auth)
+        account.workspaceName = "Cached Workspace"
+
+        let refreshed = account.withIdentity(from: auth, quotaPlan: "team")
+        #expect(refreshed.workspaceName == "Cached Workspace")
+        #expect(refreshed.displaysWorkspaceIdentity)
+        #expect(refreshed.identityMarkerUserId == "user-cached")
+        #expect(refreshed.identityMarkerWorkspaceId == "workspace-cached")
+
+        let personal = ManagedAccount.make(auth: sampleAuth(
+            accountId: "personal-account",
+            email: "personal@example.com",
+            refresh: "refresh-personal-account",
+            plan: "pro",
+            userId: "personal-user"))
+        #expect(!personal.displaysWorkspaceIdentity)
+        #expect(personal.identityMarkerUserId == "personal-user")
     }
 
     @Test("orders sidebar with active account first")
@@ -204,6 +419,39 @@ struct AccountStoreTests {
         #expect(cred.tokens.accountId == "sess-acct-1")
     }
 
+    @Test("session credentials without workspace context remain separate")
+    func sessionWithoutWorkspaceDoesNotUseSyntheticEmailIdentity() async {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-runway-session-no-workspace-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AccountStore(
+            rootURL: root.appendingPathComponent("accounts"),
+            officialAuthURL: root.appendingPathComponent("auth.json"))
+        let firstAccess = Self.jwt(payload: [
+            "email": "shared@example.com",
+            "exp": 4_100_000_000,
+            "jti": "session-one",
+            "https://api.openai.com/auth": ["chatgpt_user_id": "user-shared"],
+        ])
+        let secondAccess = Self.jwt(payload: [
+            "email": "shared@example.com",
+            "exp": 4_100_000_000,
+            "jti": "session-two",
+            "https://api.openai.com/auth": ["chatgpt_user_id": "user-shared"],
+        ])
+        let sessionJSON = """
+        [
+          {"user":{"email":"shared@example.com"},"accessToken":"\(firstAccess)","authProvider":"openai"},
+          {"user":{"email":"shared@example.com"},"accessToken":"\(secondAccess)","authProvider":"openai"}
+        ]
+        """
+
+        let batch = await AccountImporter(store: store).importPastedText(sessionJSON)
+        #expect(batch.successCount == 2)
+        #expect(try! store.loadIndex().accounts.count == 2)
+        #expect(try! store.loadIndex().accounts.allSatisfy { $0.accountId == nil })
+    }
+
     @Test("paste of unrecognized JSON reports no_credentials failure")
     func pasteUnrecognizedJSONFailsClearly() async {
         let root = FileManager.default.temporaryDirectory
@@ -236,6 +484,67 @@ struct AccountStoreTests {
         #expect(active?.accountId == "two" || active?.email == "two@example.com")
     }
 
+    @Test("external auth change to another user in the same workspace preserves both credentials")
+    func syncsDifferentUserInSameWorkspace() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-runway-sync-same-workspace-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AccountStore(
+            rootURL: root.appendingPathComponent("accounts"),
+            officialAuthURL: root.appendingPathComponent("auth.json"))
+        let firstAuth = sampleAuth(
+            accountId: "workspace-shared",
+            email: "one@example.com",
+            refresh: "refresh-first-member",
+            userId: "user-one")
+        let secondAuth = sampleAuth(
+            accountId: "workspace-shared",
+            email: "two@example.com",
+            refresh: "refresh-second-member",
+            userId: "user-two")
+
+        let first = try store.upsert(auth: firstAuth, makeActive: true)
+        try store.saveOfficialAuth(firstAuth)
+        try store.saveOfficialAuth(secondAuth)
+        let index = try store.syncFromOfficialAuth()
+        let activeId = try #require(index.activeAccountId)
+
+        #expect(index.accounts.count == 2)
+        #expect(activeId != first.id)
+        #expect(try store.loadCredential(id: first.id).tokens.refreshToken == "refresh-first-member")
+        #expect(try store.loadCredential(id: activeId).tokens.refreshToken == "refresh-second-member")
+    }
+
+    @Test("one-click switching between same-workspace users preserves managed snapshots")
+    func switchesBetweenSameWorkspaceUsers() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-runway-switch-same-workspace-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AccountStore(
+            rootURL: root.appendingPathComponent("accounts"),
+            officialAuthURL: root.appendingPathComponent("auth.json"))
+        let firstAuth = sampleAuth(
+            accountId: "workspace-shared",
+            email: "one@example.com",
+            refresh: "refresh-first-member",
+            userId: "user-one")
+        let secondAuth = sampleAuth(
+            accountId: "workspace-shared",
+            email: "two@example.com",
+            refresh: "refresh-second-member",
+            userId: "user-two")
+        let first = try store.upsert(auth: firstAuth, makeActive: true)
+        let second = try store.upsert(auth: secondAuth)
+        let switcher = AccountSwitcher(store: store)
+
+        _ = try await switcher.switchTo(accountId: second.id)
+        #expect(CodexIdentityClaims.decode(try store.loadOfficialAuth().tokens.idToken)?.userId == "user-two")
+        _ = try await switcher.switchTo(accountId: first.id)
+        #expect(CodexIdentityClaims.decode(try store.loadOfficialAuth().tokens.idToken)?.userId == "user-one")
+        #expect(try store.loadCredential(id: first.id).tokens.refreshToken == "refresh-first-member")
+        #expect(try store.loadCredential(id: second.id).tokens.refreshToken == "refresh-second-member")
+    }
+
     @Test("oauth session builds authorize url with pkce params")
     func oauthSession() throws {
         let session = try CodexOAuthLogin.startSession(port: 1455)
@@ -251,14 +560,27 @@ struct AccountStoreTests {
         accountId: String,
         email: String,
         refresh: String,
-        plan: String = "plus") -> CodexAuth
+        plan: String = "plus",
+        userId: String? = nil,
+        workspaceName: String? = nil) -> CodexAuth
     {
+        var authClaims: [String: Any] = [
+            "chatgpt_account_id": accountId,
+            "chatgpt_plan_type": plan,
+        ]
+        if let userId {
+            authClaims["chatgpt_user_id"] = userId
+        }
+        if let workspaceName {
+            authClaims["organizations"] = [[
+                "id": "organization-\(accountId)",
+                "is_default": true,
+                "title": workspaceName,
+            ]]
+        }
         let idToken = Self.jwt(payload: [
             "email": email,
-            "https://api.openai.com/auth": [
-                "chatgpt_account_id": accountId,
-                "chatgpt_plan_type": plan,
-            ],
+            "https://api.openai.com/auth": authClaims,
         ])
         // loginUsability requires a long refresh token so short fixtures pad out.
         let refreshToken = refresh.count >= 20 ? refresh : (refresh + String(repeating: "x", count: 24))

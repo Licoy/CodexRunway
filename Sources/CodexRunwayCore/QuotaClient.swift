@@ -44,6 +44,28 @@ public struct QuotaClient: Sendable {
         return try CodexProfileTokenUsage.decode(from: data)
     }
 
+    /// Best-effort display metadata. Failure must never block quota refresh or account switching.
+    public func fetchWorkspaceName(auth: CodexAuth) async -> String? {
+        guard !auth.tokens.accessToken.isEmpty,
+              let accountId = AccountIdentity.oauthAccountId(for: auth)
+        else { return nil }
+        do {
+            let payload = try await data(path: "accounts", auth: auth, timeoutInterval: 8)
+            return try Self.decodeWorkspaceName(from: payload, accountId: accountId)
+        } catch {
+            return nil
+        }
+    }
+
+    static func decodeWorkspaceName(from data: Data, accountId: String) throws -> String? {
+        let response = try JSONDecoder().decode(WorkspaceAccountsResponse.self, from: data)
+        guard let entry = response.items.first(where: { $0.id == accountId }),
+              let rawName = entry.name?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !rawName.isEmpty
+        else { return nil }
+        return rawName
+    }
+
     private func analyticsURL(startDate: String, endDate: String) throws -> URL {
         let url = baseURL.appendingPathComponent("wham/analytics/daily-workspace-usage-counts")
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
@@ -58,16 +80,28 @@ public struct QuotaClient: Sendable {
         return url
     }
 
-    private func data(path: String, auth: CodexAuth) async throws -> Data {
-        try await data(url: baseURL.appendingPathComponent(path), auth: auth)
+    private func data(
+        path: String,
+        auth: CodexAuth,
+        timeoutInterval: TimeInterval = 20) async throws -> Data
+    {
+        try await data(
+            url: baseURL.appendingPathComponent(path),
+            auth: auth,
+            timeoutInterval: timeoutInterval)
     }
 
-    private func data(url: URL, auth: CodexAuth) async throws -> Data {
+    private func data(
+        url: URL,
+        auth: CodexAuth,
+        timeoutInterval: TimeInterval = 20) async throws -> Data
+    {
         var request = URLRequest(url: url)
-        request.timeoutInterval = 20
+        request.timeoutInterval = timeoutInterval
         request.setValue("Bearer \(auth.tokens.accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let accountId = auth.tokens.accountId, !accountId.isEmpty {
+        request.setValue("CodexRunway/1", forHTTPHeaderField: "User-Agent")
+        if let accountId = AccountIdentity.oauthAccountId(for: auth), !accountId.isEmpty {
             request.setValue(accountId, forHTTPHeaderField: "ChatGPT-Account-Id")
         }
         let (data, response) = try await session.data(for: request)
@@ -76,4 +110,13 @@ public struct QuotaClient: Sendable {
         }
         return data
     }
+}
+
+private struct WorkspaceAccountsResponse: Decodable {
+    var items: [WorkspaceAccountEntry]
+}
+
+private struct WorkspaceAccountEntry: Decodable {
+    var id: String
+    var name: String?
 }
