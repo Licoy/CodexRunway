@@ -395,7 +395,7 @@ struct RunwayModelRefreshTests {
         try await recorder.waitFor("reset-start")
 
         // While cost is still held, independent popover sections must already have started.
-        var events = await recorder.events
+        var events = recorder.events
         #expect(events.contains("repair-start"))
         #expect(events.contains("recent-start"))
         #expect(events.contains("cost-start"))
@@ -407,13 +407,13 @@ struct RunwayModelRefreshTests {
         try await recorder.waitFor("cost-finish")
 
         // Cost finished while reset credits are still held — must not serialize behind reset.
-        events = await recorder.events
+        events = recorder.events
         #expect(events.contains("cost-finish"))
         #expect(!events.contains("reset-finish"))
 
         resetHold.release()
         try await recorder.waitFor("reset-finish")
-        events = await recorder.events
+        events = recorder.events
         #expect(events.contains("reset-finish"))
     }
 
@@ -436,7 +436,7 @@ struct RunwayModelRefreshTests {
         #expect(selected.window.end == captured.now)
         #expect(captured.policy == .force)
         try await waitForCostRefresh(in: model)
-        #expect(await recorder.captureCount == 1)
+        #expect(recorder.captureCount == 1)
     }
 
     @Test("if-changed refresh reuses results within the configured interval")
@@ -452,12 +452,12 @@ struct RunwayModelRefreshTests {
         model.refreshCost(policy: .ifChanged)
         try await Task.sleep(for: .milliseconds(20))
 
-        #expect(await recorder.captureCount == 1)
+        #expect(recorder.captureCount == 1)
         #expect(!model.isRefreshing(.apiCost))
 
         model.refreshCost(policy: .force)
         _ = try await recorder.waitForBatch(count: 2)
-        #expect(await recorder.captureCount == 2)
+        #expect(recorder.captureCount == 2)
     }
 
     @Test("current cycle API cost summary scans elapsed quota weekly range")
@@ -482,7 +482,7 @@ struct RunwayModelRefreshTests {
         #expect(query.window.end == min(max(captured.now, start), reset))
         #expect(captured.policy == .force)
         try await waitForCostRefresh(in: model)
-        #expect(await recorder.captureCount == 1)
+        #expect(recorder.captureCount == 1)
     }
 
     @Test("current cycle detail refreshes a snapshot whose elapsed end is stale")
@@ -532,7 +532,7 @@ struct RunwayModelRefreshTests {
 
         _ = try await model.queryCurrentCycleCost()
 
-        #expect(await recorder.captureCount == 2)
+        #expect(recorder.captureCount == 2)
     }
 
     @Test("previous cycle API cost summary scans the full previous quota weekly range")
@@ -559,7 +559,7 @@ struct RunwayModelRefreshTests {
         #expect(previous.window.end == cycleStart)
         #expect(captured.policy == .force)
         try await waitForCostRefresh(in: model)
-        #expect(await recorder.captureCount == 1)
+        #expect(recorder.captureCount == 1)
     }
 
     @Test("API cost summary shows empty usage when selected range has no tokens")
@@ -644,7 +644,7 @@ struct RunwayModelRefreshTests {
             settings: settings,
             services: Self.costRangeServices(recorder: batchRecorder))
         model.onFullRefreshCompleted = {
-            Task { await completionRecorder.record("complete") }
+            Task { completionRecorder.record("complete") }
         }
 
         model.refresh(policy: .ifChanged)
@@ -1076,7 +1076,8 @@ private struct CostBatchCapture: Sendable {
     let policy: UsageCostRefreshPolicy
 }
 
-private actor CostBatchRecorder {
+@MainActor
+private final class CostBatchRecorder {
     private var captures: [CostBatchCapture] = []
     var captureCount: Int { captures.count }
 
@@ -1094,7 +1095,8 @@ private actor CostBatchRecorder {
     }
 }
 
-private actor RefreshEventRecorder {
+@MainActor
+private final class RefreshEventRecorder {
     private(set) var events: [String] = []
 
     func record(_ event: String) {
