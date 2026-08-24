@@ -313,9 +313,8 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     }
 
     private func eventHitsStatusButton(_ event: NSEvent) -> Bool {
-        guard let button = statusItem.button, event.window === button.window else { return false }
-        let point = button.convert(event.locationInWindow, from: nil)
-        return button.bounds.contains(point)
+        // NSStatusBarWindow includes the button plus the system's side margins.
+        event.window === statusItem.button?.window
     }
 
     private func handleStatusEvent(_ mouseButton: StatusMouseButton, relativeTo button: NSStatusBarButton?) {
@@ -350,6 +349,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
 
     private func showPopover() {
         guard let button = statusItem.button else { return }
+        button.highlight(true)
         NSApp.activate(ignoringOtherApps: true)
         // Visible before show so the first frame already renders with shimmer unpaused;
         // fresh hosting per open (dropped on close) keeps presentation state clean.
@@ -487,19 +487,17 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         dismissPresentedSheets(on: loadedPopoverWindow)
         dismissPresentedSheets(on: detailsWindow)
         mainPanelVisibility.isVisible = false
+        statusItem.button?.highlight(false)
         popover.contentViewController = nil
         detailsWindow?.contentViewController = nil
     }
 
     private func eventHitsStatusButtonScreen(_ event: NSEvent) -> Bool {
-        guard let button = statusItem.button, let buttonWindow = button.window else { return false }
+        guard let buttonWindow = statusItem.button?.window else { return false }
         if event.window === buttonWindow {
-            return eventHitsStatusButton(event)
+            return true
         }
-        let screenPoint = NSEvent.mouseLocation
-        let buttonRect = button.convert(button.bounds, to: nil)
-        let screenRect = buttonWindow.convertToScreen(buttonRect)
-        return screenRect.contains(screenPoint)
+        return buttonWindow.frame.contains(NSEvent.mouseLocation)
     }
 
     private func closePopover() {
@@ -719,7 +717,9 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         populateMenu(menu)
         statusMenu = menu
         closeMainPanel()
+        button.highlight(true)
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 2), in: button)
+        button.highlight(isMainPanelVisible)
     }
 
     private static func mouseButton(from event: NSEvent) -> StatusMouseButton {

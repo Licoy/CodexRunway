@@ -66,7 +66,7 @@ struct StatusBarContentLayout {
     var preferredWidth: CGFloat {
         switch style {
         case .text:
-            return totalWidth(textColumnWidths, gap: 4)
+            return contentWidth(textColumnWidths, gap: 4)
         case .countdown:
             guard renderPlan.meters.count > 1 else {
                 return min(180, max(42, textWidth(text, font: countdownFont) + 14))
@@ -135,7 +135,7 @@ struct StatusBarContentLayout {
     }
 
     var textColumnWidths: [CGFloat] {
-        textCaptions.map { max(24, textWidth($0, font: textFont) + 8) }
+        textCaptions.map { max(24, textWidth($0, font: textFont) + 4) }
     }
 
     var batteryColumnWidths: [CGFloat] {

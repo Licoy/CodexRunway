@@ -237,6 +237,11 @@ struct StatusBarRenderPlanTests {
         #expect(layout.ringText(for: fiveHour) == "80")
         #expect(layout.textCaptions == ["80%", "89%"])
         #expect(noQuotaLayout.textCaptions == ["--"])
+        let expectedColumnWidths = layout.textCaptions.map {
+            max(24, $0.size(withAttributes: [.font: layout.textFont]).width + 4)
+        }
+        #expect(layout.textColumnWidths == expectedColumnWidths)
+        #expect(layout.preferredWidth == expectedColumnWidths.reduce(0, +) + 4)
         #expect(layout.preferredWidth > noQuotaLayout.preferredWidth)
     }
 
