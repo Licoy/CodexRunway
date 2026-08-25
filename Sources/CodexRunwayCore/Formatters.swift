@@ -47,6 +47,31 @@ public enum DurationFormatter {
         return DurationCopy.ago(text, language: language)
     }
 
+    /// Single-unit past duration matching the hosted reset-today "no" copy.
+    /// Future or invalid intervals return nil.
+    public static func relativePastSingleUnit(
+        since date: Date,
+        now: Date = Date(),
+        language: ResolvedLanguage) -> String?
+    {
+        let interval = now.timeIntervalSince(date)
+        guard interval.isFinite, interval >= 0 else { return nil }
+        let seconds = Int(interval)
+        let style = DurationUnitStyle(language: language)
+        if seconds < 60 {
+            return style.unit(max(seconds, 1), .second)
+        }
+        let minutes = seconds / 60
+        if minutes < 60 {
+            return style.unit(minutes, .minute)
+        }
+        let hours = minutes / 60
+        if hours < 24 {
+            return style.unit(hours, .hour)
+        }
+        return style.unit(hours / 24, .day)
+    }
+
     /// Compact absolute remaining duration (no "ago"/"in" wrapper), e.g. "3小时20分钟".
     public static func remaining(
         until date: Date,

@@ -371,6 +371,9 @@ struct RateLimitResetTodayView: View {
                 .font(.caption2)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
+            } else if let last = heroNoneLastDetail(now: now) {
+                noneLastHintText(type: last.resetType, ago: last.ago)
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text(heroSubtitle(now: now))
                     .font(.caption2)
@@ -577,9 +580,13 @@ struct RateLimitResetTodayView: View {
             parts.append(
                 "\(l10n.text(.rateLimitResetTodayLastCheck)) \(DurationFormatter.relativePast(since: checkedAt, now: now, language: l10n.language))")
         }
-        if let resetAt = snapshot.latestResetAt(now: now) {
+        if let latest = snapshot.latestReset(now: now) {
+            let relative = DurationFormatter.relativePast(
+                since: latest.at,
+                now: now,
+                language: l10n.language)
             parts.append(
-                "\(l10n.text(.lastReset)) \(DurationFormatter.relativePast(since: resetAt, now: now, language: l10n.language))")
+                "\(l10n.text(.lastReset)) \(latest.resetType.localizedName(l10n: l10n)) · \(relative)")
         } else if snapshot.resolvedState(now: now, calendar: calendar) == .no,
                   snapshot.nextScheduledReset(now: now) == nil
         {
@@ -666,6 +673,9 @@ struct RateLimitResetTodayView: View {
             if snapshot.hasUncertainNoSignalToday(now: now, calendar: calendar) {
                 return l10n.text(.rateLimitResetTodayNoHintUncertain)
             }
+            if let last = snapshot.noneHintLastReset(l10n: l10n, now: now) {
+                return last.text
+            }
             return l10n.text(.rateLimitResetTodayNoHint)
         case .unknown:
             return l10n.text(.rateLimitResetTodayUnknownHint)
@@ -707,6 +717,44 @@ struct RateLimitResetTodayView: View {
         case .globalAndBanked:
             l10n.text(.rateLimitResetTodayGlobalAndBankedScheduledHint)
         }
+    }
+
+    private func heroNoneLastDetail(now: Date) -> (resetType: RateLimitResetType, ago: String)? {
+        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
+        guard let snapshot,
+              snapshot.resolvedState(now: now, calendar: calendar) == .no,
+              snapshot.nextScheduledReset(now: now) == nil,
+              !snapshot.hasUncertainNoSignalToday(now: now, calendar: calendar),
+              let last = snapshot.noneHintLastReset(l10n: l10n, now: now)
+        else {
+            return nil
+        }
+        return (last.resetType, last.ago)
+    }
+
+    private func noneLastHintText(type: RateLimitResetType, ago: String) -> some View {
+        let template = l10n.text(.rateLimitResetTodayNoHintWithLast)
+        let typeLabel = type.localizedName(l10n: l10n)
+        let typeColor = resetTypeColor(type)
+        let secondary = Color(nsColor: .secondaryLabelColor)
+        var result = Text("")
+        for segment in RateLimitResetNoneHint.segments(template) {
+            switch segment {
+            case .text(let value):
+                result = result + Text(value).foregroundColor(secondary)
+            case .resetType:
+                result = result + Text(typeLabel)
+                    .foregroundColor(typeColor)
+                    .fontWeight(.semibold)
+            case .ago:
+                result = result + Text(ago)
+                    .foregroundColor(Color(nsColor: .labelColor))
+                    .fontWeight(.semibold)
+            }
+        }
+        return result
+            .font(.caption2)
+            .multilineTextAlignment(.leading)
     }
 
     private func resetTypeColor(_ resetType: RateLimitResetType) -> Color {

@@ -9,6 +9,10 @@ struct ResetStatusEventFixture {
     var schedulePrecision: String? = nil
     var scheduleBasis: String? = nil
     var postID: String = "123"
+    var origin: String? = nil
+    var omitOrigin = false
+    var handle: String? = "thsottiaux"
+    var includeURL: Bool = true
 
     var json: String {
         let effectiveValue = effectiveAt.map { "\"\($0)\"" } ?? "null"
@@ -22,16 +26,24 @@ struct ResetStatusEventFixture {
         if let scheduleBasis {
             extra += ",\n          \"scheduleBasis\": \"\(scheduleBasis)\""
         }
+        var sourceFields = ""
+        if let origin, !omitOrigin {
+            sourceFields += "\n            \"origin\": \"\(origin)\","
+        }
+        if let handle {
+            sourceFields += "\n            \"handle\": \"\(handle)\","
+        }
+        sourceFields += "\n            \"postId\": \"\(postID)\""
+        if includeURL {
+            sourceFields += ",\n            \"url\": \"https://x.com/thsottiaux/status/\(postID)\""
+        }
         return """
         {
           "kind": "\(kind)",
           "announcedAt": "\(announcedAt)",
           "effectiveAt": \(effectiveValue)\(extra),
           "scope": {"plans": ["all"], "windows": ["weekly"]},
-          "source": {
-            "handle": "thsottiaux",
-            "postId": "\(postID)",
-            "url": "https://x.com/thsottiaux/status/\(postID)"
+          "source": {\(sourceFields)
           },
           "confidence": 0.98,
           "rationale": "\(rationale)",
@@ -43,13 +55,24 @@ struct ResetStatusEventFixture {
     private var rationale: String {
         switch kind {
         case "reset_completed":
-            switch resetType {
-            case "banked":
-                "Explicit Codex reset-bank credit announcement."
-            case "global_and_banked":
-                "Explicit Codex global reset and reset-bank credit announcement."
-            default:
-                "Explicit Codex quota reset announcement."
+            if origin == "operator" {
+                switch resetType {
+                case "banked":
+                    "Operator-confirmed Codex reset-bank credit without an X announcement."
+                case "global_and_banked":
+                    "Operator-confirmed Codex global reset and reset-bank credit without an X announcement."
+                default:
+                    "Operator-confirmed Codex quota reset without an X announcement."
+                }
+            } else {
+                switch resetType {
+                case "banked":
+                    "Explicit Codex reset-bank credit announcement."
+                case "global_and_banked":
+                    "Explicit Codex global reset and reset-bank credit announcement."
+                default:
+                    "Explicit Codex quota reset announcement."
+                }
             }
         case "reset_scheduled":
             if scheduleBasis == "contextual_inference" {

@@ -450,6 +450,42 @@ struct PreferencesTests {
         #expect(DurationFormatter.relativePast(since: calculatedAt, now: now, language: .english) == "30 seconds ago")
     }
 
+    @Test("single-unit past duration matches the hosted reset-today copy")
+    func relativePastSingleUnitMatchesHostedCopy() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+
+        #expect(
+            DurationFormatter.relativePastSingleUnit(
+                since: now.addingTimeInterval(-40 * 60),
+                now: now,
+                language: .simplifiedChinese)
+                == "40分钟")
+        #expect(
+            DurationFormatter.relativePastSingleUnit(
+                since: now.addingTimeInterval(-3 * 3_600),
+                now: now,
+                language: .english)
+                == "3 hours")
+        #expect(
+            DurationFormatter.relativePastSingleUnit(
+                since: now.addingTimeInterval(-3_600),
+                now: now,
+                language: .simplifiedChinese)
+                == "1小时")
+        #expect(
+            DurationFormatter.relativePastSingleUnit(
+                since: now.addingTimeInterval(-2 * 86_400),
+                now: now,
+                language: .simplifiedChinese)
+                == "2天")
+        #expect(
+            DurationFormatter.relativePastSingleUnit(
+                since: now.addingTimeInterval(60),
+                now: now,
+                language: .english)
+                == nil)
+    }
+
     @Test("single instance guard rejects a second holder")
     func singleInstanceGuardRejectsSecondHolder() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)

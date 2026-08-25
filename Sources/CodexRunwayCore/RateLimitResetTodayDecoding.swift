@@ -77,7 +77,7 @@ extension RateLimitResetTodaySnapshot {
             guard entry.schedule.kind == .resetScheduled else {
                 throw invalidPayload("A fulfilled schedule must contain a scheduled event.")
             }
-            try validatePostID(entry.completionPostID, label: "completionPostId")
+            try validateEventID(entry.completionPostID, label: "completionPostId")
             guard entry.visibleUntil >= entry.completedAt else {
                 throw invalidPayload("Fulfilled schedule visibility cannot end before completion.")
             }
@@ -85,6 +85,16 @@ extension RateLimitResetTodaySnapshot {
             let scheduleID = entry.schedule.source.postID
             guard fulfilledIDs.insert(scheduleID).inserted else {
                 throw invalidPayload("Fulfilled schedules must have unique post IDs.")
+            }
+        }
+        for entry in timeline.fulfilledBanked {
+            try validate(entry.banked)
+            guard entry.banked.kind == .bankedReset else {
+                throw invalidPayload("A fulfilled banked origin must contain a banked reset event.")
+            }
+            try validateEventID(entry.completionPostID, label: "completionPostId")
+            guard entry.visibleUntil >= entry.completedAt else {
+                throw invalidPayload("Fulfilled banked visibility cannot end before completion.")
             }
         }
         var manualIDs = Set<String>()
@@ -153,20 +163,7 @@ extension RateLimitResetTodaySnapshot {
         guard event.confidence.isFinite, 0...1 ~= event.confidence else {
             throw invalidPayload("Event confidence must be between zero and one.")
         }
-        let sourcePath = event.source.url.pathComponents.filter { $0 != "/" }
-        guard event.source.handle == "thsottiaux",
-              !event.source.postID.isEmpty,
-              event.source.postID.count <= 30,
-              event.source.postID.allSatisfy(\.isNumber),
-              event.source.url.scheme?.lowercased() == "https",
-              event.source.url.host?.lowercased() == "x.com",
-              sourcePath.count == 3,
-              sourcePath[0].caseInsensitiveCompare(event.source.handle) == .orderedSame,
-              sourcePath[1] == "status",
-              sourcePath[2] == event.source.postID
-        else {
-            throw invalidPayload("Event source must identify a valid @thsottiaux X post.")
-        }
+        try validate(event.source, kind: event.kind)
         guard !event.text.isEmpty else {
             throw invalidPayload("Event text must be a non-empty original post body.")
         }
@@ -205,9 +202,50 @@ extension RateLimitResetTodaySnapshot {
         }
     }
 
+    private static func validate(
+        _ source: RateLimitResetTodaySource,
+        kind: RateLimitResetTodayEventKind) throws
+    {
+        if source.isOperator {
+            guard kind == .resetCompleted else {
+                throw invalidPayload("Operator events must be completed resets.")
+            }
+            guard RateLimitResetTodaySource.isOperatorEventID(source.postID),
+                  source.handle == nil,
+                  source.url == nil
+            else {
+                throw invalidPayload("Operator event source requires an op_ event id without handle or URL.")
+            }
+            return
+        }
+        guard !RateLimitResetTodaySource.isOperatorEventID(source.postID),
+              RateLimitResetTodaySource.isXPostID(source.postID),
+              source.handle == "thsottiaux",
+              let url = source.url
+        else {
+            throw invalidPayload("Event source must identify a valid @thsottiaux X post.")
+        }
+        let sourcePath = url.pathComponents.filter { $0 != "/" }
+        guard url.scheme?.lowercased() == "https",
+              url.host?.lowercased() == "x.com",
+              sourcePath.count == 3,
+              sourcePath[0].caseInsensitiveCompare("thsottiaux") == .orderedSame,
+              sourcePath[1] == "status",
+              sourcePath[2] == source.postID
+        else {
+            throw invalidPayload("Event source must identify a valid @thsottiaux X post.")
+        }
+    }
+
     private static func validatePostID(_ postID: String, label: String) throws {
-        guard !postID.isEmpty, postID.count <= 30, postID.allSatisfy(\.isNumber) else {
+        guard RateLimitResetTodaySource.isXPostID(postID) else {
             throw invalidPayload("\(label) must be a numeric X post ID.")
+        }
+    }
+
+    private static func validateEventID(_ postID: String, label: String) throws {
+        guard RateLimitResetTodaySource.isEventID(postID) else {
+            throw invalidPayload("\(label) must be a numeric X post ID or operator event id.")
         }
     }
 
@@ -226,13 +264,24 @@ private extension RateLimitResetTodayEvent {
     var acceptedRationales: Set<String> {
         switch kind {
         case .resetCompleted:
-            switch resetType {
-            case .global:
-                ["Explicit Codex quota reset announcement."]
-            case .banked:
-                ["Explicit Codex reset-bank credit announcement."]
-            case .globalAndBanked:
-                ["Explicit Codex global reset and reset-bank credit announcement."]
+            if source.isOperator {
+                switch resetType {
+                case .global:
+                    ["Operator-confirmed Codex quota reset without an X announcement."]
+                case .banked:
+                    ["Operator-confirmed Codex reset-bank credit without an X announcement."]
+                case .globalAndBanked:
+                    ["Operator-confirmed Codex global reset and reset-bank credit without an X announcement."]
+                }
+            } else {
+                switch resetType {
+                case .global:
+                    ["Explicit Codex quota reset announcement."]
+                case .banked:
+                    ["Explicit Codex reset-bank credit announcement."]
+                case .globalAndBanked:
+                    ["Explicit Codex global reset and reset-bank credit announcement."]
+                }
             }
         case .resetScheduled:
             if scheduleBasis == .contextualInference {

@@ -71,21 +71,64 @@ public struct RateLimitResetTodayScope: Decodable, Sendable, Equatable {
     }
 }
 
+public enum RateLimitResetEventOrigin: String, Decodable, Sendable, Equatable {
+    case x
+    case `operator`
+}
+
 public struct RateLimitResetTodaySource: Decodable, Sendable, Equatable {
-    public var handle: String
+    public var origin: RateLimitResetEventOrigin
+    public var handle: String?
     public var postID: String
-    public var url: URL
+    public var url: URL?
 
     private enum CodingKeys: String, CodingKey {
+        case origin
         case handle
         case postID = "postId"
         case url
     }
 
-    public init(handle: String, postID: String, url: URL) {
+    public init(
+        origin: RateLimitResetEventOrigin = .x,
+        handle: String? = nil,
+        postID: String,
+        url: URL? = nil)
+    {
+        self.origin = origin
         self.handle = handle
         self.postID = postID
         self.url = url
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        postID = try container.decode(String.self, forKey: .postID)
+        handle = try container.decodeIfPresent(String.self, forKey: .handle)
+        url = try container.decodeIfPresent(URL.self, forKey: .url)
+        if let decoded = try container.decodeIfPresent(RateLimitResetEventOrigin.self, forKey: .origin) {
+            origin = decoded
+        } else {
+            origin = Self.isOperatorEventID(postID) ? .operator : .x
+        }
+    }
+
+    public var isOperator: Bool { origin == .operator }
+
+    public static func isXPostID(_ value: String) -> Bool {
+        !value.isEmpty && value.count <= 30 && value.allSatisfy(\.isNumber)
+    }
+
+    public static func isOperatorEventID(_ value: String) -> Bool {
+        guard value.hasPrefix("op_") else { return false }
+        let hex = value.dropFirst(3)
+        return hex.count == 24 && hex.allSatisfy { character in
+            ("0"..."9").contains(character) || ("a"..."f").contains(character)
+        }
+    }
+
+    public static func isEventID(_ value: String) -> Bool {
+        isXPostID(value) || isOperatorEventID(value)
     }
 }
 
@@ -234,6 +277,32 @@ public struct RateLimitResetFulfilledSchedule: Decodable, Sendable, Equatable {
     }
 }
 
+public struct RateLimitResetFulfilledBanked: Decodable, Sendable, Equatable {
+    public var banked: RateLimitResetTodayEvent
+    public var completionPostID: String
+    public var completedAt: Date
+    public var visibleUntil: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case banked
+        case completionPostID = "completionPostId"
+        case completedAt
+        case visibleUntil
+    }
+
+    public init(
+        banked: RateLimitResetTodayEvent,
+        completionPostID: String,
+        completedAt: Date,
+        visibleUntil: Date)
+    {
+        self.banked = banked
+        self.completionPostID = completionPostID
+        self.completedAt = completedAt
+        self.visibleUntil = visibleUntil
+    }
+}
+
 public struct RateLimitResetManualCompletion: Decodable, Sendable, Equatable {
     public var id: String
     public var completedAt: Date
@@ -284,6 +353,7 @@ public struct RateLimitResetTimeline: Sendable, Equatable {
     public var nextSchedule: RateLimitResetTodayEvent?
     public var recentNonCompletedPostId: String?
     public var fulfilledSchedules: [RateLimitResetFulfilledSchedule]
+    public var fulfilledBanked: [RateLimitResetFulfilledBanked]
     public var manualCompletions: [RateLimitResetManualCompletion]
     public var suppressedPostIds: [String]
 
@@ -291,12 +361,14 @@ public struct RateLimitResetTimeline: Sendable, Equatable {
         nextSchedule: RateLimitResetTodayEvent? = nil,
         recentNonCompletedPostId: String? = nil,
         fulfilledSchedules: [RateLimitResetFulfilledSchedule] = [],
+        fulfilledBanked: [RateLimitResetFulfilledBanked] = [],
         manualCompletions: [RateLimitResetManualCompletion] = [],
         suppressedPostIds: [String] = [])
     {
         self.nextSchedule = nextSchedule
         self.recentNonCompletedPostId = recentNonCompletedPostId
         self.fulfilledSchedules = fulfilledSchedules
+        self.fulfilledBanked = fulfilledBanked
         self.manualCompletions = manualCompletions
         self.suppressedPostIds = suppressedPostIds
     }
@@ -307,6 +379,7 @@ extension RateLimitResetTimeline: Decodable {
         case nextSchedule
         case recentNonCompletedPostId
         case fulfilledSchedules
+        case fulfilledBanked
         case manualCompletions
         case suppressedPostIds
     }
@@ -318,6 +391,9 @@ extension RateLimitResetTimeline: Decodable {
         fulfilledSchedules = try container.decodeIfPresent(
             [RateLimitResetFulfilledSchedule].self,
             forKey: .fulfilledSchedules) ?? []
+        fulfilledBanked = try container.decodeIfPresent(
+            [RateLimitResetFulfilledBanked].self,
+            forKey: .fulfilledBanked) ?? []
         manualCompletions = try container.decodeIfPresent(
             [RateLimitResetManualCompletion].self,
             forKey: .manualCompletions) ?? []
@@ -542,13 +618,17 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         guard let event = primaryEvidenceEvent(now: now, calendar: calendar) else { return nil }
         let key: L10nKey = switch event.kind {
         case .resetCompleted:
-            switch event.resetType {
-            case .global:
-                .rateLimitResetTodayEvidenceResetCompleted
-            case .banked:
-                .rateLimitResetTodayEvidenceBankedCompleted
-            case .globalAndBanked:
-                .rateLimitResetTodayEvidenceGlobalAndBankedCompleted
+            if event.source.isOperator {
+                .rateLimitResetTodayEvidenceOperatorCompletion
+            } else {
+                switch event.resetType {
+                case .global:
+                    .rateLimitResetTodayEvidenceResetCompleted
+                case .banked:
+                    .rateLimitResetTodayEvidenceBankedCompleted
+                case .globalAndBanked:
+                    .rateLimitResetTodayEvidenceGlobalAndBankedCompleted
+                }
             }
         case .resetScheduled:
             if event.scheduleBasis == .contextualInference {
@@ -615,6 +695,27 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
 
     public func latestResetAt(now: Date = Date()) -> Date? {
         latestReset(now: now)?.at
+    }
+
+    /// Hosted "no" copy when nothing is completed or scheduled today, but history exists.
+    public func noneHintLastReset(
+        l10n: L10n,
+        now: Date = Date()) -> (resetType: RateLimitResetType, ago: String, text: String)?
+    {
+        guard let latest = latestReset(now: now),
+              let ago = DurationFormatter.relativePastSingleUnit(
+                  since: latest.at,
+                  now: now,
+                  language: l10n.language)
+        else {
+            return nil
+        }
+        let type = latest.resetType.localizedName(l10n: l10n)
+        let template = l10n.text(.rateLimitResetTodayNoHintWithLast)
+        return (
+            latest.resetType,
+            ago,
+            RateLimitResetNoneHint.plain(template: template, type: type, ago: ago))
     }
 
     /// Next pending `reset_scheduled` window, if any.
@@ -903,6 +1004,52 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
             response: response,
             now: now,
             calendar: localDayCalendar)
+    }
+}
+
+public enum RateLimitResetNoneHint: Sendable {
+    public enum Segment: Equatable, Sendable {
+        case text(String)
+        case resetType
+        case ago
+    }
+
+    public static func segments(_ template: String) -> [Segment] {
+        var segments: [Segment] = []
+        var start = template.startIndex
+        while start < template.endIndex {
+            let typeRange = template.range(of: "{type}", range: start..<template.endIndex)
+            let agoRange = template.range(of: "{ago}", range: start..<template.endIndex)
+            let next: (range: Range<String.Index>, segment: Segment)?
+            switch (typeRange, agoRange) {
+            case let (type?, ago?):
+                next = type.lowerBound <= ago.lowerBound ? (type, .resetType) : (ago, .ago)
+            case let (type?, nil):
+                next = (type, .resetType)
+            case let (nil, ago?):
+                next = (ago, .ago)
+            case (nil, nil):
+                next = nil
+            }
+            guard let next else {
+                let rest = String(template[start...])
+                if !rest.isEmpty {
+                    segments.append(.text(rest))
+                }
+                break
+            }
+            if next.range.lowerBound > start {
+                segments.append(.text(String(template[start..<next.range.lowerBound])))
+            }
+            segments.append(next.segment)
+            start = next.range.upperBound
+        }
+        return segments.isEmpty ? [.text(template)] : segments
+    }
+
+    public static func plain(template: String, type: String, ago: String) -> String {
+        template.replacingOccurrences(of: "{type}", with: type)
+            .replacingOccurrences(of: "{ago}", with: ago)
     }
 }
 

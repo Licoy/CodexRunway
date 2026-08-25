@@ -1542,6 +1542,9 @@ final class RunwayModel: ObservableObject {
             if snapshot.hasUncertainNoSignalToday(now: now, calendar: calendar) {
                 return l10n.text(.rateLimitResetTodayNoHintUncertain)
             }
+            if let last = snapshot.noneHintLastReset(l10n: l10n, now: now) {
+                return last.text
+            }
             return l10n.text(.rateLimitResetTodayNoHint)
         case .unknown:
             return l10n.text(.rateLimitResetTodayUnknownHint)
