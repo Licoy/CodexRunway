@@ -35,8 +35,33 @@ struct AdHocSigningTests {
             #expect(script.contains("runway_codesign"))
         }
         #expect(dev.contains("LOCK=\"$HOME/.codex-runway/codex-runway.lock\""))
+        #expect(dev.contains("exec swift run --package-path \"$ROOT\" CodexRunway --"))
+        #expect(dev.contains("--host-executable"))
         #expect(verify.contains("designated => identifier"))
         #expect(verify.contains("NSAppDataUsageDescription"))
+    }
+
+    @Test("run-dev-app.sh --help lists CodexRunway flags without launching")
+    func runDevAppHelp() throws {
+        let script = repositoryRoot.appendingPathComponent("Scripts/run-dev-app.sh")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [script.path, "-h"]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = output
+        try process.run()
+        process.waitUntilExit()
+        let log = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        #expect(process.terminationStatus == 0, Comment(rawValue: log))
+        #expect(log.contains("swift run CodexRunway"))
+        #expect(log.contains("--self-check"))
+        #expect(log.contains("--dev-tier-badges"))
+        #expect(log.contains("--mock-reset-today="))
+        #expect(log.contains("--dump-locale-metrics"))
+        #expect(log.contains("--render-reset-today-mock="))
+        #expect(log.contains("--render-main-panel-mock="))
+        #expect(log.contains("CODEX_RUNWAY_DISABLE_DEV_APP"))
     }
 
     @Test("Info.plist declares App Data usage text")

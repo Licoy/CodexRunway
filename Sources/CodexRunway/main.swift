@@ -1,6 +1,11 @@
 import AppKit
 import CodexRunwayCore
 
+if CommandLine.arguments.contains(where: { $0 == "--help" || $0 == "-h" }) {
+    print(RunwayCLIHelp.text, terminator: "")
+    exit(0)
+}
+
 if CommandLine.arguments.contains("--self-check") {
     await SelfCheck.run()
     exit(0)

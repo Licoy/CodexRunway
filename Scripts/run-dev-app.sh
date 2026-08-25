@@ -2,10 +2,85 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+usage() {
+  cat <<'EOF'
+Usage: Scripts/run-dev-app.sh [options]
+
+Build and launch Codex Runway Dev (widgets on macOS 14+).
+Same as: swift run CodexRunway -- [options]
+
+Options:
+  -h, --help
+      Show this help and exit.
+
+  --self-check
+      Print redacted local diagnostics and exit. No network.
+
+  --dev-tier-badges
+      Show every subscription-tier capsule in the popover.
+      Env: CODEX_RUNWAY_DEV_TIER_BADGES=1
+
+  --mock-reset-today=yes|no|scheduled|unknown
+      Use a local Reset Today fixture instead of the network.
+      Env: CODEX_RUNWAY_MOCK_RESET_TODAY=...
+
+  --dump-locale-metrics <output-directory>
+      Write language-picker and panel layout metrics, then exit.
+
+  --render-reset-today-mock=yes|no|scheduled|unknown <output.png>
+      Render the Reset Today card to a PNG, then exit.
+
+  --render-main-panel-mock=all|<page>-<light|dark> <output>
+      Render the main popover or a detail page, then exit.
+      Pages: main, accounts, reset-credits, api-cost.
+
+Environment:
+  CODEX_RUNWAY_DISABLE_DEV_APP=1
+      Skip wrapping into CodexRunway-dev.app (raw swift run process).
+
+Examples:
+  Scripts/run-dev-app.sh
+  Scripts/run-dev-app.sh --dev-tier-badges
+  Scripts/run-dev-app.sh --self-check
+  Scripts/run-dev-app.sh --mock-reset-today=scheduled
+  swift run CodexRunway -- --dev-tier-badges
+EOF
+}
+
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+  esac
+done
+
+HOST_EXECUTABLE=""
+if [[ "${1:-}" == "--host-executable" ]]; then
+  HOST_EXECUTABLE="${2:?error: --host-executable requires a path}"
+  shift 2
+elif [[ "${1:-}" == --host-executable=* ]]; then
+  HOST_EXECUTABLE="${1#--host-executable=}"
+  shift
+elif [[ -n "${1:-}" && "${1:-}" != -* && -f "$1" && -x "$1" ]]; then
+  # Legacy bootstrap: first positional is the built executable.
+  HOST_EXECUTABLE="$1"
+  shift
+fi
+
+if [[ "${1:-}" == "--" ]]; then
+  shift
+fi
+
+if [[ -z "$HOST_EXECUTABLE" ]]; then
+  exec swift run --package-path "$ROOT" CodexRunway -- "$@"
+fi
+
+SOURCE_EXECUTABLE="$HOST_EXECUTABLE"
 # shellcheck source=codesign-helpers.sh
 source "$ROOT/Scripts/codesign-helpers.sh"
-SOURCE_EXECUTABLE="${1:?usage: run-dev-app.sh <swift-run-executable> [arguments ...]}"
-shift
 ARCH="$(uname -m)"
 DEV_ROOT="$ROOT/.build/codex-runway-widget-dev"
 APP="$DEV_ROOT/CodexRunway-dev.app"

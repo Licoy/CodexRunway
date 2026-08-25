@@ -32,8 +32,10 @@ enum RunwayDevAppBootstrap {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = [script.path, executablePath(arguments[0])]
-            + Array(arguments.dropFirst())
+        process.arguments = [script.path]
+            + scriptArguments(
+                executable: executablePath(arguments[0]),
+                remaining: Array(arguments.dropFirst()))
         process.standardOutput = FileHandle.standardOutput
         process.standardError = FileHandle.standardError
         try process.run()
@@ -42,6 +44,10 @@ enum RunwayDevAppBootstrap {
             throw RunwayDevAppBootstrapError(status: process.terminationStatus)
         }
         return true
+    }
+
+    static func scriptArguments(executable: String, remaining: [String]) -> [String] {
+        ["--host-executable", executable] + remaining
     }
 
     private static var sourceRoot: URL {
