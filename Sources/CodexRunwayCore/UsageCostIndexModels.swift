@@ -44,7 +44,7 @@ struct UsageCostIndexedEvent: Sendable, Equatable {
     var uncachedInputTokens: Int
     var cachedInputTokens: Int
     var outputTokens: Int
-    var turns: Int = 1
+    var turns: Int = 0
 }
 
 struct UsageCostSourceIdentity: Sendable, Hashable {
@@ -104,7 +104,7 @@ struct UsageCostCachedFullHash: Sendable, Hashable {
 }
 
 enum UsageCostIndexSchema {
-    static let version = 2
+    static let version = 3
 
     static let create = """
         CREATE TABLE index_metadata (
@@ -148,6 +148,7 @@ enum UsageCostIndexSchema {
             uncached_input_tokens INTEGER NOT NULL CHECK (uncached_input_tokens >= 0),
             cached_input_tokens INTEGER NOT NULL CHECK (cached_input_tokens >= 0),
             output_tokens INTEGER NOT NULL CHECK (output_tokens >= 0),
+            turns INTEGER NOT NULL CHECK (turns >= 0),
             PRIMARY KEY (file_id, byte_offset),
             FOREIGN KEY (file_id) REFERENCES source_files(id) ON DELETE CASCADE
         ) WITHOUT ROWID;

@@ -34,7 +34,7 @@ struct UsageCostRepositoryMutationTests {
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let after = await repository.diagnosticsSnapshot()
 
-        #expect(refreshed[request.id]?.totals.turns == 2)
+        #expect(refreshed[request.id]?.totals.turns == 0)
         #expect(refreshed[request.id]?.totals.totalTokens == 1_610)
         #expect(after.rebuiltFiles == before.rebuiltFiles + 2)
     }
@@ -61,7 +61,7 @@ struct UsageCostRepositoryMutationTests {
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let after = await repository.diagnosticsSnapshot()
 
-        #expect(summary[request.id]?.totals.turns == 2)
+        #expect(summary[request.id]?.totals.turns == 0)
         #expect(summary[request.id]?.totals.totalTokens == 1_110)
         #expect(after.rebuiltFiles == before.rebuiltFiles + 1)
         #expect(after.appendedFiles == before.appendedFiles)
@@ -78,7 +78,7 @@ struct UsageCostRepositoryMutationTests {
         let initial = try await repository.summaries(
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let before = await repository.diagnosticsSnapshot()
-        #expect(initial[request.id]?.totals.turns == 1)
+        #expect(initial[request.id]?.totals.totalTokens == 105)
 
         try FileManager.default.removeItem(at: file)
         let deleted = try await repository.summaries(
@@ -105,7 +105,7 @@ struct UsageCostRepositoryMutationTests {
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let diagnostics = await newRepository.diagnosticsSnapshot()
 
-        #expect(rebuilt[request.id]?.totals.turns == 1)
+        #expect(rebuilt[request.id]?.totals.totalTokens == 105)
         #expect(diagnostics.bytesRead == contents.utf8.count)
         #expect(diagnostics.databaseRebuilds == 1)
         #expect(diagnostics.rebuiltFiles == 1)

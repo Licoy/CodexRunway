@@ -17,7 +17,7 @@ struct UsageCostRepositoryCorruptionTests {
             for: [fullWindowQuery()], calculatedAt: fixedNow, policy: .ifChanged)
         let diagnostics = await repository.diagnosticsSnapshot()
 
-        #expect(summaries["full"]?.totals.turns == 1)
+        #expect(summaries["full"]?.totals.totalTokens == 105)
         #expect(diagnostics.databaseRebuilds == 1)
         #expect(diagnostics.rebuiltFiles == 1)
     }
@@ -40,7 +40,7 @@ struct UsageCostRepositoryCorruptionTests {
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let after = await repository.diagnosticsSnapshot()
 
-        #expect(rebuilt[request.id]?.totals.turns == 1)
+        #expect(rebuilt[request.id]?.totals.totalTokens == 105)
         #expect(after.databaseRebuilds == before.databaseRebuilds + 1)
         #expect(after.rebuiltFiles == before.rebuiltFiles + 1)
     }
@@ -67,7 +67,7 @@ struct UsageCostRepositoryCorruptionTests {
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let after = await repository.diagnosticsSnapshot()
 
-        #expect(rebuilt[request.id]?.totals.turns == 1)
+        #expect(rebuilt[request.id]?.totals.totalTokens == 105)
         #expect(after.databaseRebuilds == before.databaseRebuilds + 1)
 
         do {
@@ -79,7 +79,7 @@ struct UsageCostRepositoryCorruptionTests {
         let rebuiltEvents = try await repository.summaries(
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let final = await repository.diagnosticsSnapshot()
-        #expect(rebuiltEvents[request.id]?.totals.turns == 1)
+        #expect(rebuiltEvents[request.id]?.totals.totalTokens == 105)
         #expect(final.databaseRebuilds == after.databaseRebuilds + 1)
 
         do {
@@ -91,7 +91,7 @@ struct UsageCostRepositoryCorruptionTests {
         let rebuiltTimestamp = try await repository.summaries(
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let afterTimestamp = await repository.diagnosticsSnapshot()
-        #expect(rebuiltTimestamp[request.id]?.totals.turns == 1)
+        #expect(rebuiltTimestamp[request.id]?.totals.totalTokens == 105)
         #expect(afterTimestamp.databaseRebuilds == final.databaseRebuilds + 1)
 
         do {
@@ -103,7 +103,7 @@ struct UsageCostRepositoryCorruptionTests {
         let rebuiltInfiniteTimestamp = try await repository.summaries(
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let afterInfiniteTimestamp = await repository.diagnosticsSnapshot()
-        #expect(rebuiltInfiniteTimestamp[request.id]?.totals.turns == 1)
+        #expect(rebuiltInfiniteTimestamp[request.id]?.totals.totalTokens == 105)
         #expect(afterInfiniteTimestamp.databaseRebuilds == afterTimestamp.databaseRebuilds + 1)
     }
 
@@ -128,7 +128,7 @@ struct UsageCostRepositoryCorruptionTests {
         let rebuiltCounts = try await repository.summaries(
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let afterCounts = await repository.diagnosticsSnapshot()
-        #expect(rebuiltCounts[request.id]?.totals.turns == 1)
+        #expect(rebuiltCounts[request.id]?.totals.totalTokens == 105)
         #expect(afterCounts.databaseRebuilds == before.databaseRebuilds + 1)
 
         do {
@@ -140,7 +140,7 @@ struct UsageCostRepositoryCorruptionTests {
         let rebuiltFingerprint = try await repository.summaries(
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let afterFingerprint = await repository.diagnosticsSnapshot()
-        #expect(rebuiltFingerprint[request.id]?.totals.turns == 1)
+        #expect(rebuiltFingerprint[request.id]?.totals.totalTokens == 105)
         #expect(afterFingerprint.databaseRebuilds == afterCounts.databaseRebuilds + 1)
     }
 
@@ -164,9 +164,9 @@ struct UsageCostRepositoryCorruptionTests {
                 """
                 INSERT INTO usage_events
                     (file_id, byte_offset, timestamp, day_key, model, project,
-                     uncached_input_tokens, cached_input_tokens, output_tokens)
+                     uncached_input_tokens, cached_input_tokens, output_tokens, turns)
                 SELECT file_id, byte_offset + 1, timestamp, day_key, model, project,
-                       9223372036854775807, 0, 0
+                       9223372036854775807, 0, 0, 0
                 FROM usage_events LIMIT 1
                 """,
                 operation: "create aggregate overflow")

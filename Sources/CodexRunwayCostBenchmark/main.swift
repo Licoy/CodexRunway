@@ -95,7 +95,7 @@ private enum BenchmarkError: Error, CustomStringConvertible {
 private struct Fixture {
     var codexHome: URL
     var file: URL
-    var expectedTurns: Int
+    var expectedTokens: Int
 }
 
 private struct Measurement {
@@ -136,11 +136,12 @@ private enum CostScannerBenchmark {
         }
         print(String(format: "peak_rss_mib=%.3f", peakRSSMiB))
         print("turns=\(measurement.summary.totals.turns)")
+        print("tokens=\(measurement.summary.totals.totalTokens)")
         if options.keepFixture { print("fixture_path=\(fixture.codexHome.path)") }
 
-        guard measurement.summary.totals.turns == fixture.expectedTurns else {
+        guard measurement.summary.totals.totalTokens == fixture.expectedTokens else {
             throw BenchmarkError.thresholdExceeded(
-                "turn count mismatch: expected \(fixture.expectedTurns), got \(measurement.summary.totals.turns)")
+                "token count mismatch: expected \(fixture.expectedTokens), got \(measurement.summary.totals.totalTokens)")
         }
         if let limit = options.maximumElapsedSeconds, measurement.elapsed > limit {
             throw BenchmarkError.thresholdExceeded(
@@ -203,8 +204,11 @@ private enum CostScannerBenchmark {
         let handle = try FileHandle(forWritingTo: file)
         defer { try? handle.close() }
         try writeFixture(to: handle, options: options)
-        let expectedTurns = (options.lines + options.relevantEvery - 1) / options.relevantEvery
-        return Fixture(codexHome: codexHome, file: file, expectedTurns: expectedTurns)
+        let expectedEvents = (options.lines + options.relevantEvery - 1) / options.relevantEvery
+        return Fixture(
+            codexHome: codexHome,
+            file: file,
+            expectedTokens: expectedEvents * 1_050)
     }
 
     private static func writeFixture(to handle: FileHandle, options: BenchmarkOptions) throws {

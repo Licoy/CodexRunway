@@ -19,7 +19,8 @@ struct UsageCostRepositoryIncrementalTests {
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let afterWarm = await repository.diagnosticsSnapshot()
 
-        #expect(cold[request.id]?.totals.turns == 1)
+        #expect(cold[request.id]?.totals.totalTokens == 105)
+        #expect(cold[request.id]?.totals.turns == 0)
         #expect(warm[request.id] == cold[request.id])
         #expect(afterWarm.bytesRead == afterCold.bytesRead)
         #expect(afterWarm.validationBytesRead == afterCold.validationBytesRead)
@@ -37,7 +38,7 @@ struct UsageCostRepositoryIncrementalTests {
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let afterAppend = await repository.diagnosticsSnapshot()
 
-        #expect(appended[request.id]?.totals.turns == 2)
+        #expect(appended[request.id]?.totals.turns == 0)
         #expect(appended[request.id]?.totals.totalTokens == 310)
         #expect(afterAppend.bytesRead - afterForce.bytesRead == suffix.utf8.count)
         #expect(afterAppend.appendedFiles == afterForce.appendedFiles + 1)
@@ -106,8 +107,9 @@ struct UsageCostRepositoryIncrementalTests {
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let secondDiagnostics = await repository.diagnosticsSnapshot()
 
-        #expect(first[request.id]?.totals.turns == 1)
-        #expect(second[request.id]?.totals.turns == 1)
+        #expect(first[request.id]?.totals.totalTokens == 105)
+        #expect(second[request.id]?.totals.totalTokens == 105)
+        #expect(first[request.id]?.totals.turns == 0)
         #expect(secondDiagnostics.bytesRead - firstDiagnostics.bytesRead == tail.utf8.count)
         #expect(secondDiagnostics.incompleteTailFiles > firstDiagnostics.incompleteTailFiles)
 
@@ -119,8 +121,8 @@ struct UsageCostRepositoryIncrementalTests {
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let warmDiagnostics = await repository.diagnosticsSnapshot()
 
-        #expect(completed[request.id]?.totals.turns == 1)
-        #expect(warm[request.id]?.totals.turns == 1)
+        #expect(completed[request.id]?.totals.totalTokens == 105)
+        #expect(warm[request.id]?.totals.totalTokens == 105)
         #expect(completedDiagnostics.bytesRead - secondDiagnostics.bytesRead == tail.utf8.count + 1)
         #expect(warmDiagnostics.bytesRead == completedDiagnostics.bytesRead)
     }

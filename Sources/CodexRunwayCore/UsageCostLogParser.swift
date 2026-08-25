@@ -34,7 +34,8 @@ final class UsageCostLogParser {
             model: turnContext?.model ?? payload?.model,
             contextModel: contextModel,
             sessionCWD: payload?.cwd ?? turnContext?.cwd,
-            lastTokenUsage: try payload?.info?.lastTokenUsage?.decodedUsage())
+            lastTokenUsage: try payload?.info?.lastTokenUsage?.decodedUsage(),
+            countsAsTurn: payload?.type == "task_complete")
     }
 
     private func parseTimestamp(_ text: String) -> ParsedTimestamp? {
@@ -134,6 +135,7 @@ private struct EncodedTurnContext: Decodable {
 }
 
 private struct EncodedUsagePayload: Decodable {
+    var type: String?
     var model: String?
     var cwd: String?
     var info: EncodedUsageInfo?

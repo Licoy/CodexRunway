@@ -121,12 +121,14 @@ public struct SessionActivityScanner: Sendable {
         }
         if state.byModel.isEmpty, size <= Self.smallFullScanBytes {
             state.byModel = [:]
+            state.turnCount = 0
             for line in try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map(String.init) {
                 try applySessionLine(line, to: &state, includesLastUsage: true)
             }
         }
         guard let id = state.id, let updatedAt = state.updatedAt else { return nil }
-        let totals = try ApiEquivalentTotals.sum(state.byModel.values)
+        var totals = try ApiEquivalentTotals.sum(state.byModel.values)
+        totals.turns = state.turnCount
         return SessionActivityItem(
             id: id,
             title: state.title ?? "Untitled",
@@ -183,12 +185,15 @@ public struct SessionActivityScanner: Sendable {
         }
         let turnContext = object["turn_context"] as? [String: Any]
         let model = turnContext?["model"] as? String ?? payload?["model"] as? String ?? state.currentModel
+        if payload?["type"] as? String == "task_complete" {
+            state.turnCount += 1
+        }
         if let usage = try tokenUsage(from: payload, key: "total_token_usage") {
-            state.byModel[model] = try ApiEquivalentTotals(validating: usage, turns: 1, threads: 0)
+            state.byModel[model] = try ApiEquivalentTotals(validating: usage, turns: 0, threads: 0)
         } else if includesLastUsage,
                   let usage = try tokenUsage(from: payload, key: "last_token_usage")
         {
-            let totals = try ApiEquivalentTotals(validating: usage, turns: 1, threads: 0)
+            let totals = try ApiEquivalentTotals(validating: usage, turns: 0, threads: 0)
             state.byModel[model, default: .zero] = try state.byModel[model, default: .zero]
                 .adding(totals)
         }
@@ -252,6 +257,7 @@ private struct SessionParseState {
     var activityState = SessionActivityState.recent
     var currentModel = "unknown-model"
     var byModel: [String: ApiEquivalentTotals] = [:]
+    var turnCount = 0
 }
 
 private func isNewerCandidate(_ lhs: SessionFileCandidate, _ rhs: SessionFileCandidate) -> Bool {

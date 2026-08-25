@@ -57,9 +57,9 @@ struct UsageCostRepositoryAggregationTests {
             policy: .ifChanged)
         let diagnostics = await repository.diagnosticsSnapshot()
 
-        #expect(summaries["first"]?.totals.turns == 2)
+        #expect(summaries["first"]?.totals.turns == 0)
         #expect(summaries["first"]?.totals.totalTokens == 310)
-        #expect(summaries["whole"]?.totals.turns == 3)
+        #expect(summaries["whole"]?.totals.turns == 0)
         #expect(summaries["whole"]?.totals.totalTokens == 615)
         #expect(summaries["whole"]?.calculatedAt == fixedNow)
         #expect(diagnostics.bytesRead == contents.utf8.count)
@@ -85,7 +85,7 @@ struct UsageCostRepositoryAggregationTests {
         let summary = try #require(try await fixture.repository(calendar: calendar).summaries(
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)[request.id])
 
-        #expect(summary.totals.turns == 2)
+        #expect(summary.totals.turns == 0)
         #expect(summary.dailyRows.map(\.date) == ["2026-06-30"])
         #expect(summary.dailyRows.map(\.totals.totalTokens) == [310])
     }
@@ -157,7 +157,7 @@ struct UsageCostRepositoryAggregationTests {
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)[request.id])
         let diagnostics = await repository.diagnosticsSnapshot()
 
-        #expect(summary.totals.turns == 1)
+        #expect(summary.totals.turns == 0)
         #expect(summary.totals.totalTokens == 105)
         #expect(summary.warnings.contains("malformed-jsonl-lines:2"))
         #expect(diagnostics.malformedCandidateLines == 2)

@@ -200,23 +200,61 @@ public struct UsageCostScanner: Sendable {
                 currentModel = contextModel
             }
             guard window.contains(record.timestamp) else { return }
-            guard let usage = record.lastTokenUsage else { return }
             let model = record.model ?? currentModel
-            let totals = try ApiEquivalentTotals(validating: usage, turns: 1, threads: 0)
-            let day = record.dayKey
-            byModel[model, default: .zero] = try byModel[model, default: .zero].adding(totals)
-            byProjectModel[currentProject, default: [:]][model, default: .zero] = try byProjectModel[
-                currentProject,
-                default: [:]
-            ][model, default: .zero].adding(totals)
-            byDay[day, default: .zero] = try byDay[day, default: .zero].adding(totals)
-            byDayModel[day, default: [:]][model, default: .zero] = try byDayModel[
-                day,
-                default: [:]
-            ][model, default: .zero].adding(totals)
-            if PricingTable.price(for: model) == nil { unknown.insert(model) }
+            if let usage = record.lastTokenUsage {
+                try addAPIEquivalent(
+                    try ApiEquivalentTotals(
+                        validating: usage,
+                        turns: record.countsAsTurn ? 1 : 0,
+                        threads: 0),
+                    model: model,
+                    project: currentProject,
+                    day: record.dayKey,
+                    byModel: &byModel,
+                    byProjectModel: &byProjectModel,
+                    byDay: &byDay,
+                    byDayModel: &byDayModel,
+                    unknown: &unknown)
+            } else if record.countsAsTurn {
+                try addAPIEquivalent(
+                    try ApiEquivalentTotals(validating: .zero, turns: 1, threads: 0),
+                    model: model,
+                    project: currentProject,
+                    day: record.dayKey,
+                    byModel: &byModel,
+                    byProjectModel: &byProjectModel,
+                    byDay: &byDay,
+                    byDayModel: &byDayModel,
+                    unknown: &unknown)
+            }
         }
         record(result: result, diagnostics: &diagnostics)
+    }
+
+    private func addAPIEquivalent(
+        _ totals: ApiEquivalentTotals,
+        model: String,
+        project: String,
+        day: String,
+        byModel: inout [String: ApiEquivalentTotals],
+        byProjectModel: inout [String: [String: ApiEquivalentTotals]],
+        byDay: inout [String: ApiEquivalentTotals],
+        byDayModel: inout [String: [String: ApiEquivalentTotals]],
+        unknown: inout Set<String>
+    ) throws {
+        byModel[model, default: .zero] = try byModel[model, default: .zero].adding(totals)
+        byProjectModel[project, default: [:]][model, default: .zero] = try byProjectModel[
+            project,
+            default: [:]
+        ][model, default: .zero].adding(totals)
+        byDay[day, default: .zero] = try byDay[day, default: .zero].adding(totals)
+        byDayModel[day, default: [:]][model, default: .zero] = try byDayModel[
+            day,
+            default: [:]
+        ][model, default: .zero].adding(totals)
+        if totals.totalTokens > 0, PricingTable.price(for: model) == nil {
+            unknown.insert(model)
+        }
     }
 
     private func record(

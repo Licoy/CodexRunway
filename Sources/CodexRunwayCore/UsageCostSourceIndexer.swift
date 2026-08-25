@@ -182,7 +182,20 @@ struct UsageCostSourceIndexer {
                     project: currentProject,
                     uncachedInputTokens: uncached,
                     cachedInputTokens: cached,
-                    outputTokens: max(0, usage.outputTokens)))
+                    outputTokens: max(0, usage.outputTokens),
+                    turns: record.countsAsTurn ? 1 : 0))
+            } else if record.countsAsTurn {
+                try emit(UsageCostIndexedEvent(
+                    fileID: existing?.id,
+                    byteOffset: line.byteOffset,
+                    timestamp: record.timestamp,
+                    dayKey: record.dayKey,
+                    model: record.model ?? currentModel,
+                    project: currentProject,
+                    uncachedInputTokens: 0,
+                    cachedInputTokens: 0,
+                    outputTokens: 0,
+                    turns: 1))
             }
             if line.isLFComplete {
                 checkpointModel = currentModel

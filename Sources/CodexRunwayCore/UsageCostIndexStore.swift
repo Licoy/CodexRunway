@@ -84,14 +84,15 @@ final class UsageCostIndexStore {
         let sql = """
             SELECT MIN(timestamp), day_key, model, project,
                    SUM(uncached_input_tokens), SUM(cached_input_tokens),
-                   SUM(output_tokens), COUNT(*),
+                   SUM(output_tokens), SUM(turns),
                    MAX(CASE WHEN
                        typeof(timestamp) NOT IN ('real', 'integer') OR
                        typeof(day_key) != 'text' OR typeof(model) != 'text' OR
                        typeof(project) != 'text' OR
                        typeof(uncached_input_tokens) != 'integer' OR
                        typeof(cached_input_tokens) != 'integer' OR
-                       typeof(output_tokens) != 'integer'
+                       typeof(output_tokens) != 'integer' OR
+                       typeof(turns) != 'integer'
                    THEN 1 ELSE 0 END)
             FROM usage_events
             WHERE timestamp >= ? AND timestamp <= ?
@@ -128,6 +129,8 @@ final class UsageCostIndexStore {
                OR cached_input_tokens < 0
                OR typeof(output_tokens) != 'integer'
                OR output_tokens < 0
+               OR typeof(turns) != 'integer'
+               OR turns < 0
             LIMIT 1
             """
         try database.withStatement(sql, operation: "validate usage event storage") { statement in
@@ -301,6 +304,7 @@ final class UsageCostIndexStore {
         try statement.bind(Int64(event.uncachedInputTokens), at: 7)
         try statement.bind(Int64(event.cachedInputTokens), at: 8)
         try statement.bind(Int64(event.outputTokens), at: 9)
+        try statement.bind(Int64(event.turns), at: 10)
         _ = try statement.step()
         try statement.reset()
     }
@@ -308,14 +312,15 @@ final class UsageCostIndexStore {
     private static let insertEventSQL = """
         INSERT INTO usage_events(
             file_id, byte_offset, timestamp, day_key, model, project,
-            uncached_input_tokens, cached_input_tokens, output_tokens)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            uncached_input_tokens, cached_input_tokens, output_tokens, turns)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(file_id, byte_offset) DO UPDATE SET
             timestamp = excluded.timestamp, day_key = excluded.day_key,
             model = excluded.model, project = excluded.project,
             uncached_input_tokens = excluded.uncached_input_tokens,
             cached_input_tokens = excluded.cached_input_tokens,
-            output_tokens = excluded.output_tokens
+            output_tokens = excluded.output_tokens,
+            turns = excluded.turns
         """
 
     private static func isSchemaError(_ error: SQLiteError) -> Bool {

@@ -18,7 +18,7 @@ struct UsageCostRepositoryConcurrencyTests {
             Task { () throws -> Int in
                 let summaries = try await repository.summaries(
                     for: [request], calculatedAt: fixedNow, policy: .force)
-                return summaries[request.id]?.totals.turns ?? -1
+                return summaries[request.id]?.totals.totalTokens ?? -1
             }
         }
         var joined = false
@@ -30,13 +30,13 @@ struct UsageCostRepositoryConcurrencyTests {
             await Task.yield()
         }
         await gate.open()
-        var turnCounts: [Int] = []
-        for task in tasks { turnCounts.append(try await task.value) }
+        var tokenCounts: [Int] = []
+        for task in tasks { tokenCounts.append(try await task.value) }
         let diagnostics = await repository.diagnosticsSnapshot()
 
         #expect(joined)
-        #expect(turnCounts.count == 6)
-        #expect(turnCounts.allSatisfy { $0 == 1 })
+        #expect(tokenCounts.count == 6)
+        #expect(tokenCounts.allSatisfy { $0 == 105 })
         #expect(diagnostics.indexPasses == 1)
         #expect(diagnostics.sharedFlightHits == 5)
         #expect(diagnostics.maxConcurrentScans == 1)
@@ -67,7 +67,7 @@ struct UsageCostRepositoryConcurrencyTests {
         await gate.open()
 
         let ownerResult = try await owner.value
-        #expect(ownerResult[request.id]?.totals.turns == 1)
+        #expect(ownerResult[request.id]?.totals.totalTokens == 105)
         do {
             _ = try await joiner.value
             Issue.record("Expected cancelled joiner to throw")

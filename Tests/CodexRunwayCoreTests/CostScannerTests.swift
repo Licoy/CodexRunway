@@ -90,7 +90,8 @@ struct CostScannerTests {
                 start: ISO8601DateFormatter().date(from: "2026-06-29T00:00:00Z")!,
                 end: ISO8601DateFormatter().date(from: "2026-06-30T00:00:00Z")!))
 
-        #expect(report.summary.totals.turns == 2)
+        #expect(report.summary.totals.turns == 0)
+        #expect(report.summary.totals.totalTokens == 315)
         #expect(report.diagnostics.bytesRead == firstContents.utf8.count + secondContents.utf8.count)
         #expect(report.diagnostics.candidateLines == 3)
         #expect(report.diagnostics.decodedLines == 3)
@@ -122,7 +123,7 @@ struct CostScannerTests {
         #expect(summary.totals.uncachedInputTokens == 1_300)
         #expect(summary.totals.cachedInputTokens == 200)
         #expect(summary.totals.outputTokens == 75)
-        #expect(summary.totals.turns == 2)
+        #expect(summary.totals.turns == 0)
         #expect(summary.dailyRows.map(\.date) == ["2026-06-25", "2026-06-29"])
         #expect(summary.modelRows.map(\.name) == ["gpt-5.3-codex", "unknown-model"])
         #expect(summary.modelRows[0].estimatedUSD != nil)
@@ -212,7 +213,7 @@ struct CostScannerTests {
         #expect(report.summary.totals.uncachedInputTokens == 80)
         #expect(report.summary.totals.cachedInputTokens == 20)
         #expect(report.summary.totals.outputTokens == 5)
-        #expect(report.summary.totals.turns == 1)
+        #expect(report.summary.totals.turns == 0)
         #expect(report.diagnostics.bytesRead == contents.utf8.count)
     }
 
@@ -232,7 +233,7 @@ struct CostScannerTests {
                 start: ISO8601DateFormatter().date(from: "2026-06-29T00:00:00Z")!,
                 end: ISO8601DateFormatter().date(from: "2026-06-30T00:00:00Z")!))
 
-        #expect(report.summary.totals.turns == 1)
+        #expect(report.summary.totals.turns == 0)
         #expect(report.diagnostics.oversizedLines == 1)
         #expect(report.diagnostics.malformedCandidateLines == 1)
         #expect(report.diagnostics.maxBufferedBytes <= 8 * 1_024 * 1_024)
@@ -261,7 +262,7 @@ struct CostScannerTests {
                 end: ISO8601DateFormatter().date(from: "2026-06-30T00:00:00Z")!))
 
         #expect(report.summary.totals.totalTokens == 105)
-        #expect(report.summary.totals.turns == 1)
+        #expect(report.summary.totals.turns == 0)
         #expect(report.diagnostics.malformedCandidateLines == 3)
         #expect(report.diagnostics.decodedLines == 1)
     }

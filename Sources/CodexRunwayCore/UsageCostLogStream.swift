@@ -9,6 +9,8 @@ struct UsageCostLogRecord: Sendable {
     var contextModel: String?
     var sessionCWD: String?
     var lastTokenUsage: TokenUsage?
+    /// Codex `task_complete` is the user-visible turn, matching Grok `turn_completed`.
+    var countsAsTurn: Bool
 }
 
 struct UsageCostParsedLine: Sendable {
@@ -41,7 +43,7 @@ struct UsageCostLogStream {
     static let chunkSize = 256 * 1_024
     static let maximumLineBytes = 8 * 1_024 * 1_024
     private static let fingerprintSeed = Data(SHA256.hash(
-        data: Data("usage-cost-content-fingerprint-v2".utf8)))
+        data: Data("usage-cost-content-fingerprint-v3".utf8)))
 
     private let reader: UsageCostLogReader
     private let parser: UsageCostLogParser
@@ -362,6 +364,7 @@ private struct LineAccumulator {
 private enum UsageCostLinePrefilter {
     private static let markers = [
         Data("token_count".utf8),
+        Data("task_complete".utf8),
         Data("turn_context".utf8),
         Data("session_meta".utf8),
         Data("\"cwd\"".utf8),

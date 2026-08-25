@@ -2,7 +2,7 @@ import Foundation
 import SQLite3
 
 actor UsageCostRepositoryWorker {
-    static let currentParserVersion = 3
+    static let currentParserVersion = 4
 
     private let codexHome: URL
     private let databaseURL: URL

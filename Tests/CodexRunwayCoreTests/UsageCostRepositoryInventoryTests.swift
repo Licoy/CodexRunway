@@ -20,7 +20,7 @@ struct UsageCostRepositoryInventoryTests {
         let appended = try await repository.summaries(
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let beforeMove = await repository.diagnosticsSnapshot()
-        #expect(appended[request.id]?.totals.turns == 2)
+        #expect(appended[request.id]?.totals.turns == 0)
 
         let archived = try fixture.archivedURL(basename: original.lastPathComponent)
         try FileManager.default.moveItem(at: original, to: archived)
@@ -29,7 +29,7 @@ struct UsageCostRepositoryInventoryTests {
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let afterMove = await repository.diagnosticsSnapshot()
 
-        #expect(moved[request.id]?.totals.turns == 2)
+        #expect(moved[request.id]?.totals.turns == 0)
         #expect(moved[request.id]?.totals.totalTokens == 310)
         #expect(afterMove.adoptedFiles == beforeMove.adoptedFiles + 1)
         #expect(afterMove.rebuiltFiles == beforeMove.rebuiltFiles)
@@ -125,7 +125,7 @@ struct UsageCostRepositoryInventoryTests {
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let afterMove = await repository.diagnosticsSnapshot()
 
-        #expect(moved[request.id]?.totals.turns == 1)
+        #expect(moved[request.id]?.totals.totalTokens == 105)
         #expect(afterMove.bytesRead == beforeMove.bytesRead)
         #expect(afterMove.adoptedFiles == beforeMove.adoptedFiles + 1)
 
@@ -136,14 +136,14 @@ struct UsageCostRepositoryInventoryTests {
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let afterCopy = await repository.diagnosticsSnapshot()
 
-        #expect(deduplicated[request.id]?.totals.turns == 1)
+        #expect(deduplicated[request.id]?.totals.totalTokens == 105)
         #expect(afterCopy.duplicateFiles == afterMove.duplicateFiles + 1)
 
         let restarted = fixture.repository()
         let persistedWarm = try await restarted.summaries(
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let persistedDiagnostics = await restarted.diagnosticsSnapshot()
-        #expect(persistedWarm[request.id]?.totals.turns == 1)
+        #expect(persistedWarm[request.id]?.totals.totalTokens == 105)
         #expect(persistedDiagnostics.bytesRead == 0)
         #expect(persistedDiagnostics.validationBytesRead == 0)
 
@@ -151,7 +151,7 @@ struct UsageCostRepositoryInventoryTests {
         let adoptedCopy = try await restarted.summaries(
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)
         let afterAdoption = await restarted.diagnosticsSnapshot()
-        #expect(adoptedCopy[request.id]?.totals.turns == 1)
+        #expect(adoptedCopy[request.id]?.totals.totalTokens == 105)
         #expect(afterAdoption.adoptedFiles == persistedDiagnostics.adoptedFiles + 1)
         #expect(afterAdoption.rebuiltFiles == persistedDiagnostics.rebuiltFiles)
         #expect(afterAdoption.bytesRead == persistedDiagnostics.bytesRead)

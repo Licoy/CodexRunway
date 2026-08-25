@@ -107,6 +107,12 @@ func tokenLine(
     """
 }
 
+func taskCompleteLine(timestamp: String, turnID: String = "turn-1") -> String {
+    """
+    {"timestamp":"\(timestamp)","type":"event_msg","payload":{"type":"task_complete","turn_id":"\(turnID)"}}
+    """
+}
+
 func append(_ text: String, to file: URL) throws {
     let handle = try FileHandle(forWritingTo: file)
     defer { try? handle.close() }
