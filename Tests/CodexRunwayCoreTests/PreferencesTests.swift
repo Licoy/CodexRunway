@@ -189,14 +189,17 @@ struct PreferencesTests {
         #expect(store.load().apiCostSummaryRange == .thisMonth)
         #expect(store.load().mainPanelHeight == 712.5)
         #expect(store.load().mainPanelModuleOrder == [
+            .rateLimitResetToday,
+            .quotaEstimate,
+            .resetCredits,
             .apiCost,
             .quota,
             .tokenUsage,
-            .rateLimitResetToday,
-            .resetCredits,
             .sessionRepair,
             .recentSessions,
         ])
+        #expect(store.load().showsQuotaEstimateSummary)
+        #expect(store.load().quotaEstimateWindowMode == .auto)
         #expect(store.load().showsQuotaSummary == false)
         #expect(store.load().showsResetCreditsSummary == false)
         #expect(store.load().showsCostSummary == false)
@@ -231,6 +234,8 @@ struct PreferencesTests {
         #expect(preferences.mainPanelModuleOrder == RunwayPreferences.defaultMainPanelModuleOrder)
         #expect(preferences.showsQuotaSummary)
         #expect(preferences.showsResetCreditsSummary)
+        #expect(preferences.showsQuotaEstimateSummary)
+        #expect(preferences.mainPanelModuleOrder.contains(.quotaEstimate))
     }
 
     @Test("main panel height is clamped when initialized or decoded")
@@ -260,11 +265,12 @@ struct PreferencesTests {
         let preferences = try JSONDecoder().decode(RunwayPreferences.self, from: data)
 
         #expect(preferences.mainPanelModuleOrder == [
-            .apiCost,
-            .quota,
             .tokenUsage,
             .rateLimitResetToday,
+            .quotaEstimate,
             .resetCredits,
+            .apiCost,
+            .quota,
             .sessionRepair,
             .recentSessions,
         ])
@@ -279,6 +285,7 @@ struct PreferencesTests {
             .quota,
             .tokenUsage,
             .rateLimitResetToday,
+            .quotaEstimate,
             .apiCost,
             .resetCredits,
             .sessionRepair,
@@ -309,6 +316,15 @@ struct PreferencesTests {
         #expect(preferences.showsRateLimitResetToday)
         #expect(preferences.rateLimitResetTodayRefreshIntervalSeconds == 3_600)
         #expect(preferences.showsTokenUsageHeatmap)
+        #expect(preferences.showsQuotaEstimateSummary)
+        #expect(preferences.quotaEstimateWindowMode == .auto)
+        #expect(preferences.mainPanelModuleOrder.firstIndex(of: .quotaEstimate)
+            == preferences.mainPanelModuleOrder.firstIndex(of: .resetCredits).map { $0 - 1 })
+
+        let legacy = """
+        { "quotaEstimateWindowMode": "officialWeek" }
+        """.data(using: .utf8)!
+        #expect(try JSONDecoder().decode(RunwayPreferences.self, from: legacy).quotaEstimateWindowMode == .auto)
     }
 
     @Test("model-specific quota usage defaults off and persists opt-in")

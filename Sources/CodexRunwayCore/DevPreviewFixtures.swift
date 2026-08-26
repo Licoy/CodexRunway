@@ -28,6 +28,47 @@ public enum RunwayPreviewFixtures {
             subscriptionExpiresAt: expiresAt)
     }
 
+    public static func quotaEstimate(now: Date) -> QuotaEstimateSnapshot {
+        let day: TimeInterval = 24 * 3_600
+        let quota = QuotaSnapshot(
+            plan: "pro",
+            primary: rateWindow(usedPercent: 37, windowMinutes: 300, resetsAt: now.addingTimeInterval(2.6 * 3_600)),
+            secondary: rateWindow(
+                usedPercent: 40,
+                windowMinutes: 10_080,
+                resetsAt: now.addingTimeInterval(3.2 * day)),
+            additionalWindows: [],
+            creditsBalance: nil,
+            updatedAt: now)
+        let rows = (0..<7).map { offset -> ApiEquivalentDailyRow in
+            let date = QuotaEstimateCalculator.addUTCDays(QuotaEstimateCalculator.utcDay(now), -offset)
+            let credits = 8.5 + Double(offset) * 1.4
+            return ApiEquivalentDailyRow(
+                date: date,
+                totals: ApiEquivalentTotals(
+                    totalTokens: Int(credits * 120_000),
+                    uncachedInputTokens: 0,
+                    cachedInputTokens: 0,
+                    outputTokens: 0,
+                    turns: 12 + offset,
+                    threads: 3),
+                estimatedUSD: nil,
+                rawCredits: credits)
+        }
+        let previous = QuotaEstimateHistorySample(
+            cycleStartDate: QuotaEstimateCalculator.addUTCDays(QuotaEstimateCalculator.utcDay(now), -13),
+            estimatedCredits: 220,
+            usedPercent: 55,
+            usedCredits: 121,
+            recordedAt: now.addingTimeInterval(-8 * day))
+        return QuotaEstimateCalculator.make(
+            quota: quota,
+            dailyRows: rows,
+            mode: .auto,
+            history: [previous],
+            now: now)
+    }
+
     public static func resetCredits(now: Date) -> ResetCreditsSnapshot {
         let day: TimeInterval = 24 * 3_600
         let credits = [

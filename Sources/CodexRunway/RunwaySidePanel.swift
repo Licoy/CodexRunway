@@ -7,6 +7,7 @@ enum RunwaySidePanel: Equatable {
     case accounts
     case resetCredits
     case apiCost
+    case quotaEstimate
 }
 
 /// Raised interactive row: optional leading icon, title, optional trailing chevron.
@@ -92,7 +93,243 @@ struct DetailPageView: View {
             }
         case .apiCost:
             ApiCostDetailView(model: model, l10n: l10n, initialRange: apiCostInitialRange)
+        case .quotaEstimate:
+            PolishedScrollView(verticalPadding: 4) {
+                QuotaEstimateDetailView(
+                    snapshot: model.quotaEstimate,
+                    error: model.quotaEstimateError,
+                    l10n: l10n)
+            }
         }
+    }
+}
+
+private struct QuotaEstimateDetailView: View {
+    var snapshot: QuotaEstimateSnapshot?
+    var error: String?
+    var l10n: L10n
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if let snapshot {
+                RunwayPageSummaryRow(
+                    title: l10n.text(.quotaEstimateWeeklyAllowance),
+                    meta: methodText(snapshot),
+                    figure: snapshot.estimatedCredits.map(QuotaEstimateFormatting.credits) ?? "—")
+                statGrid(snapshot)
+                Text(l10n.text(.quotaEstimateInfo))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                weekTable(snapshot)
+                if !historyRows(snapshot).isEmpty {
+                    historyTable(snapshot)
+                }
+            } else if let error, !error.isEmpty {
+                Text(error)
+                    .foregroundStyle(Color(nsColor: .systemRed))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(l10n.text(.notLoaded))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func methodText(_ snapshot: QuotaEstimateSnapshot) -> String {
+        let mode: String
+        switch snapshot.windowMode {
+        case .rollingWeek:
+            mode = l10n.text(.quotaEstimateMethodRolling)
+        case .auto:
+            mode = l10n.text(.quotaEstimateMethodOfficial)
+        }
+        return "\(mode) · \(snapshot.cycleStartDate)"
+    }
+
+    private func statGrid(_ snapshot: QuotaEstimateSnapshot) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+            RunwayStatCard(
+                title: l10n.text(.quotaEstimateUsedPercent),
+                value: QuotaEstimateFormatting.percent(snapshot.usedPercent),
+                color: Color(nsColor: .systemBlue))
+            RunwayStatCard(
+                title: l10n.text(.quotaEstimateThisWeekUsed),
+                value: QuotaEstimateFormatting.credits(snapshot.usedCredits),
+                color: Color(nsColor: .systemOrange))
+            RunwayStatCard(
+                title: l10n.text(.quotaEstimateWeeklyAllowance),
+                value: snapshot.estimatedCredits.map(QuotaEstimateFormatting.credits) ?? "—",
+                color: Color(nsColor: .systemGreen))
+            RunwayStatCard(
+                title: l10n.text(.quotaEstimateWeekValue),
+                value: snapshot.estimatedUSD.map(QuotaEstimateFormatting.usd) ?? "—",
+                color: Color(nsColor: .systemTeal))
+        }
+    }
+
+    private func weekTable(_ snapshot: QuotaEstimateSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(l10n.text(.quotaEstimateThisWeek))
+                .font(.headline)
+            if snapshot.currentRows.isEmpty {
+                Text(l10n.text(.usageAnalyticsEmpty))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                RunwayTableContainer {
+                    QuotaEstimateWeekHeader(l10n: l10n)
+                } rows: {
+                    ForEach(Array(snapshot.currentRows.reversed().enumerated()), id: \.element.id) { index, row in
+                        QuotaEstimateWeekRow(row: row, isFirst: index == 0)
+                    }
+                    QuotaEstimateWeekFooter(
+                        credits: snapshot.usedCredits,
+                        tokens: snapshot.currentRows.reduce(0) { $0 + $1.tokens },
+                        usd: snapshot.usedUSD,
+                        l10n: l10n)
+                }
+            }
+        }
+    }
+
+    private func historyTable(_ snapshot: QuotaEstimateSnapshot) -> some View {
+        let rows = historyRows(snapshot)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(l10n.text(.quotaEstimateHistory))
+                .font(.headline)
+            RunwayTableContainer {
+                QuotaEstimateHistoryHeader(l10n: l10n)
+            } rows: {
+                ForEach(Array(rows.enumerated()), id: \.element.cycleStartDate) { index, row in
+                    QuotaEstimateHistoryRow(row: row, isFirst: index == 0)
+                }
+            }
+        }
+    }
+
+    private func historyRows(_ snapshot: QuotaEstimateSnapshot) -> [QuotaEstimateHistoryRowModel] {
+        let ordered = snapshot.history
+        return ordered.enumerated().map { index, sample in
+            let previous = index > 0 ? ordered[index - 1] : nil
+            let delta: Double?
+            if let previous, previous.estimatedCredits > 0 {
+                delta = (sample.estimatedCredits - previous.estimatedCredits) / previous.estimatedCredits * 100
+            } else {
+                delta = nil
+            }
+            return QuotaEstimateHistoryRowModel(
+                cycleStartDate: sample.cycleStartDate,
+                estimatedCredits: sample.estimatedCredits,
+                changePercent: delta)
+        }
+        .reversed()
+        .map { $0 }
+    }
+}
+
+private struct QuotaEstimateHistoryRowModel: Identifiable {
+    var id: String { cycleStartDate }
+    var cycleStartDate: String
+    var estimatedCredits: Double
+    var changePercent: Double?
+}
+
+private struct QuotaEstimateWeekHeader: View {
+    var l10n: L10n
+
+    var body: some View {
+        HStack {
+            Text(l10n.text(.date)).frame(width: 78, alignment: .leading)
+            Text(l10n.text(.quotaEstimateCredits)).frame(maxWidth: .infinity, alignment: .trailing)
+            Text(l10n.text(.tokens)).frame(maxWidth: .infinity, alignment: .trailing)
+            Text(l10n.text(.estimatedAPICost)).frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+    }
+}
+
+private struct QuotaEstimateWeekRow: View {
+    var row: QuotaEstimateDailyRow
+    var isFirst: Bool
+
+    var body: some View {
+        HStack {
+            Text(row.date).frame(width: 78, alignment: .leading)
+            Text(QuotaEstimateFormatting.tableCredits(row.credits))
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            Text(QuotaEstimateCalculator.compactTokens(row.tokens))
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            Text(QuotaEstimateFormatting.usd(row.usd))
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .font(.caption.monospacedDigit())
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .tableRowRule(isFirst: isFirst)
+    }
+}
+
+private struct QuotaEstimateWeekFooter: View {
+    var credits: Double
+    var tokens: Int
+    var usd: Double
+    var l10n: L10n
+
+    var body: some View {
+        HStack {
+            Text(l10n.text(.total)).frame(width: 78, alignment: .leading)
+            Text(QuotaEstimateFormatting.tableCredits(credits))
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            Text(QuotaEstimateCalculator.compactTokens(tokens))
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            Text(QuotaEstimateFormatting.usd(usd))
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .font(.caption.weight(.semibold).monospacedDigit())
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .tableRowRule(isFirst: false)
+    }
+}
+
+private struct QuotaEstimateHistoryHeader: View {
+    var l10n: L10n
+
+    var body: some View {
+        HStack {
+            Text(l10n.text(.date)).frame(maxWidth: .infinity, alignment: .leading)
+            Text(l10n.text(.quotaEstimateWeeklyAllowance)).frame(maxWidth: .infinity, alignment: .trailing)
+            Text(l10n.text(.quotaEstimateVsLast)).frame(width: 72, alignment: .trailing)
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+    }
+}
+
+private struct QuotaEstimateHistoryRow: View {
+    var row: QuotaEstimateHistoryRowModel
+    var isFirst: Bool
+
+    var body: some View {
+        HStack {
+            Text(row.cycleStartDate)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(QuotaEstimateFormatting.credits(row.estimatedCredits))
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            Text(row.changePercent.map(QuotaEstimateFormatting.signedPercent) ?? "—")
+                .frame(width: 72, alignment: .trailing)
+                .foregroundStyle(.secondary)
+        }
+        .font(.caption.monospacedDigit())
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .tableRowRule(isFirst: isFirst)
     }
 }
 

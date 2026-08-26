@@ -257,6 +257,24 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case quotaAlertTitle
     case quotaAlertsDescription
     case quotaAlerts
+    case quotaEstimate
+    case quotaEstimateCannotExtrapolate
+    case quotaEstimateCredits
+    case quotaEstimateCut
+    case quotaEstimateHistory
+    case quotaEstimateIncreased
+    case quotaEstimateInfo
+    case quotaEstimateMethodOfficial
+    case quotaEstimateMethodRolling
+    case quotaEstimateThisWeek
+    case quotaEstimateThisWeekUsed
+    case quotaEstimateUsedPercent
+    case quotaEstimateWeekValue
+    case quotaEstimateWeeklyAllowance
+    case quotaEstimateWindowMode
+    case quotaEstimateWindowOfficial
+    case quotaEstimateWindowRolling
+    case quotaEstimateVsLast
     case rateLimitResetDetectedAlertBody
     case rateLimitResetDetectedBankedAlertBody
     case rateLimitResetDetectedGlobalAndBankedAlertBody
@@ -379,6 +397,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case moduleAppliesBoth
     case moduleHidden
     case moduleQuotaDescription
+    case moduleQuotaEstimateDescription
     case moduleResetCreditsDescription
     case moduleSessionRepairDescription
     case moduleVisible

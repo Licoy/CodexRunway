@@ -320,6 +320,15 @@ struct ControlPanelView: View {
                 }
                 .pickerStyle(.menu)
             }
+        case .quotaEstimate:
+            ModulePickerRow(title: l10n.text(.quotaEstimateWindowMode)) {
+                Picker(l10n.text(.quotaEstimateWindowMode), selection: quotaEstimateWindowModeBinding) {
+                    ForEach(QuotaEstimateWindowMode.allCases, id: \.self) { mode in
+                        Text(mode.title(l10n)).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
         case .resetCredits, .sessionRepair, .recentSessions:
             EmptyView()
         }
@@ -437,6 +446,8 @@ struct ControlPanelView: View {
             tokenUsageHeatmapBinding
         case .rateLimitResetToday:
             rateLimitResetTodayBinding
+        case .quotaEstimate:
+            quotaEstimateSummaryBinding
         case .resetCredits:
             resetCreditsSummaryBinding
         case .apiCost:
@@ -460,6 +471,22 @@ struct ControlPanelView: View {
                     model.refreshQuota()
                 }
             })
+    }
+
+    private var quotaEstimateSummaryBinding: Binding<Bool> {
+        Binding(
+            get: { settings.preferences.showsQuotaEstimateSummary },
+            set: { enabled in
+                settings.updateShowsQuotaEstimateSummary(enabled)
+                guard enabled else { return }
+                model.refreshQuotaEstimate()
+            })
+    }
+
+    private var quotaEstimateWindowModeBinding: Binding<QuotaEstimateWindowMode> {
+        Binding(
+            get: { settings.preferences.quotaEstimateWindowMode },
+            set: { settings.updateQuotaEstimateWindowMode($0) })
     }
 
     private var resetCreditsSummaryBinding: Binding<Bool> {
@@ -703,12 +730,22 @@ private extension TokenUsageChartStyle {
     }
 }
 
+private extension QuotaEstimateWindowMode {
+    func title(_ l10n: L10n) -> String {
+        switch self {
+        case .auto: l10n.text(.auto)
+        case .rollingWeek: l10n.text(.quotaEstimateWindowRolling)
+        }
+    }
+}
+
 private extension MainPanelModule {
     func title(_ l10n: L10n) -> String {
         switch self {
         case .quota: l10n.text(.quota)
         case .tokenUsage: l10n.text(.tokenUsageHeatmap)
         case .rateLimitResetToday: l10n.text(.rateLimitResetToday)
+        case .quotaEstimate: l10n.text(.quotaEstimate)
         case .resetCredits: l10n.text(.resetCredits)
         case .apiCost: l10n.text(.apiCost)
         case .sessionRepair: l10n.text(.sessionRepair)
@@ -721,6 +758,7 @@ private extension MainPanelModule {
         case .quota: l10n.text(.moduleQuotaDescription)
         case .tokenUsage: l10n.text(.tokenUsageHeatmapDescription)
         case .rateLimitResetToday: l10n.text(.rateLimitResetTodayDescription)
+        case .quotaEstimate: l10n.text(.moduleQuotaEstimateDescription)
         case .resetCredits: l10n.text(.moduleResetCreditsDescription)
         case .apiCost: l10n.text(.moduleAPICostDescription)
         case .sessionRepair: l10n.text(.moduleSessionRepairDescription)
@@ -730,7 +768,7 @@ private extension MainPanelModule {
 
     func platformTitle(_ l10n: L10n) -> String {
         switch self {
-        case .rateLimitResetToday, .sessionRepair:
+        case .rateLimitResetToday, .quotaEstimate, .sessionRepair:
             l10n.text(.moduleAppliesCodex)
         case .quota, .tokenUsage, .resetCredits, .apiCost, .recentSessions:
             l10n.text(.moduleAppliesBoth)
@@ -742,6 +780,7 @@ private extension MainPanelModule {
         case .quota: "gauge"
         case .tokenUsage: "chart.bar.xaxis"
         case .rateLimitResetToday: "arrow.clockwise.circle"
+        case .quotaEstimate: "function"
         case .resetCredits: "arrow.counterclockwise.circle"
         case .apiCost: "dollarsign.circle"
         case .sessionRepair: "cross.case"
@@ -751,7 +790,7 @@ private extension MainPanelModule {
 
     var hasConfiguration: Bool {
         switch self {
-        case .quota, .tokenUsage, .rateLimitResetToday, .apiCost:
+        case .quota, .tokenUsage, .rateLimitResetToday, .quotaEstimate, .apiCost:
             true
         case .resetCredits, .sessionRepair, .recentSessions:
             false

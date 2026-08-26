@@ -28,7 +28,7 @@ enum RunwayCLIHelp {
 
       --render-main-panel-mock=all|<page>-<light|dark> <output>
           Render the main popover or a detail page, then exit.
-          Pages: main, accounts, reset-credits, api-cost.
+          Pages: main, accounts, reset-credits, api-cost, quota-estimate.
 
     Environment:
       CODEX_RUNWAY_DISABLE_DEV_APP=1

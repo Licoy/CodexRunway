@@ -23,6 +23,7 @@ Codex Runway is a native macOS menu bar app for checking Codex and Grok quota. I
 - Manage multiple Codex accounts: browser sign-in, import local `auth.json`, paste token/JSON (including `/auth/session`), import files, or add an API key.
 - Switch accounts safely after confirmation by atomically writing `~/.codex/auth.json`, with an optional Codex restart so CLI / IDE stay in sync.
 - Show the current account, subscription tier, and expiration.
+- Estimate this week’s Codex allowance from official weekly usage percent and daily Credits, compare it with previous weeks to spot quota cuts, and toggle the module in settings (on by default).
 - View reset credit count, status, and expiration time.
 - View API-equivalent cost and token usage for today, the current cycle, the previous cycle, this month, or a custom range; the default range is configurable in settings.
 - Show a year-to-date token usage chart under quota on the main panel (heatmap / line / bar; daily / weekly / cumulative); style is switchable in the panel and settings, heatmap by default; can be turned off.
@@ -146,6 +147,7 @@ The app is written to `dist/CodexRunway.app`. Public releases containing this fi
 - Invalid or mock credentials are never written back to official `~/.codex/auth.json`.
 - Access tokens, refresh tokens, ID tokens, and API keys must not be written to logs, README files, issue templates, or self-check output.
 - API-equivalent cost is computed from local session JSONL logs by default, with derived data such as a local incremental index under `~/.codex-runway/`. Session contents are not uploaded.
+- Weekly quota estimates store only derived Credits totals and percents in `~/.codex-runway/quota-estimate-history.json`. No tokens or keys.
 - Online usage supplements API-equivalent cost only when local token data is unavailable. The chart’s “Official stats (all devices)” series comes from current-account profile statistics and may lag or be revised; “Local logs (all sessions)” scans the sessions present on this Mac and historical entries may span accounts. The two series are not a subset relationship and should not be subtracted.
 - Session repair only touches `~/.codex/session_index.jsonl`, creates a backup before writing, and never deletes session files.
 - “Reset today?” only downloads the public status feed. It sends no Codex account, token, or local session content.
@@ -155,7 +157,7 @@ The app is written to `dist/CodexRunway.app`. Public releases containing this fi
 ## Data sources
 
 - **Reset today?**: Data comes from [https://www.codexrunway.com/api/status.json](https://www.codexrunway.com/api/status.json). Unofficial and advisory only; may be delayed or temporarily unavailable.
-- **Quota / reset credits / official token usage / some online usage**: When signed in, requests use your local credentials against official ChatGPT / Codex backend APIs. Official token usage belongs to the current account and shows the backend statistics date.
+- **Quota / reset credits / quota estimate / official token usage / some online usage**: When signed in, requests use your local credentials against official ChatGPT / Codex backend APIs. Official token usage belongs to the current account and shows the backend statistics date. Quota estimate is unofficial: weekly allowance is extrapolated from weekly used percent and daily Credits (1000 Credits ≈ $40, version `credits-usd-2026-08-26`).
 - **Grok quota**: Returned only by the official CLI chat-proxy `/v1/billing?format=credits` endpoint using a local OAuth / SuperGrok login. There is no secondary data source, and API billing or local-session statistics are not mixed into this quota.
 - **Grok API-equivalent cost / local sessions**: Computed from local `~/.grok/sessions` `turn_completed` usage using official xAI Text API prices (input / cached / output; prompts ≥ 200k use long-context rates; price book `xai-builtin-2026-08-13`). Unknown models are not invented as exact costs. CLI `costUsdTicks` is subscription-credit accounting and is not used as API-equivalent cost.
 - **Local-log token usage / API-equivalent cost / recent sessions**: Computed by default from local `~/.codex` session logs and the local index. Historical local logs have no reliable account attribution, so they may include multiple accounts.

@@ -10,6 +10,7 @@ enum MainPanelMockRender {
         case accounts
         case resetCredits = "reset-credits"
         case apiCost = "api-cost"
+        case quotaEstimate = "quota-estimate"
 
         var sidePanel: RunwaySidePanel? {
             switch self {
@@ -17,6 +18,7 @@ enum MainPanelMockRender {
             case .accounts: return .accounts
             case .resetCredits: return .resetCredits
             case .apiCost: return .apiCost
+            case .quotaEstimate: return .quotaEstimate
             }
         }
     }
@@ -234,7 +236,9 @@ enum MainPanelMockRender {
             services: services,
             accountStore: accountStore,
             costCacheStore: UsageCostCacheStore(
-                cacheURL: root.appendingPathComponent("api-equivalent-cost.json")))
+                cacheURL: root.appendingPathComponent("api-equivalent-cost.json")),
+            quotaEstimateHistoryStore: QuotaEstimateHistoryStore(
+                fileURL: root.appendingPathComponent("quota-estimate-history.json")))
         seedFixtures(model, l10n: settings.l10n)
         return model
     }
@@ -304,6 +308,7 @@ enum MainPanelMockRender {
             utc.component(.month, from: now),
             utc.component(.day, from: now))
         model.tokenHeatmapOfficialGeneratedAt = now
+        model.quotaEstimate = RunwayPreviewFixtures.quotaEstimate(now: now)
 
         let credits = RunwayPreviewFixtures.resetCredits(now: now)
         model.resetCreditSummary = ResetCreditSummary(snapshot: credits)

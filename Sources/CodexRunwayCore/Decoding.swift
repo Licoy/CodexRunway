@@ -34,6 +34,7 @@ struct RateLimitResponse: Decodable {
 
 struct WindowResponse: Decodable {
     var usedPercent: Int
+    var usedPercentExact: Double
     var resetAt: Int
     var limitWindowSeconds: Int
 
@@ -43,11 +44,21 @@ struct WindowResponse: Decodable {
         case limitWindowSeconds = "limit_window_seconds"
     }
 
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let exact = try container.decodeFlexibleDouble(.usedPercent)
+        usedPercentExact = exact
+        usedPercent = Int(exact.rounded())
+        resetAt = try container.decode(Int.self, forKey: .resetAt)
+        limitWindowSeconds = try container.decode(Int.self, forKey: .limitWindowSeconds)
+    }
+
     var rateWindow: RateWindow {
         RateWindow(
             usedPercent: usedPercent,
             windowMinutes: limitWindowSeconds > 0 ? limitWindowSeconds / 60 : nil,
-            resetsAt: resetAt > 0 ? Date(timeIntervalSince1970: TimeInterval(resetAt)) : nil)
+            resetsAt: resetAt > 0 ? Date(timeIntervalSince1970: TimeInterval(resetAt)) : nil,
+            usedPercentExact: usedPercentExact)
     }
 }
 
@@ -146,6 +157,27 @@ enum FlexibleDate {
 func firstNonEmpty(_ values: String?...) -> String? {
     values.compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
         .first { !$0.isEmpty }
+}
+
+extension KeyedDecodingContainer {
+    func decodeFlexibleDouble(_ key: Key) throws -> Double {
+        if let value = try? decode(Double.self, forKey: key), value.isFinite {
+            return value
+        }
+        if let value = try? decode(Int.self, forKey: key) {
+            return Double(value)
+        }
+        if let text = try? decode(String.self, forKey: key),
+           let value = Double(text),
+           value.isFinite
+        {
+            return value
+        }
+        throw DecodingError.dataCorruptedError(
+            forKey: key,
+            in: self,
+            debugDescription: "Expected a finite number")
+    }
 }
 
 enum RunwayDates {

@@ -99,6 +99,14 @@ final class RunwaySettings: ObservableObject {
         update { $0.showsResetCreditsSummary = isShown }
     }
 
+    func updateShowsQuotaEstimateSummary(_ isShown: Bool) {
+        update { $0.showsQuotaEstimateSummary = isShown }
+    }
+
+    func updateQuotaEstimateWindowMode(_ mode: QuotaEstimateWindowMode) {
+        update { $0.quotaEstimateWindowMode = mode }
+    }
+
     func updateShowsCostSummary(_ isShown: Bool) {
         update { $0.showsCostSummary = isShown }
     }

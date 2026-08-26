@@ -419,11 +419,18 @@ extension CodexSubscriptionTier {
 
 public struct RateWindow: Sendable, Equatable {
     public var usedPercent: Int
+    public var usedPercentExact: Double
     public var windowMinutes: Int?
     public var resetsAt: Date?
 
-    public init(usedPercent: Int, windowMinutes: Int? = nil, resetsAt: Date? = nil) {
+    public init(
+        usedPercent: Int,
+        windowMinutes: Int? = nil,
+        resetsAt: Date? = nil,
+        usedPercentExact: Double? = nil)
+    {
         self.usedPercent = usedPercent
+        self.usedPercentExact = usedPercentExact ?? Double(usedPercent)
         self.windowMinutes = windowMinutes
         self.resetsAt = resetsAt
     }

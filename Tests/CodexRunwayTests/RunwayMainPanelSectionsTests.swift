@@ -28,6 +28,7 @@ struct RunwayMainPanelSectionsTests {
             .codexQuota,
             .codexTokenHeatmap,
             .codexRateLimitResetToday,
+            .codexQuotaEstimate,
             .codexResetCredits,
             .codexAPICost,
             .codexSessionRepair,
@@ -48,7 +49,7 @@ struct RunwayMainPanelSectionsTests {
             provider: .codex,
             preferences: preferences)
 
-        #expect(sections == [.codexQuota, .codexResetCredits])
+        #expect(sections == [.codexQuota, .codexQuotaEstimate, .codexResetCredits])
     }
 
     @Test("custom order is shared while each provider filters unsupported modules")
@@ -69,6 +70,7 @@ struct RunwayMainPanelSectionsTests {
             .codexRecentSessions,
             .codexSessionRepair,
             .codexAPICost,
+            .codexQuotaEstimate,
             .codexResetCredits,
             .codexRateLimitResetToday,
             .codexTokenHeatmap,
@@ -97,5 +99,18 @@ struct RunwayMainPanelSectionsTests {
         #expect(!sections.contains(.codexQuota))
         #expect(!sections.contains(.codexResetCredits))
         #expect(preferences.mainPanelModuleOrder == order)
+    }
+
+    @Test("quota estimate is Codex-only and can be hidden")
+    func quotaEstimateIsCodexOnly() {
+        var preferences = RunwayPreferences()
+        #expect(RunwayMainPanelSections.orderedVisible(provider: .codex, preferences: preferences)
+            .contains(.codexQuotaEstimate))
+        #expect(!RunwayMainPanelSections.orderedVisible(provider: .grok, preferences: preferences)
+            .contains(where: { $0 == .codexQuotaEstimate }))
+
+        preferences.showsQuotaEstimateSummary = false
+        #expect(!RunwayMainPanelSections.orderedVisible(provider: .codex, preferences: preferences)
+            .contains(.codexQuotaEstimate))
     }
 }

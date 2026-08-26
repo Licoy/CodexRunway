@@ -220,6 +220,14 @@ struct RunwayPopoverView: View {
                 onOpenEvidence: { url in
                     ExternalURLLauncher.open(url)
                 })
+        case .codexQuotaEstimate:
+            QuotaEstimateSummaryView(
+                snapshot: model.quotaEstimate,
+                error: model.quotaEstimateError,
+                l10n: l10n,
+                isRefreshing: model.isRefreshing(.quotaEstimate),
+                onRefresh: { model.refreshQuotaEstimate() },
+                onDetailsSelect: { detailPage = .quotaEstimate })
         case .codexResetCredits:
             ResetCreditsSummaryView(
                 summary: model.resetCreditSummary,
@@ -397,6 +405,8 @@ struct RunwayPopoverView: View {
             return l10n.text(.resetCreditDetails)
         case .apiCost:
             return l10n.text(.apiCost)
+        case .quotaEstimate:
+            return l10n.text(.quotaEstimate)
         case nil:
             return ""
         }

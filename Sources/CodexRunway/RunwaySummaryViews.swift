@@ -801,6 +801,165 @@ private struct EvidenceRowButton<Content: View>: View {
     }
 }
 
+struct QuotaEstimateSummaryView: View {
+    var snapshot: QuotaEstimateSnapshot?
+    var error: String?
+    var l10n: L10n
+    var isRefreshing: Bool
+    var onRefresh: () -> Void
+    var onDetailsSelect: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            RefreshableSectionHeader(
+                title: l10n.text(.quotaEstimate),
+                l10n: l10n,
+                isRefreshing: isRefreshing,
+                onRefresh: onRefresh,
+                infoHelp: l10n.text(.quotaEstimate),
+                infoAccessibilityIdentifier: "quota-estimate-info",
+                infoContent: {
+                    AnyView(QuotaEstimateInfoPopover(l10n: l10n))
+                })
+            if let snapshot {
+                heroLine(snapshot)
+                    .fixedSize(horizontal: false, vertical: true)
+                subtitleLine(snapshot)
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+                SidePanelDisclosureRow(
+                    title: l10n.text(.quotaEstimateThisWeek),
+                    action: onDetailsSelect)
+            } else if let error, !error.isEmpty {
+                Text(error)
+                    .font(.callout)
+                    .foregroundStyle(Color(nsColor: .systemRed))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(l10n.text(isRefreshing ? .calculating : .notLoaded))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func heroLine(_ snapshot: QuotaEstimateSnapshot) -> Text {
+        guard let estimated = snapshot.estimatedCredits else {
+            return Text("—")
+                .font(.title3.weight(.semibold).monospacedDigit())
+        }
+        var text = Text("\(QuotaEstimateFormatting.credits(estimated)) \(l10n.text(.quotaEstimateCredits))")
+            .font(.title3.weight(.semibold).monospacedDigit())
+        if let usd = snapshot.estimatedUSD, QuotaEstimateFormatting.shouldShowUSD(usd) {
+            text = text + Text(" \(QuotaEstimateFormatting.approxUSD(usd))")
+                .font(.title3.weight(.semibold).monospacedDigit())
+                .foregroundColor(Color(nsColor: .systemBlue))
+        }
+        return text
+    }
+
+    private func subtitleLine(_ snapshot: QuotaEstimateSnapshot) -> Text {
+        let unit = l10n.text(.quotaEstimateCredits)
+        if snapshot.usedCredits <= 0, !snapshot.canExtrapolate {
+            return Text(l10n.text(.quotaEstimateCannotExtrapolate))
+                .foregroundColor(.secondary)
+        }
+
+        var text = Text("\(l10n.text(.quotaEstimateThisWeekUsed)) \(QuotaEstimateFormatting.credits(snapshot.usedCredits)) \(unit)")
+            .foregroundColor(.secondary)
+        if QuotaEstimateFormatting.shouldShowUSD(snapshot.usedUSD) {
+            text = text + Text(" \(QuotaEstimateFormatting.approxUSD(snapshot.usedUSD))")
+                .foregroundColor(Color(nsColor: .systemBlue))
+        }
+        if snapshot.canExtrapolate {
+            text = text + Text(" · \(QuotaEstimateFormatting.percent(snapshot.usedPercent))")
+                .foregroundColor(.secondary)
+        } else {
+            text = text + Text(" · \(l10n.text(.quotaEstimateCannotExtrapolate))")
+                .foregroundColor(.secondary)
+        }
+        if let change = changeText(snapshot) {
+            text = text + Text(" · \(change.text)")
+                .foregroundColor(change.color)
+        }
+        return text
+    }
+
+    private func changeText(_ snapshot: QuotaEstimateSnapshot) -> (text: String, color: Color)? {
+        guard let kind = snapshot.changeKind, let change = snapshot.changePercent else { return nil }
+        let delta = QuotaEstimateFormatting.signedPercent(change)
+        switch kind {
+        case .decreased:
+            return (
+                "\(l10n.text(.quotaEstimateVsLast)) \(delta) · \(l10n.text(.quotaEstimateCut))",
+                Color(nsColor: .systemOrange))
+        case .increased:
+            return (
+                "\(l10n.text(.quotaEstimateVsLast)) \(delta) · \(l10n.text(.quotaEstimateIncreased))",
+                Color(nsColor: .systemGreen))
+        case .similar:
+            return nil
+        }
+    }
+}
+
+enum QuotaEstimateFormatting {
+    static func credits(_ value: Double) -> String {
+        String(format: "%.1f", value)
+    }
+
+    static func tableCredits(_ value: Double) -> String {
+        String(format: "%.3f", value)
+    }
+
+    static func percent(_ value: Double) -> String {
+        if value == value.rounded() {
+            return String(format: "%.0f%%", value)
+        }
+        return String(format: "%.1f%%", value)
+    }
+
+    static func usd(_ value: Double) -> String {
+        String(format: "$%.2f", value)
+    }
+
+    static func shouldShowUSD(_ value: Double) -> Bool {
+        value.isFinite && abs(value) >= 0.005
+    }
+
+    static func approxUSD(_ value: Double) -> String {
+        "(≈\(usd(value)))"
+    }
+
+    static func signedPercent(_ value: Double) -> String {
+        String(format: "%+.0f%%", value.rounded())
+    }
+}
+
+private struct QuotaEstimateInfoPopover: View {
+    var l10n: L10n
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(l10n.text(.quotaEstimate))
+                .font(.title3.weight(.semibold))
+            Text(l10n.text(.quotaEstimateInfo))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(l10n.text(.ok)) { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 320)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+}
+
 struct ResetCreditsSummaryView: View {
     var summary: ResetCreditSummary?
     var l10n: L10n

@@ -11,6 +11,7 @@ enum RunwayRefreshSection: CaseIterable, Hashable {
     case quota
     case resetCredits
     case rateLimitResetToday
+    case quotaEstimate
     case apiCost
     case tokenHeatmap
     case sessionRepair
@@ -159,6 +160,8 @@ final class RunwayModel: ObservableObject {
     @Published var quotaMeters: [QuotaMeter] = []
     @Published var resetCreditSummary: ResetCreditSummary?
     @Published var resetCreditDetails: [ResetCreditDetail] = []
+    @Published var quotaEstimate: QuotaEstimateSnapshot?
+    @Published var quotaEstimateError: String?
     @Published var rateLimitResetToday: RateLimitResetTodaySnapshot?
     @Published var costDetail: ApiEquivalentSummary?
     /// Current-account official profile statistics — day → product-displayed tokens.
@@ -204,6 +207,7 @@ final class RunwayModel: ObservableObject {
     private let services: RunwayModelServices
     private let sessionRepair = SessionRepairService()
     private let costCacheStore: UsageCostCacheStore
+    private let quotaEstimateHistoryStore: QuotaEstimateHistoryStore
     private let alertStore = RunwayAlertStore()
     private let statusExporter = RunwayStatusExporter()
     private let notificationService = RunwayNotificationService()
@@ -218,6 +222,7 @@ final class RunwayModel: ObservableObject {
     private var latestAuth: CodexAuth?
     private var latestQuota: QuotaSnapshot?
     private var latestResetCredits: ResetCreditsSnapshot?
+    private var latestQuotaEstimateDaily: ApiEquivalentSummary?
     private var lastRateLimitResetTodayFetch: Date?
     private var latestCost: ApiEquivalentSummary?
     private var latestCurrentCycleFullWindow: DateInterval?
@@ -257,6 +262,7 @@ final class RunwayModel: ObservableObject {
         services: RunwayModelServices = .live(),
         accountStore: AccountStore = AccountStore(),
         costCacheStore: UsageCostCacheStore = UsageCostCacheStore(),
+        quotaEstimateHistoryStore: QuotaEstimateHistoryStore = QuotaEstimateHistoryStore(),
         grokModule: GrokAccountModule? = nil,
         grokCLIAvailable: Bool = GrokExecutableLocator.locate() != nil)
     {
@@ -264,6 +270,7 @@ final class RunwayModel: ObservableObject {
         self.services = services
         self.accountStore = accountStore
         self.costCacheStore = costCacheStore
+        self.quotaEstimateHistoryStore = quotaEstimateHistoryStore
         self.grokModule = grokModule
         self.grokCLIAvailable = grokCLIAvailable
         self.accountSwitcher = AccountSwitcher(store: accountStore)
@@ -744,6 +751,12 @@ final class RunwayModel: ObservableObject {
         Task { await refreshResetCreditsNow() }
     }
 
+    func refreshQuotaEstimate() {
+        guard settings.preferences.showsQuotaEstimateSummary else { return }
+        guard !isRefreshingAll, !isRefreshing(.quotaEstimate) else { return }
+        Task { await refreshQuotaEstimateNow() }
+    }
+
     func refreshRateLimitResetToday(force: Bool = true) {
         guard needsRateLimitResetTodayData else { return }
         guard !isRefreshing(.rateLimitResetToday) else { return }
@@ -910,6 +923,14 @@ final class RunwayModel: ObservableObject {
            rateLimitResetToday == nil
         {
             refreshRateLimitResetToday(force: true)
+        }
+        if let latestQuota, let latestQuotaEstimateDaily {
+            applyQuotaEstimate(quota: latestQuota, daily: latestQuotaEstimateDaily, persist: false)
+        } else if selectedProvider == .codex,
+                  settings.preferences.showsQuotaEstimateSummary,
+                  quotaEstimate == nil
+        {
+            refreshQuotaEstimate()
         }
     }
 
@@ -1116,6 +1137,9 @@ final class RunwayModel: ObservableObject {
             async let resetErrorTask = refreshResetCreditsForFullRefresh(auth: auth)
             let quotaResult = await quotaResultTask
             if case .success(let quotaSnapshot) = quotaResult {
+                if settings.preferences.showsQuotaEstimateSummary {
+                    await loadQuotaEstimate(auth: auth, quota: quotaSnapshot)
+                }
                 let needsCost =
                     (settings.preferences.showsCostSummary || widgetRequirements.contains(.cost))
                     && shouldRefreshCost(policy: policy, quota: quotaSnapshot)
@@ -1276,6 +1300,70 @@ final class RunwayModel: ObservableObject {
                 lastError = error.localizedDescription
             }
         }
+        if settings.preferences.showsQuotaEstimateSummary,
+           let quota = latestQuota,
+           let auth = latestAuth
+        {
+            await loadQuotaEstimate(auth: auth, quota: quota)
+        }
+    }
+
+    private func refreshQuotaEstimateNow() async {
+        do {
+            let auth = try await loadValidAuth(preferCached: true)
+            var quota = latestQuota
+            if quota == nil {
+                let snapshot = try await services.fetchQuota(auth)
+                latestQuota = snapshot
+                applyQuota(snapshot)
+                quota = snapshot
+            }
+            guard let quota else { return }
+            await loadQuotaEstimate(auth: auth, quota: quota)
+        } catch {
+            quotaEstimateError = error.localizedDescription
+        }
+    }
+
+    private func loadQuotaEstimate(auth: CodexAuth, quota: QuotaSnapshot) async {
+        await withRefresh([.quotaEstimate]) {
+            do {
+                let range = QuotaEstimateCalculator.analyticsRange()
+                let summary = try await services.fetchDailyWorkspaceUsage(
+                    auth,
+                    range.start,
+                    range.end,
+                    range.window,
+                    Date())
+                guard isCurrentAccount(auth, generation: accountStateGeneration) else { return }
+                latestQuotaEstimateDaily = summary
+                applyQuotaEstimate(quota: quota, daily: summary, persist: true)
+                quotaEstimateError = nil
+            } catch is CancellationError {
+                return
+            } catch {
+                quotaEstimateError = error.localizedDescription
+            }
+        }
+    }
+
+    private func applyQuotaEstimate(
+        quota: QuotaSnapshot,
+        daily: ApiEquivalentSummary,
+        persist: Bool)
+    {
+        let accountKey = accountIdentityKey(for: latestAuth) ?? "unknown"
+        let history = quotaEstimateHistoryStore.load(accountKey: accountKey)
+        var snapshot = QuotaEstimateCalculator.make(
+            quota: quota,
+            dailyRows: daily.dailyRows,
+            mode: settings.preferences.quotaEstimateWindowMode,
+            history: history,
+            now: Date())
+        if persist, let sample = QuotaEstimateCalculator.sample(from: snapshot) {
+            snapshot.history = quotaEstimateHistoryStore.upsert(accountKey: accountKey, sample: sample)
+        }
+        quotaEstimate = snapshot
     }
 
     private func refreshResetCreditsNow() async {
@@ -1996,6 +2084,9 @@ final class RunwayModel: ObservableObject {
         accountStateGeneration += 1
         latestQuota = nil
         latestResetCredits = nil
+        latestQuotaEstimateDaily = nil
+        quotaEstimate = nil
+        quotaEstimateError = nil
         latestCost = nil
         latestDisplayedCost = nil
         latestDisplayedCostRange = nil

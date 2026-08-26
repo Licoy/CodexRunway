@@ -23,6 +23,7 @@ Codex Runway 是一個原生 macOS 選單列應用程式，幫你在選單列查
 - 管理多個 Codex 帳號：瀏覽器登入、匯入本機 `auth.json`、貼上 token / JSON（含 `/auth/session`）、匯入檔案或 API Key。
 - 確認後安全切號，原子寫回 `~/.codex/auth.json`，可選立即重新啟動 Codex，使 CLI / IDE 同步。
 - 顯示目前帳號、訂閱類型與到期資訊。
+- 用官方週占用率和每日 Credits 推算本週額度，並與歷史推算比較，方便發現是否被下調；設定中可開關，預設開啟。
 - 查看 reset credits 數量、狀態和到期時間。
 - 查看 API 等價成本與 token 用量：今日、本週期、上週期、本月或自訂範圍；設定可改主彈窗預設範圍。
 - 主彈窗配額下方顯示本年 token 用量圖表（熱力圖 / 折線圖 / 長條圖，每日 / 每週 / 累計），設定中可切換樣式或關閉；預設熱力圖。
@@ -146,6 +147,7 @@ bash Scripts/package-app.sh
 - 無效或 mock 憑證不會寫回官方 `~/.codex/auth.json`。
 - access token、refresh token、id token、API key 不會寫入日誌、README、issue 範本或自檢輸出。
 - API 等價成本預設來自本機工作階段 JSONL 日誌，並在 `~/.codex-runway/` 下維護本機增量索引等衍生資料；不上傳工作階段內容。
+- 訂閱額度推算只把衍生的 Credits 合計與占用率寫入 `~/.codex-runway/quota-estimate-history.json`，不含 token 或金鑰。
 - API 等價成本的線上用量只在本機沒有可用 token 資料時作為補全。Token 圖表的「官方統計（多端）」來自目前帳號的官方資料統計，可能延遲或後續修訂；「本機日誌（全部本機工作階段）」掃描本機現有工作階段，歷史記錄可能跨帳號。兩者口徑不同，不能視為包含關係或直接相減。
 - 工作階段修復只處理 `~/.codex/session_index.jsonl`，寫入前會建立備份，不刪除工作階段檔案。
 - 「今日是否重設」只下載公開狀態源，不附帶 Codex 帳號、token 或本機工作階段內容。
@@ -155,7 +157,7 @@ bash Scripts/package-app.sh
 ## 資料來源
 
 - **今日是否重設**：資料來自 [https://www.codexrunway.com/api/status.json](https://www.codexrunway.com/api/status.json)，非官方且僅供參考，可能延遲或暫時無法使用。
-- **配額 / reset credits / Token 用量官方統計 / 部分線上用量**：在你已登入的前提下，透過本機憑證存取官方 ChatGPT / Codex 後端介面；官方 Token 統計僅對應目前帳號，並顯示伺服端統計截至日期。
+- **配額 / reset credits / 訂閱額度推算 / Token 用量官方統計 / 部分線上用量**：在你已登入的前提下，透過本機憑證存取官方 ChatGPT / Codex 後端介面；官方 Token 統計僅對應目前帳號，並顯示伺服端統計截至日期。訂閱額度推算非正式：用週占用率和每日 Credits 外推本週額度（1000 Credits ≈ $40，版本 `credits-usd-2026-08-26`）。
 - **Grok 額度**：僅由官方 CLI chat-proxy 的 `/v1/billing?format=credits` 回傳（使用本機 OAuth / SuperGrok 登入憑證）。應用程式不提供第二資料源，也不會把 API 帳單或本機工作階段統計混入該額度。
 - **Grok API 等價成本 / 本機工作階段**：根據本機 `~/.grok/sessions` 的 `turn_completed` 用量，按官方 xAI Text API 價目（input / cached / output；prompt ≥ 200k 走長上下文價，價格版本 `xai-builtin-2026-08-13`）逐 turn 估算。未知模型不計精確費用。CLI 的 `costUsdTicks` 是訂閱額度口徑，不用作 API 等價。
 - **Token 用量本機日誌 / API 等價成本 / 最近工作階段**：預設基於本機 `~/.codex` 工作階段日誌與本機索引計算。本機歷史日誌沒有可靠的帳號歸屬，因此可能包含多個帳號的資料。

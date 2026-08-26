@@ -77,6 +77,7 @@ public enum MainPanelModule: String, CaseIterable, Codable, Sendable, Hashable {
     case quota
     case tokenUsage
     case rateLimitResetToday
+    case quotaEstimate
     case resetCredits
     case apiCost
     case sessionRepair
@@ -99,6 +100,8 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     public var mainPanelModuleOrder: [MainPanelModule]
     public var showsQuotaSummary: Bool
     public var showsResetCreditsSummary: Bool
+    public var showsQuotaEstimateSummary: Bool
+    public var quotaEstimateWindowMode: QuotaEstimateWindowMode
     public var showsCostSummary: Bool
     public var showsRecentSessions: Bool
     public var showsSessionRepairSummary: Bool
@@ -124,6 +127,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         .quota,
         .tokenUsage,
         .rateLimitResetToday,
+        .quotaEstimate,
         .resetCredits,
         .apiCost,
         .sessionRepair,
@@ -146,6 +150,8 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         mainPanelModuleOrder: [MainPanelModule] = RunwayPreferences.defaultMainPanelModuleOrder,
         showsQuotaSummary: Bool = true,
         showsResetCreditsSummary: Bool = true,
+        showsQuotaEstimateSummary: Bool = true,
+        quotaEstimateWindowMode: QuotaEstimateWindowMode = .auto,
         showsCostSummary: Bool = true,
         showsRecentSessions: Bool = false,
         showsSessionRepairSummary: Bool = true,
@@ -175,6 +181,8 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         self.mainPanelModuleOrder = Self.normalizedMainPanelModuleOrder(mainPanelModuleOrder)
         self.showsQuotaSummary = showsQuotaSummary
         self.showsResetCreditsSummary = showsResetCreditsSummary
+        self.showsQuotaEstimateSummary = showsQuotaEstimateSummary
+        self.quotaEstimateWindowMode = quotaEstimateWindowMode
         self.showsCostSummary = showsCostSummary
         self.showsRecentSessions = showsRecentSessions
         self.showsSessionRepairSummary = showsSessionRepairSummary
@@ -208,8 +216,20 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         _ order: [MainPanelModule]
     ) -> [MainPanelModule] {
         var seen = Set<MainPanelModule>()
-        let unique = order.filter { seen.insert($0).inserted }
-        return unique + defaultMainPanelModuleOrder.filter { seen.insert($0).inserted }
+        var result = order.filter { seen.insert($0).inserted }
+        for module in defaultMainPanelModuleOrder where seen.insert(module).inserted {
+            if let neighbor = defaultMainPanelModuleOrder
+                .drop(while: { $0 != module })
+                .dropFirst()
+                .first(where: { result.contains($0) }),
+               let index = result.firstIndex(of: neighbor)
+            {
+                result.insert(module, at: index)
+            } else {
+                result.append(module)
+            }
+        }
+        return result
     }
 
     public mutating func moveMainPanelModule(_ module: MainPanelModule, by offset: Int) {
@@ -241,6 +261,8 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         case mainPanelModuleOrder
         case showsQuotaSummary
         case showsResetCreditsSummary
+        case showsQuotaEstimateSummary
+        case quotaEstimateWindowMode
         case showsCostSummary
         case showsRecentSessions
         case showsSessionRepairSummary
@@ -284,6 +306,11 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         showsQuotaSummary = try container.decodeIfPresent(Bool.self, forKey: .showsQuotaSummary) ?? true
         showsResetCreditsSummary =
             try container.decodeIfPresent(Bool.self, forKey: .showsResetCreditsSummary) ?? true
+        showsQuotaEstimateSummary =
+            try container.decodeIfPresent(Bool.self, forKey: .showsQuotaEstimateSummary) ?? true
+        quotaEstimateWindowMode =
+            try container.decodeIfPresent(QuotaEstimateWindowMode.self, forKey: .quotaEstimateWindowMode)
+            ?? .auto
         showsCostSummary = try container.decodeIfPresent(Bool.self, forKey: .showsCostSummary) ?? true
         showsRecentSessions = try container.decodeIfPresent(Bool.self, forKey: .showsRecentSessions) ?? false
         showsSessionRepairSummary = try container.decodeIfPresent(Bool.self, forKey: .showsSessionRepairSummary) ?? true

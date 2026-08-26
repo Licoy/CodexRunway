@@ -4,6 +4,7 @@ enum RunwayMainPanelSection: Hashable {
     case codexQuota
     case codexTokenHeatmap
     case codexRateLimitResetToday
+    case codexQuotaEstimate
     case codexResetCredits
     case codexAPICost
     case codexSessionRepair
@@ -38,7 +39,7 @@ enum RunwayMainPanelSections {
                 return preferences.showsQuotaSummary ? .grokQuota : nil
             case .tokenUsage:
                 return preferences.showsTokenUsageHeatmap ? .grokTokenHeatmap : nil
-            case .rateLimitResetToday, .sessionRepair:
+            case .rateLimitResetToday, .quotaEstimate, .sessionRepair:
                 return nil
             case .resetCredits:
                 return preferences.showsResetCreditsSummary ? .grokResetCredits : nil
@@ -55,6 +56,8 @@ enum RunwayMainPanelSections {
                 return preferences.showsTokenUsageHeatmap ? .codexTokenHeatmap : nil
             case .rateLimitResetToday:
                 return preferences.showsRateLimitResetToday ? .codexRateLimitResetToday : nil
+            case .quotaEstimate:
+                return preferences.showsQuotaEstimateSummary ? .codexQuotaEstimate : nil
             case .resetCredits:
                 return preferences.showsResetCreditsSummary ? .codexResetCredits : nil
             case .apiCost:
