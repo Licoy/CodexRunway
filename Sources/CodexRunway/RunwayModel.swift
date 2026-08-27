@@ -27,6 +27,12 @@ struct RunwayModelServices: Sendable {
     var fetchQuota: @Sendable (CodexAuth) async throws -> QuotaSnapshot
     var fetchResetCredits: @Sendable (CodexAuth) async throws -> ResetCreditsSnapshot
     var fetchRateLimitResetToday: @Sendable () async throws -> RateLimitResetTodaySnapshot
+    var fetchRateLimitResetTodayReaction: @Sendable () async throws -> RateLimitResetTodayReactionSnapshot = {
+        throw URLError(.unsupportedURL)
+    }
+    var clickRateLimitResetTodayReaction: @Sendable () async throws -> RateLimitResetTodayReactionPostResult = {
+        throw URLError(.unsupportedURL)
+    }
     var scanAPIEquivalent: @Sendable (
         [ApiCostQuery],
         Date,
@@ -42,6 +48,7 @@ struct RunwayModelServices: Sendable {
         authStore: CodexAuthStore = CodexAuthStore(),
         quotaClient: QuotaClient = QuotaClient(),
         rateLimitResetTodayClient: RateLimitResetTodayClient = RateLimitResetTodayClient(),
+        rateLimitResetTodayReactionClient: RateLimitResetTodayReactionClient = RateLimitResetTodayReactionClient(),
         sessionRepair: SessionRepairService = SessionRepairService(),
         sessionActivityScanner: SessionActivityScanner = SessionActivityScanner()) -> Self
     {
@@ -91,6 +98,12 @@ struct RunwayModelServices: Sendable {
             },
             fetchRateLimitResetToday: {
                 try await rateLimitResetTodayClient.fetchStatus()
+            },
+            fetchRateLimitResetTodayReaction: {
+                try await rateLimitResetTodayReactionClient.fetch()
+            },
+            clickRateLimitResetTodayReaction: {
+                try await rateLimitResetTodayReactionClient.click()
             },
             scanAPIEquivalent: { queries, calculatedAt, policy, progress in
                 try await costRepository.summaries(
@@ -163,6 +176,9 @@ final class RunwayModel: ObservableObject {
     @Published var quotaEstimate: QuotaEstimateSnapshot?
     @Published var quotaEstimateError: String?
     @Published var rateLimitResetToday: RateLimitResetTodaySnapshot?
+    @Published var rateLimitResetTodayReaction: RateLimitResetTodayReactionSnapshot?
+    @Published var isRateLimitResetTodayReactionBusy = false
+    @Published var rateLimitResetTodayReactionDelta = RateLimitResetTodayReactionDelta.none
     @Published var costDetail: ApiEquivalentSummary?
     /// Current-account official profile statistics — day → product-displayed tokens.
     @Published var tokenHeatmapAllDevicesTokens: [String: Int] = [:]
@@ -224,6 +240,10 @@ final class RunwayModel: ObservableObject {
     private var latestResetCredits: ResetCreditsSnapshot?
     private var latestQuotaEstimateDaily: ApiEquivalentSummary?
     private var lastRateLimitResetTodayFetch: Date?
+    private var reactionPollTask: Task<Void, Never>?
+    private var reactionPollingDesired = false
+    private var reactionWriteGeneration = 0
+    private var isReactionDisabled = false
     private var latestCost: ApiEquivalentSummary?
     private var latestCurrentCycleFullWindow: DateInterval?
     private var latestDisplayedCost: ApiEquivalentSummary?
@@ -673,6 +693,7 @@ final class RunwayModel: ObservableObject {
         selectedProvider = provider
         settings.updateSelectedProvider(provider)
         providerDidChange(from: previous)
+        setRateLimitResetTodayReactionPollingEnabled(reactionPollingDesired)
     }
 
     var isRefreshing: Bool {
@@ -761,6 +782,32 @@ final class RunwayModel: ObservableObject {
         guard needsRateLimitResetTodayData else { return }
         guard !isRefreshing(.rateLimitResetToday) else { return }
         Task { await refreshRateLimitResetTodayNow(force: force) }
+    }
+
+    func setRateLimitResetTodayReactionPollingEnabled(_ enabled: Bool) {
+        if enabled, !reactionPollingDesired {
+            isReactionDisabled = false
+        }
+        reactionPollingDesired = enabled
+        let shouldRun = enabled
+            && selectedProvider == .codex
+            && settings.preferences.showsRateLimitResetToday
+            && !isReactionDisabled
+        if shouldRun {
+            if reactionPollTask == nil {
+                startRateLimitResetTodayReactionPolling()
+            }
+        } else {
+            reactionPollTask?.cancel()
+            reactionPollTask = nil
+        }
+    }
+
+    func clickRateLimitResetTodayReaction() {
+        guard !isRateLimitResetTodayReactionBusy else { return }
+        guard let current = rateLimitResetTodayReaction, current.isVisible, !current.isExhausted else { return }
+        isRateLimitResetTodayReactionBusy = true
+        Task { await clickRateLimitResetTodayReactionNow(current) }
     }
 
     func refreshCost(policy: UsageCostRefreshPolicy = .force) {
@@ -1463,6 +1510,101 @@ final class RunwayModel: ObservableObject {
                 }
             }
         }
+    }
+
+    private func startRateLimitResetTodayReactionPolling() {
+        reactionPollTask?.cancel()
+        reactionPollTask = Task { [weak self] in
+            await self?.runRateLimitResetTodayReactionPolling()
+        }
+    }
+
+    private func runRateLimitResetTodayReactionPolling() async {
+        // One fetch on open, then wait pollMs before the next. Closing the
+        // panel cancels this task so a hidden popover never hits the site.
+        await loadRateLimitResetTodayReaction()
+        while !Task.isCancelled, reactionPollingDesired {
+            let nanoseconds = UInt64((rateLimitResetTodayReaction?.pollInterval ?? 5) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            if Task.isCancelled || !reactionPollingDesired { break }
+            if isRateLimitResetTodayReactionBusy { continue }
+            await loadRateLimitResetTodayReaction()
+        }
+    }
+
+    private func loadRateLimitResetTodayReaction() async {
+        if isRateLimitResetTodayReactionBusy { return }
+        let generation = reactionWriteGeneration
+        let previousCount = rateLimitResetTodayReaction?.count
+        let previousEpoch = rateLimitResetTodayReaction?.epochId
+        do {
+            let snapshot = try await services.fetchRateLimitResetTodayReaction()
+            guard !Task.isCancelled else { return }
+            guard generation == reactionWriteGeneration, !isRateLimitResetTodayReactionBusy else { return }
+            applyRateLimitResetTodayReaction(
+                snapshot,
+                previousCount: previousCount,
+                previousEpoch: previousEpoch)
+        } catch RateLimitResetTodayReactionError.disabled {
+            guard generation == reactionWriteGeneration else { return }
+            isReactionDisabled = true
+            rateLimitResetTodayReaction = nil
+            reactionPollTask?.cancel()
+            reactionPollTask = nil
+        } catch {
+            // Keep the last successful payload.
+        }
+    }
+
+    private func clickRateLimitResetTodayReactionNow(_ current: RateLimitResetTodayReactionSnapshot) async {
+        let local = RateLimitResetTodayReactionLocal(
+            epochId: current.epochId,
+            previousCount: current.count ?? 0,
+            previousRemaining: current.remaining)
+        let parsed: RateLimitResetTodayReactionPostResult?
+        do {
+            parsed = try await services.clickRateLimitResetTodayReaction()
+        } catch {
+            parsed = nil
+        }
+        let next = RateLimitResetTodayReaction.reconcileAfterPost(local: local, response: parsed)
+        if next.payload != nil {
+            reactionWriteGeneration += 1
+        }
+        var updated = next.payload ?? current
+        updated.count = next.count
+        if next.exhausted, updated.dailyLimit > 0 {
+            updated.remaining = 0
+        } else {
+            updated.remaining = next.remaining
+        }
+        rateLimitResetTodayReaction = updated
+        isRateLimitResetTodayReactionBusy = false
+        publishReactionDelta(
+            RateLimitResetTodayReaction.positiveDelta(
+                previousCount: local.previousCount,
+                nextCount: updated.count,
+                previousEpoch: local.epochId,
+                nextEpoch: updated.epochId))
+    }
+
+    private func applyRateLimitResetTodayReaction(
+        _ snapshot: RateLimitResetTodayReactionSnapshot,
+        previousCount: Int?,
+        previousEpoch: String?)
+    {
+        rateLimitResetTodayReaction = snapshot
+        publishReactionDelta(
+            RateLimitResetTodayReaction.positiveDelta(
+                previousCount: previousCount,
+                nextCount: snapshot.count,
+                previousEpoch: previousEpoch,
+                nextEpoch: snapshot.epochId))
+    }
+
+    private func publishReactionDelta(_ amount: Int) {
+        guard amount > 0 else { return }
+        rateLimitResetTodayReactionDelta = RateLimitResetTodayReactionDelta(amount: amount)
     }
 
     private func applyRateLimitResetToday(_ snapshot: RateLimitResetTodaySnapshot) {

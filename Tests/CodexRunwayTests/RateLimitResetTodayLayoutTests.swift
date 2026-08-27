@@ -79,4 +79,16 @@ struct RateLimitResetTodayLayoutTests {
 
         #expect(narrowImage.size.height > wideImage.size.height)
     }
+
+    @Test("website link copy is localized for every language")
+    func websiteLinkCopyIsLocalized() {
+        for language in ResolvedLanguage.allCases {
+            let text = L10n(language: language).text(.rateLimitResetTodayOpenWebsite)
+            #expect(!text.isEmpty)
+            #expect(text != L10nKey.rateLimitResetTodayOpenWebsite.rawValue)
+        }
+        #expect(
+            L10n(language: .simplifiedChinese).text(.rateLimitResetTodayOpenWebsite)
+                == "去 Codex Runway 网页查看重置信息和历史记录")
+    }
 }

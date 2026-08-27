@@ -66,7 +66,8 @@ enum RateLimitResetTodayMockRender {
             isRefreshing: false,
             onRefresh: {},
             onOpenSource: {},
-            onOpenEvidence: { _ in })
+            onOpenEvidence: { _ in },
+            reaction: RateLimitResetTodayReactionSnapshot.devMock(kind: kind))
             .padding(16)
             .frame(width: width)
             .background(Color(nsColor: .windowBackgroundColor))

@@ -272,6 +272,13 @@ struct RateLimitResetTodayView: View {
     var onRefresh: () -> Void
     var onOpenSource: () -> Void
     var onOpenEvidence: ((URL) -> Void)?
+    var reaction: RateLimitResetTodayReactionSnapshot? = nil
+    var isReactionBusy: Bool = false
+    var reactionDelta: RateLimitResetTodayReactionDelta = .none
+    var onReactionClick: () -> Void = {}
+    var onReactionPollingEnabledChange: (Bool) -> Void = { _ in }
+
+    @Environment(\.runwayPanelVisible) private var panelVisible
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -311,12 +318,18 @@ struct RateLimitResetTodayView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
+                    dividedSection {
+                        websiteLink
+                    }
                 }
             }
             .padding(12)
             .frame(maxWidth: .infinity)
             .runwayCard(.raised)
         }
+        .onAppear { onReactionPollingEnabledChange(panelVisible) }
+        .onChange(of: panelVisible) { onReactionPollingEnabledChange($0) }
+        .onDisappear { onReactionPollingEnabledChange(false) }
     }
 
     /// Hairline only — spacing is owned by `dividedSection`.
@@ -335,19 +348,32 @@ struct RateLimitResetTodayView: View {
         .padding(.top, 8)
     }
 
-    /// Large answer on the left, detail on the right — time/countdown stay caption-sized.
+    /// Verdict + reaction on the first row; hint copy wraps on the line below.
     private func hero(now: Date) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            Text(heroTitle(now: now))
-                .font(.system(size: 28, weight: .semibold, design: .rounded))
-                .foregroundStyle(heroColor(now: now))
-                .minimumScaleFactor(0.75)
-                .lineLimit(1)
-                .layoutPriority(1)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 10) {
+                Text(heroTitle(now: now))
+                    .font(.system(size: 28, weight: .semibold, design: .rounded))
+                    .foregroundStyle(heroColor(now: now))
+                    .minimumScaleFactor(0.75)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+
+                if let reaction, reaction.isVisible {
+                    RateLimitResetTodayReactionButton(
+                        snapshot: reaction,
+                        l10n: l10n,
+                        isBusy: isReactionBusy,
+                        delta: reactionDelta,
+                        onClick: onReactionClick)
+                        .fixedSize()
+                }
+
+                Spacer(minLength: 0)
+            }
 
             heroSubtitleView(now: now)
-
-            Spacer(minLength: 0)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -382,7 +408,13 @@ struct RateLimitResetTodayView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .layoutPriority(1)
+    }
+
+    private var websiteLink: some View {
+        RateLimitResetTodayWebsiteLink(
+            title: l10n.text(.rateLimitResetTodayOpenWebsite),
+            help: l10n.text(.rateLimitResetTodayOpenSource),
+            action: onOpenSource)
     }
 
     private func resetTypeBadge(_ resetType: RateLimitResetType) -> some View {
@@ -770,6 +802,45 @@ struct RateLimitResetTodayView: View {
         case .globalAndBanked:
             .systemPurple
         }
+    }
+}
+
+private struct RateLimitResetTodayWebsiteLink: View {
+    var title: String
+    var help: String
+    var action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(title)
+                    .font(.caption2)
+                    .underline(isHovered)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Image(systemName: "arrow.up.right")
+                    .font(.caption2.weight(.semibold))
+            }
+            .foregroundStyle(Color(nsColor: .linkColor))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(
+                isHovered ? RunwaySurface.hoverNeutral : Color.clear,
+                in: RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
+            .padding(.horizontal, -6)
+            .padding(.vertical, -3)
+            .animation(.easeOut(duration: 0.12), value: isHovered)
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+        .help(help)
+        .accessibilityLabel(title)
+        .accessibilityIdentifier("rate-limit-reset-today-open-website")
+        .onHover { isHovered = $0 }
     }
 }
 
