@@ -274,6 +274,8 @@ struct RateLimitResetTodayView: View {
     var onOpenEvidence: ((URL) -> Void)?
     var reaction: RateLimitResetTodayReactionSnapshot? = nil
     var isReactionBusy: Bool = false
+    var isReactionLoading: Bool = false
+    var isReactionFresh: Bool = true
     var reactionDelta: RateLimitResetTodayReactionDelta = .none
     var onReactionClick: () -> Void = {}
     var onReactionPollingEnabledChange: (Bool) -> Void = { _ in }
@@ -332,6 +334,10 @@ struct RateLimitResetTodayView: View {
         .onDisappear { onReactionPollingEnabledChange(false) }
     }
 
+    private var isReactionAwaitingCount: Bool {
+        isReactionLoading || (panelVisible && !isReactionFresh)
+    }
+
     /// Hairline only — spacing is owned by `dividedSection`.
     private var zoneRule: some View {
         Rectangle()
@@ -364,9 +370,19 @@ struct RateLimitResetTodayView: View {
                         snapshot: reaction,
                         l10n: l10n,
                         isBusy: isReactionBusy,
+                        isLoading: isReactionAwaitingCount,
                         delta: reactionDelta,
                         onClick: onReactionClick)
                         .fixedSize()
+                } else if isReactionAwaitingCount {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(RunwaySurface.raised, in: Capsule())
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(RunwaySurface.hairline, lineWidth: 1))
                 }
 
                 Spacer(minLength: 0)

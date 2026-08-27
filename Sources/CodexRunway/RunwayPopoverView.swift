@@ -222,6 +222,8 @@ struct RunwayPopoverView: View {
                 },
                 reaction: model.rateLimitResetTodayReaction,
                 isReactionBusy: model.isRateLimitResetTodayReactionBusy,
+                isReactionLoading: model.isRateLimitResetTodayReactionLoading,
+                isReactionFresh: model.isRateLimitResetTodayReactionFresh,
                 reactionDelta: model.rateLimitResetTodayReactionDelta,
                 onReactionClick: { model.clickRateLimitResetTodayReaction() },
                 onReactionPollingEnabledChange: { model.setRateLimitResetTodayReactionPollingEnabled($0) })

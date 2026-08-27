@@ -176,6 +176,17 @@ public enum RateLimitResetTodayReaction {
         return delta > 0 ? delta : 0
     }
 
+    public static func optimisticClick(
+        _ snapshot: RateLimitResetTodayReactionSnapshot) -> RateLimitResetTodayReactionSnapshot
+    {
+        var next = snapshot
+        next.count = (snapshot.count ?? 0) + 1
+        if snapshot.dailyLimit > 0, let remaining = snapshot.remaining {
+            next.remaining = max(0, remaining - 1)
+        }
+        return next
+    }
+
     public static func reconcileAfterPost(
         local: RateLimitResetTodayReactionLocal,
         response: RateLimitResetTodayReactionPostResult?) -> RateLimitResetTodayReactionReconcile

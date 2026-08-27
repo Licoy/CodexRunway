@@ -6,18 +6,20 @@ struct RateLimitResetTodayReactionButton: View {
     var snapshot: RateLimitResetTodayReactionSnapshot
     var l10n: L10n
     var isBusy: Bool
+    var isLoading: Bool = false
     var delta: RateLimitResetTodayReactionDelta
     var onClick: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var floatingDelta = 0
     @State private var floatVisible = false
+    @State private var floatToken = UUID()
     @State private var isHovered = false
 
     var body: some View {
         Button(action: onClick) {
             HStack(spacing: 4) {
-                if isBusy {
+                if isBusy && !isLoading {
                     ProgressView()
                         .controlSize(.mini)
                 } else {
@@ -27,9 +29,14 @@ struct RateLimitResetTodayReactionButton: View {
                 Text(label)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
-                Text(countText)
-                    .monospacedDigit()
-                    .lineLimit(1)
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.mini)
+                } else {
+                    Text(countText)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                }
             }
             .font(.caption2.weight(.semibold))
             .foregroundStyle(foreground)
@@ -40,7 +47,7 @@ struct RateLimitResetTodayReactionButton: View {
                 Capsule()
                     .strokeBorder(border, lineWidth: 1))
             .overlay(alignment: .topTrailing) {
-                if floatingDelta > 0 {
+                if floatingDelta > 0, !isLoading {
                     Text(RateLimitResetTodayReaction.formatDelta(floatingDelta, language: l10n.language))
                         .font(.caption2.weight(.semibold).monospacedDigit())
                         .foregroundStyle(Color(nsColor: .secondaryLabelColor))
@@ -54,7 +61,7 @@ struct RateLimitResetTodayReactionButton: View {
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
-        .opacity(snapshot.isExhausted && !isBusy ? 0.45 : 1)
+        .opacity(snapshot.isExhausted && !isBusy && !isLoading ? 0.45 : 1)
         .help(accessibilityLabel)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier("rate-limit-reset-today-reaction")
@@ -65,13 +72,19 @@ struct RateLimitResetTodayReactionButton: View {
         .onChange(of: isDisabled) { disabled in
             if disabled { isHovered = false }
         }
-        .onChange(of: delta.id) { _ in
-            presentDelta(delta.amount)
+        .onChange(of: isLoading) { loading in
+            if loading {
+                floatingDelta = 0
+                floatVisible = false
+            }
+        }
+        .onChange(of: delta) { newDelta in
+            presentDelta(newDelta.amount)
         }
     }
 
     private var isDisabled: Bool {
-        isBusy || snapshot.isExhausted
+        isBusy || isLoading || snapshot.isExhausted
     }
 
     private var emoji: String {
@@ -113,6 +126,12 @@ struct RateLimitResetTodayReactionButton: View {
     }
 
     private var accessibilityLabel: String {
+        if isLoading {
+            let key: L10nKey = snapshot.polarity == .yes
+                ? .rateLimitResetTodayReactionThankAria
+                : .rateLimitResetTodayReactionPleaseAria
+            return String(format: l10n.text(key), l10n.text(.calculating))
+        }
         if snapshot.isExhausted && !isBusy {
             return l10n.text(.rateLimitResetTodayReactionLimitReached)
         }
@@ -123,16 +142,17 @@ struct RateLimitResetTodayReactionButton: View {
     }
 
     private func presentDelta(_ value: Int) {
-        guard value > 0 else { return }
+        guard value > 0, !isLoading else { return }
         floatingDelta = value
+        let token = UUID()
+        floatToken = token
         let motion = reduceMotion ? Animation.easeOut(duration: 0.2) : .easeOut(duration: 1)
         withAnimation(motion) {
             floatVisible = true
         }
-        let token = value
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_000_000_000)
-            guard floatingDelta == token else { return }
+            guard floatToken == token else { return }
             withAnimation(motion) {
                 floatVisible = false
             }

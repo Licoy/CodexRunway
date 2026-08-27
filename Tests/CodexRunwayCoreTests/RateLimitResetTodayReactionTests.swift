@@ -142,6 +142,37 @@ struct RateLimitResetTodayReactionTests {
         #expect(RateLimitResetTodayReaction.formatDelta(0, language: .english) == "")
     }
 
+    @Test("optimisticClick bumps count and remaining")
+    func optimisticClick() {
+        let limited = RateLimitResetTodayReactionSnapshot(
+            enabled: true,
+            ready: true,
+            polarity: .no,
+            epochId: "abc",
+            seed: 10,
+            count: 10,
+            remaining: 2,
+            dailyLimit: 5,
+            pollMs: 2_000)
+        let bumped = RateLimitResetTodayReaction.optimisticClick(limited)
+        #expect(bumped.count == 11)
+        #expect(bumped.remaining == 1)
+
+        let unlimited = RateLimitResetTodayReactionSnapshot(
+            enabled: true,
+            ready: true,
+            polarity: .no,
+            epochId: "abc",
+            seed: 10,
+            count: 10,
+            remaining: nil,
+            dailyLimit: 0,
+            pollMs: 2_000)
+        let next = RateLimitResetTodayReaction.optimisticClick(unlimited)
+        #expect(next.count == 11)
+        #expect(next.remaining == nil)
+    }
+
     @Test("POST request sends Origin, Referer, and the stored cookie")
     func postRequestHeaders() {
         let visitor = "abcdef0123456789abcdef0123456789"
