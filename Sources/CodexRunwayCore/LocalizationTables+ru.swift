@@ -351,6 +351,16 @@ extension L10n {
         .rateLimitResetTodayYesHintWithTime: "Сброс сегодня · %@",
         .rateLimitResetTodayYesHintScheduled: "Глобальный сброс запланирован на сегодня, но ещё не завершён",
         .rateLimitResetTodayYesHintScheduledWithTime: "Запланировано сегодня, ещё не завершено · %@",
+        .rateLimitResetTodayPercentPrefix: "≥%@%%",
+        .rateLimitResetTodayPercentExact: "%@%%",
+        .rateLimitResetTodayClockLocal: "местному времени",
+        .rateLimitResetTodayConfirmedWhen: "%@ (%@ назад)",
+        .rateLimitResetTodayConfirmedHint:
+            "Сегодня зафиксирован завершённый {type}. Уверенность около {percent}. Время сброса по {zone}: {when}",
+        .rateLimitResetTodayConfirmedHintNoPercent:
+            "Сегодня зафиксирован завершённый {type}. Время сброса по {zone}: {when}",
+        .rateLimitResetTodayScheduledChanceHint:
+            "Около {percent} вероятности {type}; сейчас запланировано. Примерное окно сброса ({zone}): {date}",
         .rateLimitResetUpcomingAlertBody1h: "До запланированного сброса Codex меньше 1 часа.",
         .rateLimitResetUpcomingAlertBody30m: "До запланированного сброса Codex меньше 30 минут.",
         .rateLimitResetUpcomingRangeAlertBody: "Ожидаемое окно сброса: %@.",

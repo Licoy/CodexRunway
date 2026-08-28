@@ -23,6 +23,8 @@ struct RunwayWidgetSnapshotTests {
         #expect(!text.contains("text"))
         #expect(text.contains("\"resetType\":\"global_and_banked\""))
         #expect(text.contains("\"nextScheduledResetType\":\"banked\""))
+        #expect(text.contains("\"confidencePercent\":92"))
+        #expect(text.contains("\"confidenceBand\":\"ok\""))
     }
 
     @Test("legacy snapshots decode without reset type fields")
@@ -34,6 +36,8 @@ struct RunwayWidgetSnapshotTests {
         var resetToday = try #require(object["resetToday"] as? [String: Any])
         resetToday.removeValue(forKey: "resetType")
         resetToday.removeValue(forKey: "nextScheduledResetType")
+        resetToday.removeValue(forKey: "confidencePercent")
+        resetToday.removeValue(forKey: "confidenceBand")
         object["resetToday"] = resetToday
 
         let legacyData = try JSONSerialization.data(withJSONObject: object)
@@ -44,6 +48,8 @@ struct RunwayWidgetSnapshotTests {
         #expect(decoded.schemaVersion == 1)
         #expect(decoded.resetToday?.resetType == nil)
         #expect(decoded.resetToday?.nextScheduledResetType == nil)
+        #expect(decoded.resetToday?.confidencePercent == nil)
+        #expect(decoded.resetToday?.confidenceBand == nil)
     }
 
     @Test("store writes atomically with owner-only permissions")
@@ -211,7 +217,9 @@ struct RunwayWidgetSnapshotTests {
                 nextScheduledAt: date.addingTimeInterval(3_600),
                 nextScheduledResetType: .banked,
                 lastSuccessfulCheckAt: nil,
-                fetchedAt: date))
+                fetchedAt: date,
+                confidencePercent: 92,
+                confidenceBand: .ok))
     }
 
     private func quota(

@@ -351,6 +351,16 @@ extension L10n {
         .rateLimitResetTodayYesHintWithTime: "오늘 리셋됨 · %@",
         .rateLimitResetTodayYesHintScheduled: "전체 리셋이 오늘 늦게 예정되어 있으며 아직 완료되지 않았습니다",
         .rateLimitResetTodayYesHintScheduledWithTime: "오늘 예정·미완료 · %@",
+        .rateLimitResetTodayPercentPrefix: "≥%@%%",
+        .rateLimitResetTodayPercentExact: "%@%%",
+        .rateLimitResetTodayClockLocal: "현지 시간",
+        .rateLimitResetTodayConfirmedWhen: "%@ (%@ 전)",
+        .rateLimitResetTodayConfirmedHint:
+            "오늘 완료된 {type}이(가) 확인되었습니다. 신뢰도는 약 {percent}입니다. {zone} 리셋 시각: {when}",
+        .rateLimitResetTodayConfirmedHintNoPercent:
+            "오늘 완료된 {type}이(가) 확인되었습니다. {zone} 리셋 시각: {when}",
+        .rateLimitResetTodayScheduledChanceHint:
+            "약 {percent} 확률로 {type}이(가) 진행됩니다. 현재 예정되어 있습니다. 대략적인 리셋 구간({zone}): {date}",
         .rateLimitResetUpcomingAlertBody1h: "예정된 Codex 리셋까지 1시간도 남지 않았습니다.",
         .rateLimitResetUpcomingAlertBody30m: "예정된 Codex 리셋까지 30분도 남지 않았습니다.",
         .rateLimitResetUpcomingRangeAlertBody: "예상 리셋 창: %@.",

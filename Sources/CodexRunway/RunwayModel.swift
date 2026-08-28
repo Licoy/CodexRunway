@@ -1156,13 +1156,16 @@ final class RunwayModel: ObservableObject {
         case .unknown: state = .unknown
         }
         let nextScheduledReset = snapshot.nextScheduledReset(now: now)
+        let presentation = snapshot.verdictPresentation(now: now)
         return RunwayWidgetResetTodaySnapshot(
             state: state,
             resetType: snapshot.displayResetType(now: now),
             nextScheduledAt: nextScheduledReset?.effectiveAt,
             nextScheduledResetType: nextScheduledReset?.event.resetType,
             lastSuccessfulCheckAt: snapshot.lastSuccessfulCheckAt,
-            fetchedAt: snapshot.fetchedAt)
+            fetchedAt: snapshot.fetchedAt,
+            confidencePercent: presentation.percent,
+            confidenceBand: presentation.band)
     }
 
     private func withRefresh(_ sections: Set<RunwayRefreshSection>, operation: () async -> Void) async {
@@ -1728,9 +1731,15 @@ final class RunwayModel: ObservableObject {
         state: RateLimitResetTodayState,
         now: Date) -> String
     {
-        let stateText = rateLimitResetTodayStateText(state)
-        guard let resetType = snapshot.displayResetType(now: now) else { return stateText }
-        return "\(stateText) · \(resetType.localizedName(l10n: l10n))"
+        if state == .unknown {
+            return rateLimitResetTodayStateText(state)
+        }
+        let presentation = snapshot.verdictPresentation(now: now)
+        let title = presentation.titleText(l10n: l10n)
+        guard let resetType = presentation.resetType ?? snapshot.displayResetType(now: now) else {
+            return title
+        }
+        return "\(title) · \(resetType.localizedName(l10n: l10n))"
     }
 
     private func rateLimitResetScheduleText(
@@ -1755,6 +1764,9 @@ final class RunwayModel: ObservableObject {
         _ snapshot: RateLimitResetTodaySnapshot,
         now: Date) -> String
     {
+        if let detail = snapshot.verdictDetail(l10n: l10n, now: now) {
+            return detail.plainText
+        }
         let calendar = RateLimitResetTodaySnapshot.localDayCalendar
         switch snapshot.resolvedState(now: now, calendar: calendar) {
         case .yes:

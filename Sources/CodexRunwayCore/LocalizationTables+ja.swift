@@ -351,6 +351,16 @@ extension L10n {
         .rateLimitResetTodayYesHintWithTime: "本日リセット · %@",
         .rateLimitResetTodayYesHintScheduled: "グローバルリセットは本日中に予定されていますが、まだ完了していません",
         .rateLimitResetTodayYesHintScheduledWithTime: "本日予定・未完了 · %@",
+        .rateLimitResetTodayPercentPrefix: "≥%@%%",
+        .rateLimitResetTodayPercentExact: "%@%%",
+        .rateLimitResetTodayClockLocal: "現地時間",
+        .rateLimitResetTodayConfirmedWhen: "%@（%@前）",
+        .rateLimitResetTodayConfirmedHint:
+            "本日、完了した{type}を確認しました。信頼度は約{percent}です。{zone}のリセット時刻は{when}",
+        .rateLimitResetTodayConfirmedHintNoPercent:
+            "本日、完了した{type}を確認しました。{zone}のリセット時刻は{when}",
+        .rateLimitResetTodayScheduledChanceHint:
+            "約{percent}の確率で{type}が行われます。現在予定済みです。おおよそのリセット時間帯（{zone}）：{date}",
         .rateLimitResetUpcomingAlertBody1h: "予定の Codex リセットまで 1 時間を切っています。",
         .rateLimitResetUpcomingAlertBody30m: "予定の Codex リセットまで 30 分を切っています。",
         .rateLimitResetUpcomingRangeAlertBody: "予想リセットウィンドウ: %@。",

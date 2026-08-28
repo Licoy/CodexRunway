@@ -1,3 +1,4 @@
+import AppKit
 import CodexRunwayCore
 import SwiftUI
 import WidgetKit
@@ -241,9 +242,9 @@ struct RunwayResetTodayWidgetView: View {
         return VStack(alignment: .leading, spacing: 8) {
             RunwayWidgetHeader(title: l10n.text(.widgetResetTodayTitle), trailing: "Codex")
             if let reset = snapshot.resetToday {
-                Text(stateText(reset.state, l10n: l10n))
+                Text(stateText(reset, l10n: l10n))
                     .font(.system(size: family == .systemSmall ? 34 : 42, weight: .bold, design: .rounded))
-                    .foregroundStyle(stateColor(reset.state))
+                    .foregroundStyle(stateColor(reset))
                 if let resetType = reset.resetType {
                     Text(resetType.localizedName(l10n: l10n))
                         .font(.caption.weight(.semibold))
@@ -297,19 +298,31 @@ struct RunwayResetTodayWidgetView: View {
         }
     }
 
-    private func stateText(_ state: RunwayWidgetResetTodaySnapshot.State, l10n: L10n) -> String {
-        switch state {
-        case .yes: l10n.text(.rateLimitResetTodayYes)
-        case .no: l10n.text(.rateLimitResetTodayNo)
-        case .unknown: l10n.text(.rateLimitResetTodayUnknown)
+    private func stateText(_ reset: RunwayWidgetResetTodaySnapshot, l10n: L10n) -> String {
+        if let percent = reset.confidencePercent {
+            let key: L10nKey = percent == 100
+                ? .rateLimitResetTodayPercentExact
+                : .rateLimitResetTodayPercentPrefix
+            return String(format: l10n.text(key), "\(percent)") + l10n.text(.rateLimitResetTodayYes)
+        }
+        switch reset.state {
+        case .yes: return l10n.text(.rateLimitResetTodayYes)
+        case .no: return l10n.text(.rateLimitResetTodayNo)
+        case .unknown: return l10n.text(.rateLimitResetTodayUnknown)
         }
     }
 
-    private func stateColor(_ state: RunwayWidgetResetTodaySnapshot.State) -> Color {
-        switch state {
-        case .yes: .green
-        case .no: .primary
-        case .unknown: .yellow
+    private func stateColor(_ reset: RunwayWidgetResetTodaySnapshot) -> Color {
+        if let band = reset.confidenceBand {
+            return band == .ok ? Color(nsColor: .systemPurple) : Color(nsColor: .systemYellow)
+        }
+        switch reset.state {
+        case .yes:
+            return reset.resetType == .banked ? Color(nsColor: .systemBlue) : .green
+        case .no:
+            return .primary
+        case .unknown:
+            return .yellow
         }
     }
 

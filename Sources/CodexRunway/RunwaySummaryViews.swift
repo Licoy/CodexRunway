@@ -358,11 +358,7 @@ struct RateLimitResetTodayView: View {
     private func hero(now: Date) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center, spacing: 10) {
-                Text(heroTitle(now: now))
-                    .font(.system(size: 28, weight: .semibold, design: .rounded))
-                    .foregroundStyle(heroColor(now: now))
-                    .minimumScaleFactor(0.75)
-                    .lineLimit(1)
+                heroTitleView(now: now)
                     .layoutPriority(1)
 
                 if let reaction, reaction.isVisible {
@@ -401,18 +397,9 @@ struct RateLimitResetTodayView: View {
                 resetTypeBadge(resetType)
             }
 
-            // Keep the absolute time free of a live countdown so the hero stays stable.
-            if let detail = heroYesTimeDetail(now: now) {
-                let prefix = heroYesPrefix(now: now)
-                (
-                    Text("\(prefix) · ")
-                        .foregroundColor(Color(nsColor: .secondaryLabelColor))
-                    + Text(detail.text)
-                        .foregroundColor(detail.color)
-                )
-                .font(.caption2)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
+            if let detail = snapshot?.verdictDetail(l10n: l10n, now: now) {
+                verdictDetailText(detail, now: now)
+                    .fixedSize(horizontal: false, vertical: true)
             } else if let last = heroNoneLastDetail(now: now) {
                 noneLastHintText(type: last.resetType, ago: last.ago)
                     .fixedSize(horizontal: false, vertical: true)
@@ -445,48 +432,6 @@ struct RateLimitResetTodayView: View {
             .padding(.vertical, 2)
             .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
             .accessibilityLabel(Text(label))
-    }
-
-    /// "Already reset" vs "scheduled later today" prefix for the yes hero line.
-    private func heroYesPrefix(now: Date) -> String {
-        guard let snapshot else { return l10n.text(.rateLimitResetTodayYesHint) }
-        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-        if snapshot.prefersSameDayScheduleExplanation(now: now, calendar: calendar),
-           let next = snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar)
-        {
-            return scheduledHint(for: next.event.resetType)
-        }
-        return completedHint(for: snapshot.displayResetType(now: now, calendar: calendar) ?? .global)
-    }
-
-    private func heroYesTimeDetail(now: Date) -> (text: String, color: Color)? {
-        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-        guard let snapshot, snapshot.resolvedState(now: now, calendar: calendar) == .yes else {
-            return nil
-        }
-        if snapshot.prefersSameDayScheduleExplanation(now: now, calendar: calendar),
-           let next = snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar)
-        {
-            let when = ResetLabelFormatter.scheduledLabel(
-                for: RateLimitResetScheduleWindow(
-                    startAt: next.effectiveAt,
-                    endAt: next.effectiveUntil,
-                    isRange: next.isRange),
-                language: l10n.language,
-                calendar: calendar)
-            return (when, Color(nsColor: .systemGreen))
-        }
-        guard let resetAt = snapshot.latestResetAt(now: now) else { return nil }
-        let when = ResetLabelFormatter.shortLabel(
-            for: resetAt,
-            now: now,
-            language: l10n.language,
-            calendar: calendar)
-        // Past reset → muted gray; (defensive) future same-day effective → green.
-        let color: Color = resetAt <= now
-            ? Color(nsColor: .secondaryLabelColor)
-            : Color(nsColor: .systemGreen)
-        return (when, color)
     }
 
     @ViewBuilder
@@ -542,7 +487,7 @@ struct RateLimitResetTodayView: View {
                             .foregroundColor(resetTypeColor(next.event.resetType))
                             .fontWeight(.semibold)
                         + Text(absolute)
-                            .foregroundColor(Color(nsColor: .systemBlue))
+                            .foregroundColor(scheduleTimeColor(for: next.event))
                             .fontWeight(.bold)
                         + Text("\(openParen)\(countdown)\(closeParen)")
                             .foregroundColor(Color(nsColor: .secondaryLabelColor))
@@ -664,21 +609,39 @@ struct RateLimitResetTodayView: View {
         return l10n.text(.rateLimitResetTodayLatestEvidence)
     }
 
-    private func heroTitle(now: Date) -> String {
-        guard let snapshot else {
-            return isRefreshing ? "…" : "—"
+    private func heroTitleView(now: Date) -> some View {
+        let color = heroColor(now: now)
+        return HStack(alignment: .firstTextBaseline, spacing: 4) {
+            if let snapshot {
+                let calendar = RateLimitResetTodaySnapshot.localDayCalendar
+                if snapshot.resolvedState(now: now, calendar: calendar) == .unknown {
+                    Text(l10n.text(.rateLimitResetTodayUnknown))
+                } else {
+                    let presentation = snapshot.verdictPresentation(now: now, calendar: calendar)
+                    if let percent = presentation.percentText(l10n: l10n) {
+                        Text(percent)
+                            .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    }
+                    Text(presentation.answerText(l10n: l10n))
+                }
+            } else {
+                Text(isRefreshing ? "…" : "—")
+            }
         }
-        switch snapshot.resolvedState(
-            now: now,
-            calendar: RateLimitResetTodaySnapshot.localDayCalendar)
-        {
-        case .yes:
-            return l10n.text(.rateLimitResetTodayYes)
-        case .no:
-            return l10n.text(.rateLimitResetTodayNo)
-        case .unknown:
+        .font(.system(size: 28, weight: .semibold, design: .rounded))
+        .foregroundStyle(color)
+        .minimumScaleFactor(0.75)
+        .lineLimit(1)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(heroAccessibilityTitle(now: now))
+    }
+
+    private func heroAccessibilityTitle(now: Date) -> String {
+        guard let snapshot else { return isRefreshing ? "…" : "—" }
+        if snapshot.resolvedState(now: now) == .unknown {
             return l10n.text(.rateLimitResetTodayUnknown)
         }
+        return snapshot.verdictPresentation(now: now).titleText(l10n: l10n)
     }
 
     private func heroSubtitle(now: Date) -> String {
@@ -691,8 +654,6 @@ struct RateLimitResetTodayView: View {
         let calendar = RateLimitResetTodaySnapshot.localDayCalendar
         switch snapshot.resolvedState(now: now, calendar: calendar) {
         case .yes:
-            // Time detail is rendered separately in small type via heroYesTimeDetail.
-            // When only a same-day schedule remains (no past reset yet), use scheduled copy.
             if snapshot.prefersSameDayScheduleExplanation(now: now, calendar: calendar),
                let next = snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar)
             {
@@ -732,17 +693,98 @@ struct RateLimitResetTodayView: View {
 
     private func heroColor(now: Date) -> Color {
         guard let snapshot else { return Color(nsColor: .secondaryLabelColor) }
-        switch snapshot.resolvedState(
-            now: now,
-            calendar: RateLimitResetTodaySnapshot.localDayCalendar)
-        {
-        case .yes:
-            return Color(nsColor: .systemGreen)
-        case .no:
-            return Color(nsColor: .systemOrange)
-        case .unknown:
+        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
+        let state = snapshot.resolvedState(now: now, calendar: calendar)
+        if state == .unknown {
             return Color(nsColor: .secondaryLabelColor)
         }
+        let presentation = snapshot.verdictPresentation(now: now, calendar: calendar)
+        if let band = presentation.band {
+            return Color(nsColor: confidenceBandNSColor(band))
+        }
+        if presentation.isCompleted, presentation.resetType == .banked {
+            return Color(nsColor: .systemBlue)
+        }
+        if presentation.showsYes {
+            return Color(nsColor: .systemGreen)
+        }
+        return Color(nsColor: .systemOrange)
+    }
+
+    private func confidenceBandNSColor(_ band: RateLimitResetTodayConfidenceBand) -> NSColor {
+        switch band {
+        case .ok: .systemPurple
+        case .warn: .systemYellow
+        }
+    }
+
+    private func scheduleTimeColor(for event: RateLimitResetTodayEvent) -> Color {
+        Color(nsColor: confidenceBandNSColor(snapshot?.scheduleConfidenceBand(for: event) ?? .ok))
+    }
+
+    private func verdictDetailText(
+        _ detail: RateLimitResetTodayDetailPresentation,
+        now: Date) -> some View
+    {
+        let secondary = Color(nsColor: .secondaryLabelColor)
+        let emphasis = detailEmphasisColor(detail, now: now)
+        var result = Text("")
+        for token in detail.tokens {
+            switch token {
+            case .text(let value):
+                result = result + Text(value).foregroundColor(secondary)
+            case .resetType:
+                result = result
+                    + Text(detail.typeLabel)
+                    .foregroundColor(detailTypeColor(detail, now: now))
+                    .fontWeight(.semibold)
+                    .underline()
+            case .percent:
+                result = result
+                    + Text(detail.percentText ?? "")
+                    .foregroundColor(emphasis)
+                    .fontWeight(.semibold)
+                    .underline()
+            case .time:
+                result = result
+                    + Text(detail.timeText ?? "")
+                    .foregroundColor(emphasis)
+                    .fontWeight(.semibold)
+                    .underline()
+            }
+        }
+        return result
+            .font(.caption2)
+            .multilineTextAlignment(.leading)
+    }
+
+    private func detailTypeColor(
+        _ detail: RateLimitResetTodayDetailPresentation,
+        now: Date) -> Color
+    {
+        if let snapshot {
+            let presentation = snapshot.verdictPresentation(now: now)
+            if let band = presentation.band {
+                return Color(nsColor: confidenceBandNSColor(band))
+            }
+        }
+        guard let resetType = detail.resetType else {
+            return Color(nsColor: .systemGreen)
+        }
+        return resetTypeColor(resetType)
+    }
+
+    private func detailEmphasisColor(
+        _ detail: RateLimitResetTodayDetailPresentation,
+        now: Date) -> Color
+    {
+        if let snapshot {
+            let presentation = snapshot.verdictPresentation(now: now)
+            if let band = presentation.band {
+                return Color(nsColor: confidenceBandNSColor(band))
+            }
+        }
+        return Color(nsColor: .systemGreen)
     }
 
     private func completedHint(for resetType: RateLimitResetType) -> String {

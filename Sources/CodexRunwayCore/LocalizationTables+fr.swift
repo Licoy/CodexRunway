@@ -351,6 +351,16 @@ extension L10n {
         .rateLimitResetTodayYesHintWithTime: "Réinit. aujourd’hui · %@",
         .rateLimitResetTodayYesHintScheduled: "Réinit. globale prévue aujourd’hui, mais pas encore terminée",
         .rateLimitResetTodayYesHintScheduledWithTime: "Prévu aujourd’hui, pas encore terminé · %@",
+        .rateLimitResetTodayPercentPrefix: "≥%@%%",
+        .rateLimitResetTodayPercentExact: "%@%%",
+        .rateLimitResetTodayClockLocal: "heure locale",
+        .rateLimitResetTodayConfirmedWhen: "%@ (il y a %@)",
+        .rateLimitResetTodayConfirmedHint:
+            "Une {type} terminée a été observée aujourd’hui. Confiance d’environ {percent}. Heure de réinit. en {zone} : {when}",
+        .rateLimitResetTodayConfirmedHintNoPercent:
+            "Une {type} terminée a été observée aujourd’hui. Heure de réinit. en {zone} : {when}",
+        .rateLimitResetTodayScheduledChanceHint:
+            "Environ {percent} de chances d’une {type} ; actuellement planifiée. Fenêtre approximative en {zone} : {date}",
         .rateLimitResetUpcomingAlertBody1h: "Une réinitialisation Codex planifiée a lieu dans moins d’1 heure.",
         .rateLimitResetUpcomingAlertBody30m: "Une réinitialisation Codex planifiée a lieu dans moins de 30 minutes.",
         .rateLimitResetUpcomingRangeAlertBody: "Fenêtre de réinit. prévue : %@.",

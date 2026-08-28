@@ -124,6 +124,8 @@ public struct RunwayWidgetResetTodaySnapshot: Codable, Equatable, Sendable {
     public var nextScheduledResetType: RateLimitResetType?
     public var lastSuccessfulCheckAt: Date?
     public var fetchedAt: Date
+    public var confidencePercent: Int?
+    public var confidenceBand: RateLimitResetTodayConfidenceBand?
 
     public init(
         state: State,
@@ -131,7 +133,9 @@ public struct RunwayWidgetResetTodaySnapshot: Codable, Equatable, Sendable {
         nextScheduledAt: Date?,
         nextScheduledResetType: RateLimitResetType? = nil,
         lastSuccessfulCheckAt: Date?,
-        fetchedAt: Date)
+        fetchedAt: Date,
+        confidencePercent: Int? = nil,
+        confidenceBand: RateLimitResetTodayConfidenceBand? = nil)
     {
         self.state = state
         self.resetType = resetType
@@ -139,6 +143,8 @@ public struct RunwayWidgetResetTodaySnapshot: Codable, Equatable, Sendable {
         self.nextScheduledResetType = nextScheduledResetType
         self.lastSuccessfulCheckAt = lastSuccessfulCheckAt
         self.fetchedAt = fetchedAt
+        self.confidencePercent = confidencePercent
+        self.confidenceBand = confidenceBand
     }
 }
 
