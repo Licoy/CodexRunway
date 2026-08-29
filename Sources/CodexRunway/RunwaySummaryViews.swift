@@ -392,24 +392,18 @@ struct RateLimitResetTodayView: View {
 
     @ViewBuilder
     private func heroSubtitleView(now: Date) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let resetType = snapshot?.displayResetType(now: now) {
-                resetTypeBadge(resetType)
-            }
-
-            if let detail = snapshot?.verdictDetail(l10n: l10n, now: now) {
-                verdictDetailText(detail, now: now)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else if let last = heroNoneLastDetail(now: now) {
-                noneLastHintText(type: last.resetType, ago: last.ago)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Text(heroSubtitle(now: now))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        if let detail = snapshot?.verdictDetail(l10n: l10n, now: now) {
+            verdictDetailText(detail, now: now)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if let last = heroNoneLastDetail(now: now) {
+            noneLastHintText(type: last.resetType, ago: last.ago)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text(heroSubtitle(now: now))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -418,20 +412,6 @@ struct RateLimitResetTodayView: View {
             title: l10n.text(.rateLimitResetTodayOpenWebsite),
             help: l10n.text(.rateLimitResetTodayOpenSource),
             action: onOpenSource)
-    }
-
-    private func resetTypeBadge(_ resetType: RateLimitResetType) -> some View {
-        let label = resetType.localizedName(l10n: l10n)
-        let color = resetTypeColor(resetType)
-        return Text(label)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(color)
-            .lineLimit(2)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-            .accessibilityLabel(Text(label))
     }
 
     @ViewBuilder

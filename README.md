@@ -19,7 +19,7 @@ Codex Runway is a native macOS menu bar app for checking Codex and Grok quota. I
 - Manage multiple Grok OAuth / SuperGrok accounts with isolated sign-in, current-login import, paste token/JSON, refresh, aliases, ordering, removal, and explicit switching.
 - View 5-hour, weekly, and additional quota windows.
 - See whether Codex rate limits have reset today (data from [www.codexrunway.com](https://www.codexrunway.com)), with a link to the related public post.
-- Toggle the “reset today?” section in settings and configure its own refresh interval (on by default, every 1 hour).
+- Toggle the “reset today?” section in settings and configure its own refresh interval (on by default, every 5 minutes).
 - Manage multiple Codex accounts: browser sign-in, import local `auth.json`, paste token/JSON (including `/auth/session`), import files, or add an API key.
 - Switch accounts safely after confirmation by atomically writing `~/.codex/auth.json`, with an optional Codex restart so CLI / IDE stay in sync.
 - Show the current account, subscription tier, and expiration.

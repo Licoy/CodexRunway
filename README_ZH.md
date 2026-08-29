@@ -19,7 +19,7 @@ Codex Runway 是一个原生 macOS 状态栏应用，帮你在菜单栏查看 Co
 - 管理多个 Grok OAuth / SuperGrok 账号：隔离登录、导入当前登录、粘贴 Token / JSON、刷新、别名、排序、删除和显式切号。
 - 查看 5 小时、每周和附加额度窗口。
 - 查看今日速率限制是否已重置（数据来自 [www.codexrunway.com](https://www.codexrunway.com)），并可跳转到相关公开动态。
-- 设置中可开关「今日是否重置」栏目，并单独配置其刷新间隔（默认开启、每 1 小时）。
+- 设置中可开关「今日是否重置」栏目，并单独配置其刷新间隔（默认开启、每 5 分钟）。
 - 管理多个 Codex 账号：浏览器登录、导入本机 `auth.json`、粘贴 token / JSON（含 `/auth/session`）、导入文件或 API Key。
 - 确认后安全切号，原子写回 `~/.codex/auth.json`，可选立即重启 Codex，使 CLI / IDE 同步。
 - 显示当前账号、订阅类型与到期信息。

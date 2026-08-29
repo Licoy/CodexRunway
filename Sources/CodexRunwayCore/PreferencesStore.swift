@@ -121,8 +121,10 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     public static let defaultMainPanelHeight = 584.0
     public static let minimumMainPanelHeight = 360.0
     public static let maximumMainPanelHeight = 900.0
-    public static let rateLimitResetTodayRefreshIntervalOptions: [Int] = [900, 1_800, 3_600, 7_200, 21_600]
-    public static let defaultRateLimitResetTodayRefreshIntervalSeconds = 3_600
+    public static let rateLimitResetTodayRefreshIntervalOptions: [Int] = [
+        300, 600, 900, 1_800, 3_600, 7_200, 21_600,
+    ]
+    public static let defaultRateLimitResetTodayRefreshIntervalSeconds = 300
     public static let defaultMainPanelModuleOrder: [MainPanelModule] = [
         .quota,
         .tokenUsage,
@@ -200,7 +202,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     }
 
     public static func clampRateLimitResetTodayRefreshInterval(_ seconds: Int) -> Int {
-        max(900, min(21_600, seconds))
+        max(300, min(21_600, seconds))
     }
 
     public static func clampWidgetRefreshInterval(_ seconds: Int) -> Int {

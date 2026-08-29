@@ -19,7 +19,7 @@ Codex Runway 是一個原生 macOS 選單列應用程式，幫你在選單列查
 - 管理多個 Grok OAuth / SuperGrok 帳號：隔離登入、匯入目前登入、貼上 Token / JSON、重新整理、別名、排序、刪除和顯式切號。
 - 查看 5 小時、每週和附加額度視窗。
 - 查看今日速率限制是否已重設（資料來自 [www.codexrunway.com](https://www.codexrunway.com)），並可跳轉到相關公開動態。
-- 設定中可開關「今日是否重設」欄目，並單獨設定其重新整理間隔（預設開啟、每 1 小時）。
+- 設定中可開關「今日是否重設」欄目，並單獨設定其重新整理間隔（預設開啟、每 5 分鐘）。
 - 管理多個 Codex 帳號：瀏覽器登入、匯入本機 `auth.json`、貼上 token / JSON（含 `/auth/session`）、匯入檔案或 API Key。
 - 確認後安全切號，原子寫回 `~/.codex/auth.json`，可選立即重新啟動 Codex，使 CLI / IDE 同步。
 - 顯示目前帳號、訂閱類型與到期資訊。

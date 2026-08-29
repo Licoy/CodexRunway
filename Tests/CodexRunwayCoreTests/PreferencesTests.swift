@@ -208,7 +208,7 @@ struct PreferencesTests {
         #expect(store.load().showsRateLimitResetToday)
         #expect(store.load().showsTokenUsageHeatmap)
         #expect(store.load().tokenUsageChartStyle == .heatmap)
-        #expect(store.load().rateLimitResetTodayRefreshIntervalSeconds == 3_600)
+        #expect(store.load().rateLimitResetTodayRefreshIntervalSeconds == 300)
         #expect(store.load().automaticallyChecksForUpdates == false)
         #expect(store.load().quotaAlertsEnabled)
         #expect(store.load().resetCreditAlertsEnabled)
@@ -299,7 +299,7 @@ struct PreferencesTests {
         #expect(preferences.mainPanelModuleOrder == RunwayPreferences.defaultMainPanelModuleOrder)
     }
 
-    @Test("old preferences default rate-limit-reset-today section on with 1h refresh")
+    @Test("old preferences default rate-limit-reset-today section on with 5m refresh")
     func oldPreferencesDefaultRateLimitResetToday() throws {
         let data = """
         {
@@ -314,7 +314,7 @@ struct PreferencesTests {
         let preferences = try JSONDecoder().decode(RunwayPreferences.self, from: data)
 
         #expect(preferences.showsRateLimitResetToday)
-        #expect(preferences.rateLimitResetTodayRefreshIntervalSeconds == 3_600)
+        #expect(preferences.rateLimitResetTodayRefreshIntervalSeconds == 300)
         #expect(preferences.showsTokenUsageHeatmap)
         #expect(preferences.showsQuotaEstimateSummary)
         #expect(preferences.quotaEstimateWindowMode == .auto)
@@ -325,6 +325,33 @@ struct PreferencesTests {
         { "quotaEstimateWindowMode": "officialWeek" }
         """.data(using: .utf8)!
         #expect(try JSONDecoder().decode(RunwayPreferences.self, from: legacy).quotaEstimateWindowMode == .auto)
+    }
+
+    @Test("rate-limit-reset-today refresh offers 5 and 10 minutes and keeps saved values")
+    func rateLimitResetTodayRefreshIntervalOptions() throws {
+        #expect(RunwayPreferences.defaultRateLimitResetTodayRefreshIntervalSeconds == 300)
+        #expect(RunwayPreferences.rateLimitResetTodayRefreshIntervalOptions == [
+            300, 600, 900, 1_800, 3_600, 7_200, 21_600,
+        ])
+        #expect(RunwayPreferences().rateLimitResetTodayRefreshIntervalSeconds == 300)
+        #expect(RunwayPreferences.clampRateLimitResetTodayRefreshInterval(60) == 300)
+        #expect(RunwayPreferences.clampRateLimitResetTodayRefreshInterval(300) == 300)
+        #expect(RunwayPreferences.clampRateLimitResetTodayRefreshInterval(600) == 600)
+        #expect(RunwayPreferences.clampRateLimitResetTodayRefreshInterval(50_000) == 21_600)
+
+        let savedHour = """
+        { "rateLimitResetTodayRefreshIntervalSeconds": 3600 }
+        """.data(using: .utf8)!
+        #expect(
+            try JSONDecoder().decode(RunwayPreferences.self, from: savedHour)
+                .rateLimitResetTodayRefreshIntervalSeconds == 3_600)
+
+        let tooFrequent = """
+        { "rateLimitResetTodayRefreshIntervalSeconds": 60 }
+        """.data(using: .utf8)!
+        #expect(
+            try JSONDecoder().decode(RunwayPreferences.self, from: tooFrequent)
+                .rateLimitResetTodayRefreshIntervalSeconds == 300)
     }
 
     @Test("model-specific quota usage defaults off and persists opt-in")

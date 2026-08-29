@@ -756,6 +756,10 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         if settings.preferences.showsTokenUsageHeatmap {
             model.refreshTokenHeatmap(policy: .ifChanged)
         }
+        // Non-blocking: last snapshot stays visible, section spinner shows, alerts on change.
+        if settings.preferences.showsRateLimitResetToday {
+            model.refreshRateLimitResetToday(force: true)
+        }
         // force:false — panel opens skip the heavy session-dir rescan while the
         // last successful scan is fresh; manual section refreshes stay forced.
         if settings.preferences.showsSessionRepairSummary {

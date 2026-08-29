@@ -1453,7 +1453,7 @@ final class RunwayModel: ObservableObject {
     private func refreshRateLimitResetTodayDisplayIfNeeded(now: Date) {
         guard let snapshot = rateLimitResetToday else { return }
         let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-        // Re-check approaching scheduled resets on the local timer (refresh may be hourly).
+        // Re-check approaching scheduled resets on the local timer between network refreshes.
         deliverAlerts(
             RunwayAlertDecider.rateLimitResetTodayAlerts(
                 previous: snapshot,

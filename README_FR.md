@@ -19,7 +19,7 @@ Codex Runway est une application native de barre de menus macOS pour consulter l
 - Gérer plusieurs comptes Grok OAuth / SuperGrok avec connexion isolée, import de la connexion actuelle, collage de jeton/JSON, actualisation, alias, ordre, suppression et basculement explicite.
 - Voir les fenêtres de quota 5 heures, hebdomadaire et supplémentaires.
 - Savoir si les limites Codex ont été réinitialisées aujourd’hui (données de [www.codexrunway.com](https://www.codexrunway.com), avec un lien vers le message public associé).
-- Activer la section « réinit. aujourd’hui ? » dans les réglages et configurer son propre intervalle d’actualisation (activé par défaut, toutes les heures).
+- Activer la section « réinit. aujourd’hui ? » dans les réglages et configurer son propre intervalle d’actualisation (activé par défaut, toutes les 5 minutes).
 - Gérer plusieurs comptes Codex : connexion navigateur, import du `auth.json` local, collage de jeton/JSON (y compris `/auth/session`), import de fichiers ou ajout d’une clé API.
 - Basculer de compte en toute sécurité après confirmation en écrivant atomiquement `~/.codex/auth.json`, avec un redémarrage Codex optionnel pour que CLI / IDE restent synchronisés.
 - Afficher le compte actuel, le niveau d’abonnement et l’expiration.
