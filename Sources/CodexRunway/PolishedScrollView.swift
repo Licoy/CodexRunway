@@ -1,6 +1,14 @@
 import AppKit
 import SwiftUI
 
+/// Transient vertical position shared by scroll views that are recreated inside one
+/// presentation. The value is intentionally not published: capturing a position while
+/// a view is dismantled must not trigger a redraw of the surrounding SwiftUI tree.
+@MainActor
+final class PolishedScrollPosition: ObservableObject {
+    fileprivate var verticalOffset: CGFloat = 0
+}
+
 struct PolishedScrollView<Content: View>: View {
     private let content: Content
     private let verticalPadding: CGFloat
@@ -10,25 +18,30 @@ struct PolishedScrollView<Content: View>: View {
     private let remasureToken: AnyHashable
     /// Thin overlay knob that fades away when idle. Off for the popover, on for settings.
     private let showsOverlayScroller: Bool
+    /// Optional position whose lifetime is owned by the caller.
+    private let scrollPosition: PolishedScrollPosition?
 
     init(
         verticalPadding: CGFloat = 8,
         fadesEdges: Bool = true,
         remasureToken: AnyHashable = 0,
         showsOverlayScroller: Bool = false,
+        scrollPosition: PolishedScrollPosition? = nil,
         @ViewBuilder content: () -> Content)
     {
         self.verticalPadding = verticalPadding
         self.fadesEdges = fadesEdges
         self.remasureToken = remasureToken
         self.showsOverlayScroller = showsOverlayScroller
+        self.scrollPosition = scrollPosition
         self.content = content()
     }
 
     var body: some View {
         let scroll = HiddenScrollerScrollView(
             remasureToken: remasureToken,
-            showsOverlayScroller: showsOverlayScroller)
+            showsOverlayScroller: showsOverlayScroller,
+            scrollPosition: scrollPosition)
         {
             content
                 .padding(.vertical, verticalPadding)
@@ -56,19 +69,22 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
     let content: Content
     let remasureToken: AnyHashable
     let showsOverlayScroller: Bool
+    let scrollPosition: PolishedScrollPosition?
 
     init(
         remasureToken: AnyHashable,
         showsOverlayScroller: Bool,
+        scrollPosition: PolishedScrollPosition?,
         @ViewBuilder content: () -> Content)
     {
         self.remasureToken = remasureToken
         self.showsOverlayScroller = showsOverlayScroller
+        self.scrollPosition = scrollPosition
         self.content = content()
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(scrollPosition: scrollPosition)
     }
 
     /// The nested NSHostingView is a separate SwiftUI root: custom environment keys do
@@ -99,8 +115,10 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
         scrollView.onLayout = { [weak scrollView, weak hostingView] in
             guard let scrollView, let hostingView else { return }
             resize(hostingView, in: scrollView, coordinator: context.coordinator, force: false)
+            restoreScrollPosition(in: scrollView, coordinator: context.coordinator)
         }
         resize(hostingView, in: scrollView, coordinator: context.coordinator, force: true)
+        restoreScrollPosition(in: scrollView, coordinator: context.coordinator)
         return scrollView
     }
 
@@ -119,12 +137,21 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
         // longer strings wrap and grow instead of staying clipped at the old height.
         if languageChanged {
             resize(hostingView, in: scrollView, coordinator: coordinator, force: true)
+            restoreScrollPosition(in: scrollView, coordinator: coordinator)
             return
         }
         coordinator.throttleProbe { [weak scrollView, weak hostingView] in
             guard let scrollView, let hostingView else { return }
             resize(hostingView, in: scrollView, coordinator: coordinator, force: true)
+            restoreScrollPosition(in: scrollView, coordinator: coordinator)
         }
+    }
+
+    static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
+        guard let scrollPosition = coordinator.scrollPosition else { return }
+        scrollPosition.verticalOffset = clampedVerticalOffset(
+            scrollView.documentVisibleRect.minY,
+            in: scrollView)
     }
 
     private func applyScroller(_ scrollView: NSScrollView) {
@@ -200,8 +227,28 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
         coordinator.lastHeight = height
     }
 
+    private func restoreScrollPosition(in scrollView: NSScrollView, coordinator: Coordinator) {
+        guard coordinator.needsScrollRestore, let scrollPosition = coordinator.scrollPosition else { return }
+        let viewportHeight = scrollView.contentSize.height
+        guard viewportHeight > 0, scrollView.documentView != nil else { return }
+
+        let offset = Self.clampedVerticalOffset(scrollPosition.verticalOffset, in: scrollView)
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: offset))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        scrollPosition.verticalOffset = offset
+        coordinator.needsScrollRestore = false
+    }
+
+    private static func clampedVerticalOffset(_ offset: CGFloat, in scrollView: NSScrollView) -> CGFloat {
+        let documentHeight = scrollView.documentView?.frame.height ?? 0
+        let maximumOffset = max(0, documentHeight - scrollView.contentSize.height)
+        return min(max(0, offset), maximumOffset)
+    }
+
     @MainActor
     final class Coordinator {
+        let scrollPosition: PolishedScrollPosition?
+        var needsScrollRestore: Bool
         var lastWidth: CGFloat = 0
         var lastHeight: CGFloat = 0
         var lastRemasureToken: AnyHashable?
@@ -210,6 +257,11 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
         private let probeInterval: TimeInterval = 0.1
         private var lastProbeAt: Date?
         private var pendingProbe: (() -> Void)?
+
+        init(scrollPosition: PolishedScrollPosition?) {
+            self.scrollPosition = scrollPosition
+            self.needsScrollRestore = scrollPosition != nil
+        }
 
         /// Leading + trailing throttle: probe immediately when idle, and collapse a
         /// publish burst into a single trailing probe.
