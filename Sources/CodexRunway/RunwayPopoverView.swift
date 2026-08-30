@@ -46,6 +46,7 @@ struct RunwayPopoverView: View {
     @State private var detailPage: RunwaySidePanel?
     @State private var apiCostDetailRange = ApiCostSummaryRange.today
     @State private var panelHeight: CGFloat
+    @StateObject private var mainScrollPosition = PolishedScrollPosition()
     private var l10n: L10n { settings.l10n }
     private var visibleSections: [RunwayMainPanelSection] {
         RunwayMainPanelSections.orderedVisible(
@@ -160,7 +161,11 @@ struct RunwayPopoverView: View {
     }
 
     private var mainContent: some View {
-        PolishedScrollView(verticalPadding: 4, remasureToken: l10n.language) {
+        PolishedScrollView(
+            verticalPadding: 4,
+            remasureToken: l10n.language,
+            scrollPosition: mainScrollPosition)
+        {
             VStack(alignment: .leading, spacing: 0) {
                 if showsTierBadgeGallery {
                     sectionBlock(isFirst: true) {
