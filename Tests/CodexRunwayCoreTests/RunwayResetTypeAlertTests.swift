@@ -125,10 +125,134 @@ struct RunwayResetTypeAlertTests {
                 .first)
         let day = Int(alertCalendar.startOfDay(for: now).timeIntervalSince1970)
 
-        #expect(alert.id == "rate-limit-reset:detected:manual:mixed-1:\(day)")
+        #expect(alert.id == "rate-limit-reset:detected:at:\(Int(completion.completedAt.timeIntervalSince1970)):\(day)")
         #expect(alert.name == "900")
         #expect(alert.resetType == .globalAndBanked)
         #expect(alert.date == completion.completedAt)
+    }
+
+    @Test("reclustered manual completion keeps the same occurrence seen")
+    func reclusteredManualCompletionDoesNotRedetect() throws {
+        let now = try alertDate("2026-08-23T12:00:00Z")
+        let completedAt = try alertDate("2026-08-23T04:00:00Z")
+        let visibleUntil = try alertDate("2026-09-02T04:00:00Z")
+        let scheduleA = alertSchedule(postID: "900", announcedAt: try alertDate("2026-08-23T01:00:00Z"))
+        let scheduleB = alertSchedule(postID: "901", announcedAt: try alertDate("2026-08-23T01:05:00Z"))
+        let scheduleC = alertSchedule(postID: "902", announcedAt: try alertDate("2026-08-23T01:10:00Z"))
+        let previous = alertSnapshot(
+            now: now,
+            timeline: RateLimitResetTimeline(manualCompletions: [
+                RateLimitResetManualCompletion(
+                    id: "manual:cl_aaa",
+                    completedAt: completedAt,
+                    visibleUntil: visibleUntil,
+                    representativePostID: "900",
+                    schedulePostIDs: ["900", "901"],
+                    schedules: [scheduleA, scheduleB]),
+            ]))
+        let current = alertSnapshot(
+            now: now,
+            timeline: RateLimitResetTimeline(manualCompletions: [
+                RateLimitResetManualCompletion(
+                    id: "manual:cl_bbb",
+                    completedAt: completedAt,
+                    visibleUntil: visibleUntil,
+                    representativePostID: "902",
+                    schedulePostIDs: ["901", "902"],
+                    schedules: [scheduleB, scheduleC]),
+            ]))
+
+        #expect(
+            RunwayAlertDecider.rateLimitResetTodayAlerts(
+                previous: previous,
+                current: current,
+                now: now,
+                calendar: alertCalendar)
+                .isEmpty)
+    }
+
+    @Test("a later disjoint manual completion still alerts")
+    func disjointManualCompletionStillAlerts() throws {
+        let now = try alertDate("2026-08-23T12:00:00Z")
+        let visibleUntil = try alertDate("2026-09-02T04:00:00Z")
+        let firstAt = try alertDate("2026-08-23T04:00:00Z")
+        let secondAt = try alertDate("2026-08-23T08:00:00Z")
+        let first = alertSchedule(postID: "900", announcedAt: try alertDate("2026-08-23T01:00:00Z"))
+        let second = alertSchedule(postID: "901", announcedAt: try alertDate("2026-08-23T01:05:00Z"))
+        let previous = alertSnapshot(
+            now: now,
+            timeline: RateLimitResetTimeline(manualCompletions: [
+                RateLimitResetManualCompletion(
+                    id: "manual:cl_first",
+                    completedAt: firstAt,
+                    visibleUntil: visibleUntil,
+                    representativePostID: "900",
+                    schedulePostIDs: ["900"],
+                    schedules: [first]),
+            ]))
+        let current = alertSnapshot(
+            now: now,
+            timeline: RateLimitResetTimeline(manualCompletions: [
+                RateLimitResetManualCompletion(
+                    id: "manual:cl_first",
+                    completedAt: firstAt,
+                    visibleUntil: visibleUntil,
+                    representativePostID: "900",
+                    schedulePostIDs: ["900"],
+                    schedules: [first]),
+                RateLimitResetManualCompletion(
+                    id: "manual:cl_second",
+                    completedAt: secondAt,
+                    visibleUntil: visibleUntil,
+                    representativePostID: "901",
+                    schedulePostIDs: ["901"],
+                    schedules: [second]),
+            ]))
+
+        let alerts = RunwayAlertDecider.rateLimitResetTodayAlerts(
+            previous: previous,
+            current: current,
+            now: now,
+            calendar: alertCalendar)
+        let day = Int(alertCalendar.startOfDay(for: now).timeIntervalSince1970)
+
+        #expect(alerts.map(\.id) == [
+            "rate-limit-reset:detected:at:\(Int(secondAt.timeIntervalSince1970)):\(day)",
+        ])
+        #expect(alerts.map(\.name) == ["901"])
+    }
+
+    @Test("completed event then matching manual completion stays seen")
+    func completedEventThenManualDoesNotRedetect() throws {
+        let now = try alertDate("2026-08-23T12:00:00Z")
+        let completedAt = try alertDate("2026-08-23T04:00:00Z")
+        let event = alertEvent(
+            postID: "900",
+            resetType: .global,
+            announcedAt: completedAt,
+            effectiveAt: completedAt)
+        let previous = alertSnapshot(now: now, events: [event])
+        let current = alertSnapshot(
+            now: now,
+            timeline: RateLimitResetTimeline(manualCompletions: [
+                RateLimitResetManualCompletion(
+                    id: "manual:cl_later",
+                    completedAt: completedAt,
+                    visibleUntil: try alertDate("2026-09-02T04:00:00Z"),
+                    representativePostID: "900",
+                    schedulePostIDs: ["900"],
+                    schedules: [
+                        alertSchedule(postID: "900", announcedAt: try alertDate("2026-08-23T01:00:00Z")),
+                    ]),
+            ]))
+
+        #expect(
+            RunwayAlertDecider.rateLimitResetTodayAlerts(
+                previous: previous,
+                current: current,
+                now: now,
+                calendar: alertCalendar)
+                .isEmpty)
     }
 
     @Test("upcoming alert carries type without changing its identity")
@@ -186,6 +310,19 @@ private let alertCalendar: Calendar = {
 
 private func alertDate(_ value: String) throws -> Date {
     try Date(value, strategy: .iso8601)
+}
+
+private func alertSchedule(
+    postID: String,
+    announcedAt: Date,
+    resetType: RateLimitResetType = .global) -> RateLimitResetTodayEvent
+{
+    alertEvent(
+        postID: postID,
+        kind: .resetScheduled,
+        resetType: resetType,
+        announcedAt: announcedAt,
+        effectiveAt: announcedAt)
 }
 
 private func alertEvent(

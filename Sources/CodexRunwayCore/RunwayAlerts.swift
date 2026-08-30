@@ -84,11 +84,13 @@ public enum RunwayAlertDecider {
 
         // Skip the first successful load so app launch does not spam for existing resets.
         // Identity, rather than type, owns detection so a classification correction does not re-alert.
+        // Manual cluster IDs (manual:cl_*) are unstable; match by overlapping aliases.
         if let previous {
-            let previousIDs = Set(resetOccurrences(in: previous, now: now, calendar: calendar).map(\.id))
+            let previousIDs = Set(
+                resetOccurrences(in: previous, now: now, calendar: calendar).flatMap(\.aliases))
             let day = Int(calendar.startOfDay(for: now).timeIntervalSince1970)
             for occurrence in resetOccurrences(in: current, now: now, calendar: calendar)
-                where !previousIDs.contains(occurrence.id)
+                where occurrence.aliases.isDisjoint(with: previousIDs)
             {
                 alerts.append(RunwayAlert(
                     id: "rate-limit-reset:detected:\(occurrence.id):\(day)",
@@ -132,6 +134,7 @@ public enum RunwayAlertDecider {
 
     private struct ResetOccurrence {
         var id: String
+        var aliases: Set<String>
         var name: String
         var date: Date
         var resetType: RateLimitResetType
@@ -142,31 +145,72 @@ public enum RunwayAlertDecider {
         now: Date,
         calendar: Calendar) -> [ResetOccurrence]
     {
-        var occurrences = snapshot.events.compactMap { event -> ResetOccurrence? in
-            guard event.kind == .resetCompleted else { return nil }
-            let date = event.effectiveAt ?? event.announcedAt
-            guard date <= now, calendar.isDate(date, inSameDayAs: now) else { return nil }
-            return ResetOccurrence(
-                id: event.source.postID,
-                name: event.source.postID,
-                date: date,
-                resetType: event.resetType)
+        var occurrences = snapshot.events.compactMap {
+            eventOccurrence($0, now: now, calendar: calendar)
         }
-        occurrences += snapshot.visibleManualCompletions(now: now).compactMap { completion in
-            guard completion.completedAt <= now,
-                  calendar.isDate(completion.completedAt, inSameDayAs: now)
-            else { return nil }
-            return ResetOccurrence(
-                id: completion.id,
-                name: completion.representativePostID,
-                date: completion.completedAt,
-                resetType: completion.resetType)
+        occurrences += snapshot.visibleManualCompletions(now: now).compactMap {
+            manualOccurrence($0, now: now, calendar: calendar)
         }
         occurrences.sort { lhs, rhs in
             lhs.date == rhs.date ? lhs.id < rhs.id : lhs.date < rhs.date
         }
-        var seen = Set<String>()
-        return occurrences.filter { seen.insert($0.id).inserted }
+        return coalesced(occurrences)
+    }
+
+    private static func eventOccurrence(
+        _ event: RateLimitResetTodayEvent,
+        now: Date,
+        calendar: Calendar) -> ResetOccurrence?
+    {
+        guard event.kind == .resetCompleted else { return nil }
+        let date = event.effectiveAt ?? event.announcedAt
+        guard date <= now, calendar.isDate(date, inSameDayAs: now) else { return nil }
+        let postID = event.source.postID
+        return ResetOccurrence(
+            id: postID,
+            aliases: [postID],
+            name: postID,
+            date: date,
+            resetType: event.resetType)
+    }
+
+    private static func manualOccurrence(
+        _ completion: RateLimitResetManualCompletion,
+        now: Date,
+        calendar: Calendar) -> ResetOccurrence?
+    {
+        guard completion.completedAt <= now,
+              calendar.isDate(completion.completedAt, inSameDayAs: now)
+        else { return nil }
+        let timeID = timeAlias(for: completion.completedAt)
+        var aliases: Set<String> = [
+            timeID,
+            completion.id,
+            completion.representativePostID,
+        ]
+        aliases.formUnion(completion.schedulePostIDs)
+        return ResetOccurrence(
+            id: timeID,
+            aliases: aliases,
+            name: completion.representativePostID,
+            date: completion.completedAt,
+            resetType: completion.resetType)
+    }
+
+    private static func coalesced(_ occurrences: [ResetOccurrence]) -> [ResetOccurrence] {
+        var unique: [ResetOccurrence] = []
+        for occurrence in occurrences {
+            if let index = unique.firstIndex(where: { !$0.aliases.isDisjoint(with: occurrence.aliases) }) {
+                unique[index].aliases.formUnion(occurrence.aliases)
+                continue
+            }
+            unique.append(occurrence)
+        }
+        return unique
+    }
+
+    private static func timeAlias(for date: Date) -> String {
+        "at:\(Int(date.timeIntervalSince1970))"
     }
 }
 
