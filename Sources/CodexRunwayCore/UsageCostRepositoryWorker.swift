@@ -84,7 +84,9 @@ actor UsageCostRepositoryWorker {
         for (index, query) in queries.enumerated() {
             try Task.checkCancellation()
             progress?.report(.aggregating(completed: index, total: totalQueries), force: true)
-            let events = try opened.store.events(in: query.window)
+            let events = try opened.store.events(
+                in: query.window,
+                dayBoundary: query.dayBoundary)
             try Task.checkCancellation()
             result[query.id] = try UsageCostSummaryBuilder.make(
                 events: events,

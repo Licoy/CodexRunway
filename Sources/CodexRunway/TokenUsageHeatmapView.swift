@@ -172,6 +172,10 @@ struct TokenUsageHeatmapView: View {
         return "\(mode.rawValue)|\(chartStyle.rawValue)|\(stamp)|\(officialStatsAsOf ?? "")|\(officialStamp)|\(allDevicesTokens.count)|\(allTotal)|\(localTokens.count)|\(localTotal)|\(l10n.language)"
     }
 
+    private var chartTimeZone: TimeZone {
+        showsOfficialStats ? TimeZone(secondsFromGMT: 0)! : .autoupdatingCurrent
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
@@ -480,7 +484,7 @@ struct TokenUsageHeatmapView: View {
 
     private func tooltipContent(for cell: TokenUsageHeatmapCell) -> TokenUsageTooltipContent {
         // Always that calendar day's totals (not weekly/cumulative aggregates).
-        let date = Self.tooltipDateFormatter(language: l10n.language).string(from: cell.date)
+        let date = tooltipDateFormatter(language: l10n.language).string(from: cell.date)
         return TokenUsageTooltipContent.make(
             date: date,
             officialTokens: cell.allDevicesTokens,
@@ -506,14 +510,16 @@ struct TokenUsageHeatmapView: View {
                 allDevicesTokens: allDevicesTokens,
                 localTokens: localTokens,
                 mode: mode,
-                now: now)
+                now: now,
+                timeZone: chartTimeZone)
             series = nil
         case .line, .bar:
             series = TokenUsageHeatmapBuilder.makeSeries(
                 allDevicesTokens: allDevicesTokens,
                 localTokens: localTokens,
                 mode: mode,
-                now: now)
+                now: now,
+                timeZone: chartTimeZone)
             snapshot = nil
         }
         hover.clear()
@@ -523,8 +529,10 @@ struct TokenUsageHeatmapView: View {
         cellSize * 7 + rowSpacing * 6 + labelSpacing + 14
     }
 
-    private static func tooltipDateFormatter(language: ResolvedLanguage) -> DateFormatter {
-        TokenUsageDateFormatting.mediumDateFormatter(language: language)
+    private func tooltipDateFormatter(language: ResolvedLanguage) -> DateFormatter {
+        TokenUsageDateFormatting.mediumDateFormatter(
+            language: language,
+            timeZone: chartTimeZone)
     }
 }
 
@@ -1103,7 +1111,10 @@ private struct TokenUsageTrendChartView: View {
     }
 
     private var tooltipDateFormatter: DateFormatter {
-        TokenUsageDateFormatting.seriesTooltipFormatter(mode: series.mode, language: l10n.language)
+        TokenUsageDateFormatting.seriesTooltipFormatter(
+            mode: series.mode,
+            language: l10n.language,
+            timeZone: showsOfficialStats ? TimeZone(secondsFromGMT: 0)! : .autoupdatingCurrent)
     }
 }
 

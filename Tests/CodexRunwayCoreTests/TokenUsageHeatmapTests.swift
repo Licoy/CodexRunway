@@ -181,6 +181,15 @@ struct TokenUsageHeatmapTests {
         #expect(dayKey(window.end.addingTimeInterval(-1)) == "2026-07-27")
     }
 
+    @Test("official profile window follows UTC day boundaries")
+    func utcYearToDateWindow() {
+        let now = date("2026-08-30T01:00:00+08:00")
+        let window = TokenUsageHeatmapBuilder.utcYearToDateWindow(now: now)
+
+        #expect(window.start == date("2026-01-01T00:00:00Z"))
+        #expect(window.end == date("2026-08-30T00:00:00Z"))
+    }
+
     @Test("compact token counts use 万/亿 in Chinese and K/M/B in English")
     func compactTokenCountFormatting() {
         #expect(TokenUsageHeatmapBuilder.compactTokenCount(999, language: .simplifiedChinese) == "999")

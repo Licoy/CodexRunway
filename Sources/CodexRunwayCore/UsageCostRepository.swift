@@ -1,12 +1,23 @@
 import Foundation
 
+public enum UsageCostDayBoundary: Sendable, Hashable {
+    case local
+    case utc
+}
+
 public struct ApiCostQuery: Sendable, Hashable {
     public let id: String
     public let window: DateInterval
+    public let dayBoundary: UsageCostDayBoundary
 
-    public init(id: String, window: DateInterval) {
+    public init(
+        id: String,
+        window: DateInterval,
+        dayBoundary: UsageCostDayBoundary = .local)
+    {
         self.id = id
         self.window = window
+        self.dayBoundary = dayBoundary
     }
 }
 

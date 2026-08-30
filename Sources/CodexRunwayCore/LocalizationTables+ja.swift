@@ -428,7 +428,7 @@ extension L10n {
         .heatmapLocalDevice: "ローカルログ（全セッション）",
         .heatmapLocalShort: "ローカル",
         .heatmapOfficialAsOf: "公式集計日 %@",
-        .heatmapSourceDisclosure: "公式統計は遅延したり改訂されたりすることがあります。ローカル ログはこの Mac で見えるすべてのセッションを含み、複数アカウントにまたがる場合があります。",
+        .heatmapSourceDisclosure: "公式統計は遅延したり改訂されたりすることがあります。ローカル ログはこの Mac で見えるすべてのセッションを含み、複数アカウントにまたがる場合があります。日別データには UTC 日付を使用します。",
         .heatmapSourceMismatch: "出典が異なります。包含関係として比較できません。",
         .sourceLocalSessions: "ローカルセッション",
         .sourceOnlineSupplement: "オンライン補完",

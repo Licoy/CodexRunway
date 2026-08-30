@@ -428,7 +428,7 @@ extension L10n {
         .heatmapLocalDevice: "로컬 로그(모든 세션)",
         .heatmapLocalShort: "로컬",
         .heatmapOfficialAsOf: "공식 집계일 %@",
-        .heatmapSourceDisclosure: "공식 통계는 지연되거나 수정될 수 있습니다. 로컬 로그는 이 Mac에서 보이는 모든 세션을 포함하며 여러 계정에 걸칠 수 있습니다.",
+        .heatmapSourceDisclosure: "공식 통계는 지연되거나 수정될 수 있습니다. 로컬 로그는 이 Mac에서 보이는 모든 세션을 포함하며 여러 계정에 걸칠 수 있습니다. 일별 데이터에는 UTC 날짜를 사용합니다.",
         .heatmapSourceMismatch: "출처가 다릅니다. 포함 관계로 비교할 수 없습니다.",
         .sourceLocalSessions: "로컬 세션",
         .sourceOnlineSupplement: "온라인 보완",
