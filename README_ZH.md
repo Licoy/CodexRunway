@@ -148,7 +148,7 @@ bash Scripts/package-app.sh
 - access token、refresh token、id token、API key 不会写入日志、README、issue 模板或自检输出。
 - API 等价成本默认来自本机会话 JSONL 日志，并在 `~/.codex-runway/` 下维护本地增量索引等派生数据；不上传会话内容。
 - 订阅额度推算只把派生的 Credits 合计与占用率写入 `~/.codex-runway/quota-estimate-history.json`，不含 token 或密钥。
-- API 等价成本的在线用量只在本地没有可用 token 数据时作为补全。Token 图表的“官方统计（多端）”来自当前账号的官方资料统计，可能延迟或后续修订；“本机日志（全部本机会话）”扫描本机现有会话，历史记录可能跨账号。两者口径不同，不能视为包含关系或直接相减。
+- API 等价成本的在线用量只在本地没有可用 token 数据时作为补全。Token 图表的“官方统计（多端）”来自当前账号的官方资料统计，可能延迟或后续修订；“本机日志（全部本机会话）”扫描本机现有会话，历史记录可能跨账号。按日数据使用 UTC 日期，以便两边使用同一日界。两者口径不同，不能视为包含关系或直接相减。
 - 会话修复只处理 `~/.codex/session_index.jsonl`，写入前会创建备份，不删除会话文件。
 - 「今日是否重置」只下载公开状态源，不附带 Codex 账号、token 或本机会话内容。
 - 更新检测只访问版本信息，不上传 Codex 账号或会话数据。

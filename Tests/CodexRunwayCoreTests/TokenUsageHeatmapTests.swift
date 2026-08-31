@@ -190,6 +190,28 @@ struct TokenUsageHeatmapTests {
         #expect(window.end == date("2026-08-30T00:00:00Z"))
     }
 
+    @Test("UTC heatmap clips to the UTC civil day and looks up UTC keys")
+    func utcHeatmapAlignsKeysToUtcDay() {
+        let now = date("2026-08-30T01:00:00+08:00")
+        let utc = TimeZone(secondsFromGMT: 0)!
+        let snapshot = TokenUsageHeatmapBuilder.make(
+            allDevicesTokens: ["2026-08-29": 100, "2026-08-30": 200],
+            localTokens: ["2026-08-29": 10, "2026-08-30": 20],
+            mode: .daily,
+            now: now,
+            firstWeekday: 1,
+            timeZone: utc)
+        let cells = snapshot.weeks.flatMap { $0 }
+        let utcToday = cells.first { $0.dayKey == "2026-08-29" }
+
+        #expect(utcToday?.isInRange == true)
+        #expect(utcToday?.allDevicesTokens == 100)
+        #expect(utcToday?.localTokens == 10)
+        #expect(!cells.contains { $0.dayKey == "2026-08-30" && $0.isInRange })
+        #expect(snapshot.totalAllDevicesTokens == 100)
+        #expect(snapshot.totalLocalTokens == 10)
+    }
+
     @Test("compact token counts use 万/亿 in Chinese and K/M/B in English")
     func compactTokenCountFormatting() {
         #expect(TokenUsageHeatmapBuilder.compactTokenCount(999, language: .simplifiedChinese) == "999")

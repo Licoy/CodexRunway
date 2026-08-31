@@ -100,18 +100,24 @@ struct UsageCostRepositoryAggregationTests {
         try fixture.write(contents, basename: "rollout-utc-days.jsonl")
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Singapore")!
-        let request = ApiCostQuery(
-            id: "utc",
-            window: DateInterval(
-                start: parseDate("2026-06-29T17:00:00Z"),
-                end: parseDate("2026-06-30T02:00:00Z")),
-            dayBoundary: .utc)
+        let window = DateInterval(
+            start: parseDate("2026-06-29T17:00:00Z"),
+            end: parseDate("2026-06-30T02:00:00Z"))
+        let utcRequest = ApiCostQuery(id: "utc", window: window, dayBoundary: .utc)
+        let localRequest = ApiCostQuery(id: "local", window: window)
+        let repository = fixture.repository(calendar: calendar)
 
-        let summary = try #require(try await fixture.repository(calendar: calendar).summaries(
-            for: [request], calculatedAt: fixedNow, policy: .ifChanged)[request.id])
+        let summaries = try await repository.summaries(
+            for: [utcRequest, localRequest], calculatedAt: fixedNow, policy: .ifChanged)
+        let utcSummary = try #require(summaries[utcRequest.id])
+        let localSummary = try #require(summaries[localRequest.id])
+        let diagnostics = await repository.diagnosticsSnapshot()
 
-        #expect(summary.dailyRows.map(\.date) == ["2026-06-29", "2026-06-30"])
-        #expect(summary.dailyRows.map(\.totals.totalTokens) == [105, 205])
+        #expect(utcSummary.dailyRows.map(\.date) == ["2026-06-29", "2026-06-30"])
+        #expect(utcSummary.dailyRows.map(\.totals.totalTokens) == [105, 205])
+        #expect(localSummary.dailyRows.map(\.date) == ["2026-06-30"])
+        #expect(localSummary.dailyRows.map(\.totals.totalTokens) == [310])
+        #expect(diagnostics.databaseRebuilds == 0)
     }
 
     @Test("local day keys remain Gregorian when the system uses another calendar")

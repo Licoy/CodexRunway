@@ -20,7 +20,7 @@ struct RunwayModelRefreshTests {
             },
             scanAPIEquivalent: { queries, now, policy, _ in
                 await recorder.record(queries: queries, now: now, policy: policy)
-                Dictionary(uniqueKeysWithValues: queries.map {
+                return Dictionary(uniqueKeysWithValues: queries.map {
                     ($0.id, ApiEquivalentSummary.unavailable(window: $0.window, calculatedAt: now))
                 })
             },
