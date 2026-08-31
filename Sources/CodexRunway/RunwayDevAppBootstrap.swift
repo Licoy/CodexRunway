@@ -69,6 +69,6 @@ private struct RunwayDevAppBootstrapError: LocalizedError {
     var status: Int32
 
     var errorDescription: String? {
-        "Could not prepare Codex Runway Dev (exit \(status))."
+        "Could not prepare CodexRunway Dev (exit \(status))."
     }
 }

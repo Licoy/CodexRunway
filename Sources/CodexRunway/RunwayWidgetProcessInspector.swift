@@ -171,7 +171,7 @@ enum RunwayWidgetProcessInspector {
         } catch {
             if reportAuditFailure {
                 NSLog(
-                    "Codex Runway could not acquire atomic identity for widget process %d; using start-time identity: %@",
+                    "CodexRunway could not acquire atomic identity for widget process %d; using start-time identity: %@",
                     processIdentifier,
                     error.localizedDescription)
             }

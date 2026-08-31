@@ -2,7 +2,7 @@
 
 ## 项目定位
 
-Codex Runway 是一个原生 macOS 状态栏应用，用 Swift 编写，用于读取本机 Codex 配置和会话数据，展示配额、reset credits、API 等价成本，并修复本机会话索引。
+CodexRunway 是一个原生 macOS 状态栏应用，用 Swift 编写，用于读取本机 Codex 配置和会话数据，展示配额、reset credits、API 等价成本，并修复本机会话索引。
 
 ## 技术边界
 
@@ -15,7 +15,7 @@ Codex Runway 是一个原生 macOS 状态栏应用，用 Swift 编写，用于�
 ## 隐私与安全
 
 - 不要在日志、测试输出、README、issue 模板中输出 access token、refresh token、API key。
-- Codex Runway 自有目录统一使用 `~/.codex-runway`，默认只保存非密钥的派生数据，不将应用缓存写入 `~/.codex`。
+- CodexRunway 自有目录统一使用 `~/.codex-runway`，默认只保存非密钥的派生数据，不将应用缓存写入 `~/.codex`。
 - 多账号凭据是唯一例外：仅允许存放在 `~/.codex-runway/accounts/<id>/auth.json`（目录 `0700`、文件 `0600`，原子写入）。账号索引 `index.json` 不得包含 token。
 - 读取 `~/.codex/auth.json` 时只使用必要字段。
 - 修改官方 `~/.codex/auth.json` 仅限：OAuth refresh 回写、以及用户主动切号时的原子写入。

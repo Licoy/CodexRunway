@@ -98,7 +98,7 @@ final class RunwayWidgetCoordinator {
                 compatibilityStore: storage.compatibilityStore,
                 configurationLoader: RunwayWidgetCenterConfigurationLoader())
         } catch {
-            NSLog("Codex Runway widget store unavailable: %@", error.localizedDescription)
+            NSLog("CodexRunway widget store unavailable: %@", error.localizedDescription)
             return nil
         }
     }
@@ -137,7 +137,7 @@ final class RunwayWidgetCoordinator {
                 }
                 self.onRequirementsChanged?(requirements)
             case .failure(let message):
-                NSLog("Codex Runway could not inspect widgets: %@", message)
+                NSLog("CodexRunway could not inspect widgets: %@", message)
             }
         }
     }
@@ -171,7 +171,7 @@ final class RunwayWidgetCoordinator {
                     recordReload(at: snapshot.generatedAt)
                 }
             } catch {
-                NSLog("Codex Runway could not publish widget data: %@", error.localizedDescription)
+                NSLog("CodexRunway could not publish widget data: %@", error.localizedDescription)
             }
         }
     }
@@ -218,7 +218,7 @@ private actor RunwayWidgetSnapshotPublisher {
             do {
                 try compatibilityStore.save(snapshot)
             } catch {
-                NSLog("Codex Runway could not mirror widget data: %@", error.localizedDescription)
+                NSLog("CodexRunway could not mirror widget data: %@", error.localizedDescription)
             }
         }
         return true

@@ -51,7 +51,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
 
     func start() {
         let button = statusItem.button
-        button?.toolTip = "Codex Runway"
+        button?.toolTip = "CodexRunway"
         button?.target = self
         button?.action = #selector(handleStatusItemClick(_:))
         button?.sendAction(on: [.leftMouseDown, .rightMouseDown])
@@ -263,7 +263,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
             if detailsWindow.isVisible {
                 // Normal NSWindow is safe to refresh; not anchored like NSPopover.
                 detailsWindow.contentViewController = makePopoverHostingController()
-                detailsWindow.title = "Codex Runway"
+                detailsWindow.title = "CodexRunway"
             } else {
                 detailsWindow.contentViewController = nil
             }
@@ -625,7 +625,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false)
-        window.title = "Codex Runway"
+        window.title = "CodexRunway"
         window.level = .floating
         window.isReleasedWhenClosed = false
         // Title-bar close must run the same teardown as outside-clicks, or the

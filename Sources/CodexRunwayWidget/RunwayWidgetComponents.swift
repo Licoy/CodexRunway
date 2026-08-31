@@ -172,7 +172,7 @@ struct RunwayWidgetUnavailableView: View {
             Image(systemName: icon)
                 .font(.title2)
                 .foregroundStyle(RunwayWidgetPalette.token)
-            Text("Codex Runway")
+            Text("CodexRunway")
                 .font(.headline)
             Text(message)
                 .font(.caption)

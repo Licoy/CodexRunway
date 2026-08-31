@@ -1,14 +1,14 @@
 [English](./README.md) · [简体中文](./README_ZH.md) · [繁體中文](./README_ZH_HANT.md) · 한국어 · [日本語](./README_JA.md) · [Русский](./README_RU.md) · [Français](./README_FR.md)
 
 <p align="center">
-  <img src="Resources/AppIcon.png" alt="Codex Runway logo" width="128" height="128">
+  <img src="Resources/AppIcon.png" alt="CodexRunway logo" width="128" height="128">
 </p>
 
-# Codex Runway
+# CodexRunway
 
 Codex가 얼마나 더 달릴 수 있을까요?
 
-Codex Runway는 Codex와 Grok 할당량을 확인하는 네이티브 macOS 메뉴 막대 앱입니다. Codex의 오늘 리셋 여부, reset credits, API 환산 비용, 로컬 세션과 공급자별 다중 계정 관리를 제공합니다.
+CodexRunway는 Codex와 Grok 할당량을 확인하는 네이티브 macOS 메뉴 막대 앱입니다. Codex의 오늘 리셋 여부, reset credits, API 환산 비용, 로컬 세션과 공급자별 다중 계정 관리를 제공합니다.
 
 ## 주요 기능
 
@@ -37,12 +37,12 @@ Codex Runway는 Codex와 Grok 할당량을 확인하는 네이티브 macOS 메�
 ## 스크린샷
 
 <p align="center">
-  <img src="docs/images/1.webp" alt="Codex Runway 할당량 개요" width="260">
-  <img src="docs/images/2.webp" alt="Codex Runway 리셋 크레딧 상세" width="260">
-  <img src="docs/images/3.webp" alt="Codex Runway API 환산 비용" width="260">
-  <img src="docs/images/4.webp" alt="Codex Runway 설정 페이지" width="260">
-  <img src="docs/images/5.webp" alt="Codex Runway 다중 계정" width="260">
-  <img src="docs/images/6.webp" alt="Codex Runway Grok 할당량" width="260">
+  <img src="docs/images/1.webp" alt="CodexRunway 할당량 개요" width="260">
+  <img src="docs/images/2.webp" alt="CodexRunway 리셋 크레딧 상세" width="260">
+  <img src="docs/images/3.webp" alt="CodexRunway API 환산 비용" width="260">
+  <img src="docs/images/4.webp" alt="CodexRunway 설정 페이지" width="260">
+  <img src="docs/images/5.webp" alt="CodexRunway 다중 계정" width="260">
+  <img src="docs/images/6.webp" alt="CodexRunway Grok 할당량" width="260">
 </p>
 
 ## 설치
@@ -55,7 +55,7 @@ Codex Runway는 Codex와 Grok 할당량을 확인하는 네이티브 macOS 메�
 brew install --cask licoy/tap/codex-runway
 ```
 
-Codex Runway는 앱 내 업데이트도 지원합니다. Homebrew가 업그레이드를 확인하고 설치하게 하려면:
+CodexRunway는 앱 내 업데이트도 지원합니다. Homebrew가 업그레이드를 확인하고 설치하게 하려면:
 
 ```bash
 brew upgrade --cask --greedy codex-runway
@@ -109,7 +109,7 @@ xattr -dr com.apple.quarantine /Applications/CodexRunway.app
 swift run CodexRunway
 ```
 
-macOS 14+에서는 이 명령이 별도의 `Codex Runway Dev` 앱과 Widget 확장을 빌드·등록한 뒤 실행합니다. 개발 앱은 `.build/codex-runway-widget-dev/CodexRunway-dev.app`에 있으며 시스템 위젯 갤러리에서 바로 추가할 수 있습니다. 다른 Codex Runway 인스턴스는 먼저 종료하세요. 위젯 없이 패키징되지 않은 명령줄 프로세스만 쓰려면 `CODEX_RUNWAY_DISABLE_DEV_APP=1`을 설정하세요.
+macOS 14+에서는 이 명령이 별도의 `CodexRunway Dev` 앱과 Widget 확장을 빌드·등록한 뒤 실행합니다. 개발 앱은 `.build/codex-runway-widget-dev/CodexRunway-dev.app`에 있으며 시스템 위젯 갤러리에서 바로 추가할 수 있습니다. 다른 CodexRunway 인스턴스는 먼저 종료하세요. 위젯 없이 패키징되지 않은 명령줄 프로세스만 쓰려면 `CODEX_RUNWAY_DISABLE_DEV_APP=1`을 설정하세요.
 
 자가 진단:
 

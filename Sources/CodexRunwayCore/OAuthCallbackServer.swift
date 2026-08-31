@@ -96,7 +96,7 @@ public final class OAuthCallbackServer: @unchecked Sendable {
             let body = """
             <!doctype html><html><body style="font-family:system-ui;padding:2rem">
             <h2>Sign-in complete</h2>
-            <p>You can close this window and return to Codex Runway.</p>
+            <p>You can close this window and return to CodexRunway.</p>
             </body></html>
             """
             let response = """

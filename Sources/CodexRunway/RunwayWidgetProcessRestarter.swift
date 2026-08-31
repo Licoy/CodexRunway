@@ -210,7 +210,7 @@ struct RunwayWidgetProcessRestarter {
         }
 
         NSLog(
-            "Codex Runway widget process %d did not exit after SIGTERM; sending SIGKILL.",
+            "CodexRunway widget process %d did not exit after SIGTERM; sending SIGKILL.",
             identity.processIdentifier)
         guard try loadIdentity(identity.processIdentifier) == identity else { return true }
         guard try sendSignal(identity, SIGKILL) else { return true }

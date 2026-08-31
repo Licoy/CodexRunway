@@ -33,7 +33,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(RUNWAY_WIDGET_BUNDLE_ID)
         PRODUCT_NAME: CodexRunwayWidget
         RUNWAY_APP_GROUP_ID: group.com.github.codex-runway
-        RUNWAY_WIDGET_DISPLAY_NAME: Codex Runway
+        RUNWAY_WIDGET_DISPLAY_NAME: CodexRunway
         RUNWAY_WIDGET_STORAGE_MODE: app-group
         RUNWAY_WIDGET_BUNDLE_ID: com.github.codex-runway.widget
         SKIP_INSTALL: NO

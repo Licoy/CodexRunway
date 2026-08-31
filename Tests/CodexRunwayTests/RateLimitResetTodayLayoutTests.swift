@@ -89,6 +89,6 @@ struct RateLimitResetTodayLayoutTests {
         }
         #expect(
             L10n(language: .simplifiedChinese).text(.rateLimitResetTodayOpenWebsite)
-                == "去 Codex Runway 网页查看重置信息和历史记录")
+                == "去 CodexRunway 网页查看重置信息和历史记录")
     }
 }

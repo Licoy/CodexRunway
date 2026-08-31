@@ -33,7 +33,7 @@ extension StatusController {
             .map { "\($0.title): \($0.remainingPercent)%" }
             .joined(separator: " · ")
         statusItem.button?.toolTip = quotaDetails.isEmpty
-            ? "Codex Runway · \(model.selectedStatusText)"
-            : "Codex Runway · \(model.selectedStatusText)\n\(quotaDetails)"
+            ? "CodexRunway · \(model.selectedStatusText)"
+            : "CodexRunway · \(model.selectedStatusText)\n\(quotaDetails)"
     }
 }

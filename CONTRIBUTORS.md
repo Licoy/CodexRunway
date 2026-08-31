@@ -2,7 +2,7 @@
 
 [README](README.md) | [简体中文](README_ZH.md)
 
-感谢所有为 Codex Runway 提交代码、测试、反馈、文档和设计建议的人。
+感谢所有为 CodexRunway 提交代码、测试、反馈、文档和设计建议的人。
 
 ## 当前维护
 

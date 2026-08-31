@@ -1,14 +1,14 @@
 [English](./README.md) · [简体中文](./README_ZH.md) · [繁體中文](./README_ZH_HANT.md) · [한국어](./README_KO.md) · [日本語](./README_JA.md) · Русский · [Français](./README_FR.md)
 
 <p align="center">
-  <img src="Resources/AppIcon.png" alt="Codex Runway logo" width="128" height="128">
+  <img src="Resources/AppIcon.png" alt="CodexRunway logo" width="128" height="128">
 </p>
 
-# Codex Runway
+# CodexRunway
 
 Как долго ещё сможет работать ваш Codex?
 
-Codex Runway — нативное приложение для строки меню macOS, которое показывает квоту Codex и Grok. Оно также даёт статус сброса Codex за сегодня, reset credits, эквивалентную стоимость API и локальные сессии, а также отдельное управление несколькими аккаунтами для каждого провайдера.
+CodexRunway — нативное приложение для строки меню macOS, которое показывает квоту Codex и Grok. Оно также даёт статус сброса Codex за сегодня, reset credits, эквивалентную стоимость API и локальные сессии, а также отдельное управление несколькими аккаунтами для каждого провайдера.
 
 ## Возможности
 
@@ -37,12 +37,12 @@ Codex Runway — нативное приложение для строки ме�
 ## Снимки экрана
 
 <p align="center">
-  <img src="docs/images/1.webp" alt="Обзор квоты Codex Runway" width="260">
-  <img src="docs/images/2.webp" alt="Сведения о кредитах сброса Codex Runway" width="260">
-  <img src="docs/images/3.webp" alt="Эквивалентная стоимость API Codex Runway" width="260">
-  <img src="docs/images/4.webp" alt="Страница настроек Codex Runway" width="260">
-  <img src="docs/images/5.webp" alt="Несколько аккаунтов Codex Runway" width="260">
-  <img src="docs/images/6.webp" alt="Квота Grok в Codex Runway" width="260">
+  <img src="docs/images/1.webp" alt="Обзор квоты CodexRunway" width="260">
+  <img src="docs/images/2.webp" alt="Сведения о кредитах сброса CodexRunway" width="260">
+  <img src="docs/images/3.webp" alt="Эквивалентная стоимость API CodexRunway" width="260">
+  <img src="docs/images/4.webp" alt="Страница настроек CodexRunway" width="260">
+  <img src="docs/images/5.webp" alt="Несколько аккаунтов CodexRunway" width="260">
+  <img src="docs/images/6.webp" alt="Квота Grok в CodexRunway" width="260">
 </p>
 
 ## Установка
@@ -55,7 +55,7 @@ Codex Runway — нативное приложение для строки ме�
 brew install --cask licoy/tap/codex-runway
 ```
 
-Codex Runway также поддерживает обновления в приложении. Чтобы Homebrew проверил и установил обновление, используйте:
+CodexRunway также поддерживает обновления в приложении. Чтобы Homebrew проверил и установил обновление, используйте:
 
 ```bash
 brew upgrade --cask --greedy codex-runway
@@ -109,7 +109,7 @@ xattr -dr com.apple.quarantine /Applications/CodexRunway.app
 swift run CodexRunway
 ```
 
-На macOS 14+ эта команда автоматически собирает и регистрирует отдельное приложение `Codex Runway Dev` и расширение виджета, затем запускает его. Приложение разработки находится в `.build/codex-runway-widget-dev/CodexRunway-dev.app` и его можно добавить из системной галереи виджетов. Сначала закройте другие запущенные экземпляры Codex Runway. Задайте `CODEX_RUNWAY_DISABLE_DEV_APP=1`, только если нужен сырой неупакованный процесс командной строки без виджетов.
+На macOS 14+ эта команда автоматически собирает и регистрирует отдельное приложение `CodexRunway Dev` и расширение виджета, затем запускает его. Приложение разработки находится в `.build/codex-runway-widget-dev/CodexRunway-dev.app` и его можно добавить из системной галереи виджетов. Сначала закройте другие запущенные экземпляры CodexRunway. Задайте `CODEX_RUNWAY_DISABLE_DEV_APP=1`, только если нужен сырой неупакованный процесс командной строки без виджетов.
 
 Самопроверка:
 

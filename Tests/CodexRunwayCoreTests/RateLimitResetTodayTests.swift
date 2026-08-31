@@ -4,7 +4,7 @@ import Testing
 
 @Suite("Rate limit reset today")
 struct RateLimitResetTodayTests {
-    @Test("uses the Codex Runway status endpoints")
+    @Test("uses the CodexRunway status endpoints")
     func usesCodexRunwayStatusEndpoints() {
         #expect(RateLimitResetTodayClient.siteURL.absoluteString == "https://www.codexrunway.com/")
         #expect(

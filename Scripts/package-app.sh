@@ -85,7 +85,7 @@ if [[ "$INCLUDE_WIDGET" == "1" ]]; then
   WIDGET_BUILD_SETTINGS=(
     RUNWAY_WIDGET_BUNDLE_ID="$RUNWAY_WIDGET_BUNDLE_ID"
     RUNWAY_APP_GROUP_ID="$RUNWAY_APP_GROUP_ID"
-    RUNWAY_WIDGET_DISPLAY_NAME="Codex Runway"
+    RUNWAY_WIDGET_DISPLAY_NAME="CodexRunway"
     RUNWAY_WIDGET_STORAGE_MODE="$RUNWAY_WIDGET_STORAGE_MODE"
     MARKETING_VERSION="$APP_VERSION"
     CURRENT_PROJECT_VERSION="$APP_BUILD"
@@ -167,6 +167,6 @@ rm -f "$ZIP" "$TAR_GZ" "$DMG"
 mkdir -p "$DMG_ROOT"
 /usr/bin/ditto "$APP" "$DMG_ROOT/CodexRunway.app"
 ln -s /Applications "$DMG_ROOT/Applications"
-hdiutil create -volname "Codex Runway" -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG" >/dev/null
+hdiutil create -volname "CodexRunway" -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG" >/dev/null
 rm -rf "$DMG_ROOT"
 printf '%s\n%s\n%s\n' "$ZIP" "$TAR_GZ" "$DMG"

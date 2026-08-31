@@ -7,7 +7,7 @@ usage() {
   cat <<'EOF'
 Usage: Scripts/run-dev-app.sh [options]
 
-Build and launch Codex Runway Dev (widgets on macOS 14+).
+Build and launch CodexRunway Dev (widgets on macOS 14+).
 Same as: swift run CodexRunway -- [options]
 
 Options:
@@ -134,7 +134,7 @@ LOCK="$HOME/.codex-runway/codex-runway.lock"
 LEGACY_LOCK="$HOME/Library/Application Support/Codex Runway/codex-runway.lock"
 if { [[ -e "$LOCK" ]] && lsof -t "$LOCK" >/dev/null 2>&1; } || \
    { [[ -e "$LEGACY_LOCK" ]] && lsof -t "$LEGACY_LOCK" >/dev/null 2>&1; }; then
-  printf 'Codex Runway is already running. Quit the installed app before swift run.\n' >&2
+  printf 'CodexRunway is already running. Quit the installed app before swift run.\n' >&2
   exit 1
 fi
 
@@ -145,7 +145,7 @@ xcodebuild \
   -derivedDataPath "$DERIVED" \
   RUNWAY_WIDGET_BUNDLE_ID="$WIDGET_ID" \
   RUNWAY_APP_GROUP_ID="group.com.github.codex-runway.swift-dev" \
-  RUNWAY_WIDGET_DISPLAY_NAME="Codex Runway Dev" \
+  RUNWAY_WIDGET_DISPLAY_NAME="CodexRunway Dev" \
   RUNWAY_WIDGET_STORAGE_MODE=local \
   MARKETING_VERSION="$MARKETING_VERSION" \
   CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
@@ -163,8 +163,8 @@ mkdir -p "$MACOS" "$RESOURCES" "$FRAMEWORKS" "$PLUGINS"
 cp "$ROOT/Resources/Info.plist" "$CONTENTS/Info.plist"
 /usr/libexec/PlistBuddy \
   -c "Set :CFBundleIdentifier $BUNDLE_ID" \
-  -c "Set :CFBundleName Codex Runway Dev" \
-  -c "Add :CFBundleDisplayName string Codex Runway Dev" \
+  -c "Set :CFBundleName CodexRunway Dev" \
+  -c "Add :CFBundleDisplayName string CodexRunway Dev" \
   -c "Set :CFBundleVersion $BUILD_NUMBER" \
   -c "Add :RunwayWidgetStorageMode string local" \
   "$CONTENTS/Info.plist"
@@ -234,7 +234,7 @@ mv "$STAGING" "$APP"
 "$LSREGISTER" -f "$APP"
 pluginkit -a "$APP/Contents/PlugIns/CodexRunwayWidget.appex"
 
-printf 'Codex Runway Dev: %s\n' "$APP"
+printf 'CodexRunway Dev: %s\n' "$APP"
 if [[ "$#" -gt 0 ]]; then
   open -n "$APP" --args "$@"
 else

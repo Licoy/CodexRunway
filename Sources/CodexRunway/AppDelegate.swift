@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         else {
             let isPackagedApplication = Bundle.main.bundleURL.pathExtension == "app"
             if isPackagedApplication {
-                NSLog("Codex Runway could not identify the bundled widget extension.")
+                NSLog("CodexRunway could not identify the bundled widget extension.")
             }
             finishLaunching(initialWidgetReloadAllowed: !isPackagedApplication)
             return
@@ -43,17 +43,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ result: RunwayWidgetProcessTerminationResult
     ) -> Bool {
         if let message = result.loadFailureMessage {
-            NSLog("Codex Runway could not inspect widget processes: %@", message)
+            NSLog("CodexRunway could not inspect widget processes: %@", message)
         }
         for failure in result.failures {
             NSLog(
-                "Codex Runway could not restart widget process %d: %@",
+                "CodexRunway could not restart widget process %d: %@",
                 failure.processIdentifier,
                 failure.message)
         }
         if !result.terminatedProcessIdentifiers.isEmpty {
             NSLog(
-                "Codex Runway restarted %d widget process(es) before timeline reload.",
+                "CodexRunway restarted %d widget process(es) before timeline reload.",
                 result.terminatedProcessIdentifiers.count)
         }
         return result.canReloadTimelines
@@ -78,7 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu()
         appItem.submenu = appMenu
         appMenu.addItem(
-            withTitle: "Quit Codex Runway",
+            withTitle: "Quit CodexRunway",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q")
 

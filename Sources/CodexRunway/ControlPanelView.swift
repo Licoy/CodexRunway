@@ -361,7 +361,7 @@ struct ControlPanelView: View {
             SettingsSection {
                 AboutLogoView()
                 SectionLabel(l10n.text(.about))
-                InfoRow(title: l10n.text(.version), subtitle: appVersion, value: "Codex Runway")
+                InfoRow(title: l10n.text(.version), subtitle: appVersion, value: "CodexRunway")
                 PreferenceToggleRow(
                     title: l10n.text(.automaticallyCheckForUpdates),
                     subtitle: l10n.text(.checkForUpdates),

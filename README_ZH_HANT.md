@@ -1,14 +1,14 @@
 [English](./README.md) · [简体中文](./README_ZH.md) · 繁體中文 · [한국어](./README_KO.md) · [日本語](./README_JA.md) · [Русский](./README_RU.md) · [Français](./README_FR.md)
 
 <p align="center">
-  <img src="Resources/AppIcon.png" alt="Codex Runway logo" width="128" height="128">
+  <img src="Resources/AppIcon.png" alt="CodexRunway logo" width="128" height="128">
 </p>
 
-# Codex Runway
+# CodexRunway
 
 你的 Codex 還可以跑多久？
 
-Codex Runway 是一個原生 macOS 選單列應用程式，幫你在選單列查看 Codex 與 Grok 額度，並提供 Codex 的今日是否重設、reset credits、API 等價成本與本機工作階段能力，以及兩個供應商各自獨立的多帳號管理。
+CodexRunway 是一個原生 macOS 選單列應用程式，幫你在選單列查看 Codex 與 Grok 額度，並提供 Codex 的今日是否重設、reset credits、API 等價成本與本機工作階段能力，以及兩個供應商各自獨立的多帳號管理。
 
 ## 亮點
 
@@ -37,12 +37,12 @@ Codex Runway 是一個原生 macOS 選單列應用程式，幫你在選單列查
 ## 截圖
 
 <p align="center">
-  <img src="docs/images/1.webp" alt="Codex Runway 配額概覽" width="260">
-  <img src="docs/images/2.webp" alt="Codex Runway 重設次數詳情" width="260">
-  <img src="docs/images/3.webp" alt="Codex Runway API 等價成本" width="260">
-  <img src="docs/images/4.webp" alt="Codex Runway 設定頁面" width="260">
-  <img src="docs/images/5.webp" alt="Codex Runway 多帳號" width="260">
-  <img src="docs/images/6.webp" alt="Codex Runway Grok 配額" width="260">
+  <img src="docs/images/1.webp" alt="CodexRunway 配額概覽" width="260">
+  <img src="docs/images/2.webp" alt="CodexRunway 重設次數詳情" width="260">
+  <img src="docs/images/3.webp" alt="CodexRunway API 等價成本" width="260">
+  <img src="docs/images/4.webp" alt="CodexRunway 設定頁面" width="260">
+  <img src="docs/images/5.webp" alt="CodexRunway 多帳號" width="260">
+  <img src="docs/images/6.webp" alt="CodexRunway Grok 配額" width="260">
 </p>
 
 ## 安裝
@@ -55,7 +55,7 @@ Codex Runway 是一個原生 macOS 選單列應用程式，幫你在選單列查
 brew install --cask licoy/tap/codex-runway
 ```
 
-Codex Runway 同時支援應用程式內更新；如希望透過 Homebrew 強制檢查並升級，請使用：
+CodexRunway 同時支援應用程式內更新；如希望透過 Homebrew 強制檢查並升級，請使用：
 
 ```bash
 brew upgrade --cask --greedy codex-runway
@@ -109,7 +109,7 @@ xattr -dr com.apple.quarantine /Applications/CodexRunway.app
 swift run CodexRunway
 ```
 
-在 macOS 14+，該命令會自動建置並註冊獨立的 `Codex Runway Dev` 應用程式和 Widget 延伸功能，然後啟動它；開發應用程式位於 `.build/codex-runway-widget-dev/CodexRunway-dev.app`，可直接從系統小工具庫新增。啟動前請先結束其他正在執行的 Codex Runway 實例。若只需執行未打包的命令列行程，可設定 `CODEX_RUNWAY_DISABLE_DEV_APP=1`。
+在 macOS 14+，該命令會自動建置並註冊獨立的 `CodexRunway Dev` 應用程式和 Widget 延伸功能，然後啟動它；開發應用程式位於 `.build/codex-runway-widget-dev/CodexRunway-dev.app`，可直接從系統小工具庫新增。啟動前請先結束其他正在執行的 CodexRunway 實例。若只需執行未打包的命令列行程，可設定 `CODEX_RUNWAY_DISABLE_DEV_APP=1`。
 
 自檢命令：
 

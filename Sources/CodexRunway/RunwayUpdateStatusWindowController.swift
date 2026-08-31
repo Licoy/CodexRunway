@@ -16,7 +16,7 @@ final class RunwayUpdateStatusWindowController: NSWindowController {
             styleMask: [.titled],
             backing: .buffered,
             defer: false)
-        window.title = "Codex Runway"
+        window.title = "CodexRunway"
         window.isReleasedWhenClosed = false
         super.init(window: window)
         configureContent()

@@ -330,7 +330,7 @@ struct RunwayPopoverView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 8) {
-                Text("Codex Runway")
+                Text("CodexRunway")
                     .font(.title3.weight(.semibold))
                 providerMenu
                 Spacer(minLength: 8)

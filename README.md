@@ -1,14 +1,14 @@
 English · [简体中文](./README_ZH.md) · [繁體中文](./README_ZH_HANT.md) · [한국어](./README_KO.md) · [日本語](./README_JA.md) · [Русский](./README_RU.md) · [Français](./README_FR.md)
 
 <p align="center">
-  <img src="Resources/AppIcon.png" alt="Codex Runway logo" width="128" height="128">
+  <img src="Resources/AppIcon.png" alt="CodexRunway logo" width="128" height="128">
 </p>
 
-# Codex Runway
+# CodexRunway
 
 How much longer can your Codex keep running?
 
-Codex Runway is a native macOS menu bar app for checking Codex and Grok quota. It also provides Codex reset-today status, reset credits, API-equivalent cost, and local sessions, with separate multi-account management for each provider.
+CodexRunway is a native macOS menu bar app for checking Codex and Grok quota. It also provides Codex reset-today status, reset credits, API-equivalent cost, and local sessions, with separate multi-account management for each provider.
 
 ## Highlights
 
@@ -37,12 +37,12 @@ Codex Runway is a native macOS menu bar app for checking Codex and Grok quota. I
 ## Screenshots
 
 <p align="center">
-  <img src="docs/images/1.webp" alt="Codex Runway quota overview" width="260">
-  <img src="docs/images/2.webp" alt="Codex Runway reset credits details" width="260">
-  <img src="docs/images/3.webp" alt="Codex Runway API-equivalent cost" width="260">
-  <img src="docs/images/4.webp" alt="Codex Runway setting page" width="260">
-  <img src="docs/images/5.webp" alt="Codex Runway multi-account" width="260">
-  <img src="docs/images/6.webp" alt="Codex Runway Grok quota" width="260">
+  <img src="docs/images/1.webp" alt="CodexRunway quota overview" width="260">
+  <img src="docs/images/2.webp" alt="CodexRunway reset credits details" width="260">
+  <img src="docs/images/3.webp" alt="CodexRunway API-equivalent cost" width="260">
+  <img src="docs/images/4.webp" alt="CodexRunway setting page" width="260">
+  <img src="docs/images/5.webp" alt="CodexRunway multi-account" width="260">
+  <img src="docs/images/6.webp" alt="CodexRunway Grok quota" width="260">
 </p>
 
 ## Installation
@@ -55,7 +55,7 @@ Install from the [project-maintained Licoy Homebrew Tap](https://github.com/Lico
 brew install --cask licoy/tap/codex-runway
 ```
 
-Codex Runway also supports in-app updates. To force Homebrew to check and install an upgrade, use:
+CodexRunway also supports in-app updates. To force Homebrew to check and install an upgrade, use:
 
 ```bash
 brew upgrade --cask --greedy codex-runway
@@ -109,7 +109,7 @@ Then open the app again.
 swift run CodexRunway
 ```
 
-On macOS 14+, this command automatically builds and registers a separate `Codex Runway Dev` app and Widget extension, then launches it. The development app lives at `.build/codex-runway-widget-dev/CodexRunway-dev.app` and can be added directly from the system widget gallery. Quit any other running Codex Runway instance first. Set `CODEX_RUNWAY_DISABLE_DEV_APP=1` only when you want the raw unpackaged command-line process without widgets.
+On macOS 14+, this command automatically builds and registers a separate `CodexRunway Dev` app and Widget extension, then launches it. The development app lives at `.build/codex-runway-widget-dev/CodexRunway-dev.app` and can be added directly from the system widget gallery. Quit any other running CodexRunway instance first. Set `CODEX_RUNWAY_DISABLE_DEV_APP=1` only when you want the raw unpackaged command-line process without widgets.
 
 Self-check:
 

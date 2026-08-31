@@ -8,7 +8,7 @@ extension StatusController {
         let providerName = model.selectedProvider == .codex
             ? l10n.text(.providerCodex)
             : l10n.text(.providerGrok)
-        menu.addItem(disabledMenuItem("Codex Runway · \(providerName) · \(model.selectedStatusText)"))
+        menu.addItem(disabledMenuItem("CodexRunway · \(providerName) · \(model.selectedStatusText)"))
         addSection(
             model.selectedProvider == .codex ? l10n.text(.quota) : l10n.text(.grokIncludedQuota),
             text: model.selectedQuotaText,
