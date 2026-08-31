@@ -426,7 +426,7 @@ extension L10n {
         .heatmapLocalDevice: "本機日志（全部本機工作階段）",
         .heatmapLocalShort: "本機",
         .heatmapOfficialAsOf: "官方截至 %@",
-        .heatmapSourceDisclosure: "官方統計可能延遲或調整；本機日志包含這台 Mac 可見的全部工作階段，可能跨帳號。",
+        .heatmapSourceDisclosure: "官方統計可能延遲或調整；本機日志包含這台 Mac 可見的全部工作階段，可能跨帳號。每日數據使用 UTC 日期。",
         .heatmapSourceMismatch: "資料來源口徑不同，不能作為包含關系比較",
         .sourceLocalSessions: "本機工作階段",
         .sourceOnlineSupplement: "線上補全",

@@ -428,7 +428,7 @@ extension L10n {
         .heatmapLocalDevice: "Journaux locaux (toutes les sessions)",
         .heatmapLocalShort: "Local",
         .heatmapOfficialAsOf: "Officiel jusqu’au %@",
-        .heatmapSourceDisclosure: "Les stats officielles peuvent être en retard ou révisées. Les journaux locaux incluent chaque session visible sur ce Mac et peuvent couvrir plusieurs comptes.",
+        .heatmapSourceDisclosure: "Les stats officielles peuvent être en retard ou révisées. Les journaux locaux incluent chaque session visible sur ce Mac et peuvent couvrir plusieurs comptes. Les valeurs quotidiennes utilisent les dates UTC.",
         .heatmapSourceMismatch: "Sources différentes ; les valeurs ne sont pas une comparaison d’inclusion.",
         .sourceLocalSessions: "Sessions locales",
         .sourceOnlineSupplement: "Complément en ligne",

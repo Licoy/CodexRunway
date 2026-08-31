@@ -90,6 +90,30 @@ struct UsageCostRepositoryAggregationTests {
         #expect(summary.dailyRows.map(\.totals.totalTokens) == [310])
     }
 
+    @Test("UTC day boundary re-buckets events without changing the local index")
+    func utcDayBoundaryRebucketsLocalIndex() async throws {
+        let fixture = try RepositoryFixture()
+        let contents = [
+            tokenLine(timestamp: "2026-06-29T18:00:00Z", input: 100),
+            tokenLine(timestamp: "2026-06-30T01:30:00Z", input: 200),
+        ].joined(separator: "\n") + "\n"
+        try fixture.write(contents, basename: "rollout-utc-days.jsonl")
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Singapore")!
+        let request = ApiCostQuery(
+            id: "utc",
+            window: DateInterval(
+                start: parseDate("2026-06-29T17:00:00Z"),
+                end: parseDate("2026-06-30T02:00:00Z")),
+            dayBoundary: .utc)
+
+        let summary = try #require(try await fixture.repository(calendar: calendar).summaries(
+            for: [request], calculatedAt: fixedNow, policy: .ifChanged)[request.id])
+
+        #expect(summary.dailyRows.map(\.date) == ["2026-06-29", "2026-06-30"])
+        #expect(summary.dailyRows.map(\.totals.totalTokens) == [105, 205])
+    }
+
     @Test("local day keys remain Gregorian when the system uses another calendar")
     func localDayKeysRemainGregorian() async throws {
         let fixture = try RepositoryFixture()

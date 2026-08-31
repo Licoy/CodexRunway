@@ -265,10 +265,13 @@ public enum TokenUsageDateFormatting {
         }
     }
 
-    public static func mediumDateFormatter(language: ResolvedLanguage) -> DateFormatter {
+    public static func mediumDateFormatter(
+        language: ResolvedLanguage,
+        timeZone: TimeZone = .autoupdatingCurrent
+    ) -> DateFormatter {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = .autoupdatingCurrent
+        formatter.timeZone = timeZone
         formatter.locale = language.locale
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
@@ -277,12 +280,13 @@ public enum TokenUsageDateFormatting {
 
     public static func seriesTooltipFormatter(
         mode: TokenUsageHeatmapMode,
-        language: ResolvedLanguage)
+        language: ResolvedLanguage,
+        timeZone: TimeZone = .autoupdatingCurrent)
         -> DateFormatter
     {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = .autoupdatingCurrent
+        formatter.timeZone = timeZone
         formatter.locale = language.locale
         switch mode {
         case .weekly:

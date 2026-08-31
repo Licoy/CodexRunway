@@ -8,6 +8,7 @@ import Testing
 struct RunwayModelRefreshTests {
     @Test("token heatmap uses official profile daily buckets")
     func tokenHeatmapUsesCodexProfileDailyUsage() async throws {
+        let recorder = CostBatchRecorder()
         let settings = RunwaySettings(store: PreferencesStore(defaults: scopedDefaults()))
         let expected = ["2026-07-26": 159_644_197]
         let services = RunwayModelServices(
@@ -17,7 +18,8 @@ struct RunwayModelRefreshTests {
             fetchRateLimitResetToday: {
                 RateLimitResetTodaySnapshot(state: .no, fetchedAt: Date())
             },
-            scanAPIEquivalent: { queries, now, _, _ in
+            scanAPIEquivalent: { queries, now, policy, _ in
+                await recorder.record(queries: queries, now: now, policy: policy)
                 Dictionary(uniqueKeysWithValues: queries.map {
                     ($0.id, ApiEquivalentSummary.unavailable(window: $0.window, calculatedAt: now))
                 })
@@ -44,8 +46,12 @@ struct RunwayModelRefreshTests {
         let model = makeModel(settings: settings, services: services)
 
         model.refreshTokenHeatmap()
+        let captured = try await recorder.waitForBatch()
         try await waitForTokenHeatmapRefresh(in: model)
 
+        let query = try #require(captured.queries.first)
+        #expect(query.dayBoundary == .utc)
+        #expect(query.window == TokenUsageHeatmapBuilder.utcYearToDateWindow(now: captured.now))
         #expect(model.tokenHeatmapAllDevicesTokens == expected)
         #expect(model.tokenHeatmapLocalTokens.isEmpty)
         #expect(model.tokenHeatmapOfficialStatsAsOf == "2026-07-27")
@@ -545,6 +551,7 @@ struct RunwayModelRefreshTests {
             $0.window.start == calendar.startOfDay(for: captured.now)
         })
         #expect(captured.queries.count == 2)
+        #expect(captured.queries.allSatisfy { $0.dayBoundary == .local })
         #expect(selected.window.end == captured.now)
         #expect(captured.policy == .force)
         try await waitForCostRefresh(in: model)

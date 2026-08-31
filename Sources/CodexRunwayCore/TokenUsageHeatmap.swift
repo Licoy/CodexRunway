@@ -156,10 +156,10 @@ public enum TokenUsageHeatmapBuilder {
         localTokens: [String: Int],
         mode: TokenUsageHeatmapMode,
         now: Date = Date(),
-        firstWeekday: Int = Calendar.current.firstWeekday
+        firstWeekday: Int = Calendar.current.firstWeekday,
+        timeZone: TimeZone = .autoupdatingCurrent
     ) -> TokenUsageHeatmapSnapshot {
-        // Local calendar so day keys align with the product's profile activity dates.
-        let calendar = displayCalendar(firstWeekday: firstWeekday)
+        let calendar = displayCalendar(firstWeekday: firstWeekday, timeZone: timeZone)
         let today = calendar.startOfDay(for: now)
         let year = calendar.component(.year, from: today)
         guard let yearStart = calendar.date(from: DateComponents(year: year, month: 1, day: 1)) else {
@@ -261,9 +261,10 @@ public enum TokenUsageHeatmapBuilder {
         localTokens: [String: Int],
         mode: TokenUsageHeatmapMode,
         now: Date = Date(),
-        firstWeekday: Int = Calendar.current.firstWeekday
+        firstWeekday: Int = Calendar.current.firstWeekday,
+        timeZone: TimeZone = .autoupdatingCurrent
     ) -> TokenUsageChartSeries {
-        let calendar = displayCalendar(firstWeekday: firstWeekday)
+        let calendar = displayCalendar(firstWeekday: firstWeekday, timeZone: timeZone)
         let today = calendar.startOfDay(for: now)
         let year = calendar.component(.year, from: today)
         guard let yearStart = calendar.date(from: DateComponents(year: year, month: 1, day: 1)) else {
@@ -403,13 +404,20 @@ public enum TokenUsageHeatmapBuilder {
         now: Date = Date(),
         calendar: Calendar? = nil
     ) -> DateInterval {
-        // Prefer the caller's calendar; default to local so profile activity day keys align.
-        let cal = calendar ?? displayCalendar(firstWeekday: Calendar.current.firstWeekday)
+        let cal = calendar ?? displayCalendar(
+            firstWeekday: Calendar.current.firstWeekday,
+            timeZone: .autoupdatingCurrent)
         let today = cal.startOfDay(for: now)
         let year = cal.component(.year, from: today)
         let start = cal.date(from: DateComponents(year: year, month: 1, day: 1)) ?? today
         let endExclusive = cal.date(byAdding: .day, value: 1, to: today) ?? now
         return DateInterval(start: start, end: endExclusive)
+    }
+
+    public static func utcYearToDateWindow(now: Date = Date()) -> DateInterval {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return yearToDateWindow(now: now, calendar: calendar)
     }
 
     /// Locale-aware compact token count: 中/日/韩用万级单位, Latin locales use K / M / B.
@@ -605,9 +613,9 @@ public enum TokenUsageHeatmapBuilder {
         return calendar.date(from: DateComponents(year: year, month: month, day: day))
     }
 
-    private static func displayCalendar(firstWeekday: Int) -> Calendar {
+    private static func displayCalendar(firstWeekday: Int, timeZone: TimeZone) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .autoupdatingCurrent
+        calendar.timeZone = timeZone
         calendar.locale = Locale(identifier: "en_US_POSIX")
         calendar.firstWeekday = min(7, max(1, firstWeekday))
         return calendar

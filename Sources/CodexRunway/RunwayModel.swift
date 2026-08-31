@@ -850,7 +850,8 @@ final class RunwayModel: ObservableObject {
             allDevicesTokens: tokenHeatmapAllDevicesTokens,
             localTokens: tokenHeatmapLocalTokens,
             mode: mode,
-            now: tokenHeatmapCalculatedAt ?? Date())
+            now: tokenHeatmapCalculatedAt ?? Date(),
+            timeZone: TimeZone(secondsFromGMT: 0)!)
     }
 
     func tick(now: Date = Date()) {
@@ -1905,8 +1906,11 @@ final class RunwayModel: ObservableObject {
     private func scanTokenHeatmap(auth: CodexAuth, policy: UsageCostRefreshPolicy) async throws {
         let expectedGeneration = accountStateGeneration
         let now = Date()
-        let window = TokenUsageHeatmapBuilder.yearToDateWindow(now: now)
-        let query = ApiCostQuery(id: Self.tokenHeatmapQueryID, window: window)
+        let window = TokenUsageHeatmapBuilder.utcYearToDateWindow(now: now)
+        let query = ApiCostQuery(
+            id: Self.tokenHeatmapQueryID,
+            window: window,
+            dayBoundary: .utc)
 
         // Collect both independent series. The official profile activity endpoint
         // has a different token definition from workspace analytics.
@@ -2393,9 +2397,12 @@ final class RunwayModel: ObservableObject {
                 currentWindow: currentWindows?.elapsed,
                 selectedRange: selectedRange))
         }
-        let heatmapWindow = TokenUsageHeatmapBuilder.yearToDateWindow(now: now)
+        let heatmapWindow = TokenUsageHeatmapBuilder.utcYearToDateWindow(now: now)
         if includeHeatmap {
-            queries.append(ApiCostQuery(id: Self.tokenHeatmapQueryID, window: heatmapWindow))
+            queries.append(ApiCostQuery(
+                id: Self.tokenHeatmapQueryID,
+                window: heatmapWindow,
+                dayBoundary: .utc))
         }
         guard !queries.isEmpty else { return }
 

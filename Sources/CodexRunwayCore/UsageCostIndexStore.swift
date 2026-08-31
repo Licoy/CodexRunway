@@ -80,9 +80,16 @@ final class UsageCostIndexStore {
         }
     }
 
-    func events(in window: DateInterval) throws -> [UsageCostIndexedEvent] {
+    func events(
+        in window: DateInterval,
+        dayBoundary: UsageCostDayBoundary = .local
+    ) throws -> [UsageCostIndexedEvent] {
+        let dayKey = switch dayBoundary {
+        case .local: "day_key"
+        case .utc: "strftime('%Y-%m-%d', timestamp, 'unixepoch')"
+        }
         let sql = """
-            SELECT MIN(timestamp), day_key, model, project,
+            SELECT MIN(timestamp), \(dayKey) AS aggregate_day_key, model, project,
                    SUM(uncached_input_tokens), SUM(cached_input_tokens),
                    SUM(output_tokens), SUM(turns),
                    MAX(CASE WHEN
@@ -96,8 +103,8 @@ final class UsageCostIndexStore {
                    THEN 1 ELSE 0 END)
             FROM usage_events
             WHERE timestamp >= ? AND timestamp <= ?
-            GROUP BY day_key, model, project
-            ORDER BY day_key, model, project
+            GROUP BY aggregate_day_key, model, project
+            ORDER BY aggregate_day_key, model, project
             """
         return try database.withStatement(sql, operation: "query usage events") { statement in
             try statement.bind(window.start.timeIntervalSince1970, at: 1)
