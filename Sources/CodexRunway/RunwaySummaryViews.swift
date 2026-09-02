@@ -395,6 +395,9 @@ struct RateLimitResetTodayView: View {
         if let detail = snapshot?.verdictDetail(l10n: l10n, now: now) {
             verdictDetailText(detail, now: now)
                 .fixedSize(horizontal: false, vertical: true)
+        } else if let unconfirmed = heroUnconfirmedScheduleDetail(now: now) {
+            unconfirmedScheduleHintText(type: unconfirmed)
+                .fixedSize(horizontal: false, vertical: true)
         } else if let last = heroNoneLastDetail(now: now) {
             noneLastHintText(type: last.resetType, ago: last.ago)
                 .fixedSize(horizontal: false, vertical: true)
@@ -662,6 +665,13 @@ struct RateLimitResetTodayView: View {
             if snapshot.hasUncertainNoSignalToday(now: now, calendar: calendar) {
                 return l10n.text(.rateLimitResetTodayNoHintUncertain)
             }
+            if let unconfirmed = snapshot.unconfirmedScheduleHint(
+                l10n: l10n,
+                now: now,
+                calendar: calendar)
+            {
+                return unconfirmed.text
+            }
             if let last = snapshot.noneHintLastReset(l10n: l10n, now: now) {
                 return last.text
             }
@@ -795,11 +805,48 @@ struct RateLimitResetTodayView: View {
               snapshot.resolvedState(now: now, calendar: calendar) == .no,
               snapshot.nextScheduledReset(now: now) == nil,
               !snapshot.hasUncertainNoSignalToday(now: now, calendar: calendar),
+              snapshot.unconfirmedExpiredSchedule(now: now, calendar: calendar) == nil,
               let last = snapshot.noneHintLastReset(l10n: l10n, now: now)
         else {
             return nil
         }
         return (last.resetType, last.ago)
+    }
+
+    private func heroUnconfirmedScheduleDetail(now: Date) -> RateLimitResetType? {
+        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
+        guard let snapshot,
+              snapshot.resolvedState(now: now, calendar: calendar) == .no,
+              snapshot.nextScheduledReset(now: now) == nil,
+              !snapshot.hasUncertainNoSignalToday(now: now, calendar: calendar),
+              let event = snapshot.unconfirmedExpiredSchedule(now: now, calendar: calendar)
+        else {
+            return nil
+        }
+        return event.resetType
+    }
+
+    private func unconfirmedScheduleHintText(type: RateLimitResetType) -> some View {
+        let template = l10n.text(.rateLimitResetTodayNoHintUnconfirmedSchedule)
+        let typeLabel = type.localizedName(l10n: l10n)
+        let typeColor = resetTypeColor(type)
+        let secondary = Color(nsColor: .secondaryLabelColor)
+        var result = Text("")
+        for segment in RateLimitResetNoneHint.segments(template) {
+            switch segment {
+            case .text(let value):
+                result = result + Text(value).foregroundColor(secondary)
+            case .resetType:
+                result = result + Text(typeLabel)
+                    .foregroundColor(typeColor)
+                    .fontWeight(.semibold)
+            case .ago:
+                continue
+            }
+        }
+        return result
+            .font(.caption2)
+            .multilineTextAlignment(.leading)
     }
 
     private func noneLastHintText(type: RateLimitResetType, ago: String) -> some View {

@@ -69,7 +69,7 @@ extension RateLimitResetTodaySnapshot {
             }
         }
         if let postID = timeline.recentNonCompletedPostId {
-            try validatePostID(postID, label: "recentNonCompletedPostId")
+            try validateEventID(postID, label: "recentNonCompletedPostId")
         }
         var fulfilledIDs = Set<String>()
         for entry in timeline.fulfilledSchedules {
@@ -207,8 +207,8 @@ extension RateLimitResetTodaySnapshot {
         kind: RateLimitResetTodayEventKind) throws
     {
         if source.isOperator {
-            guard kind == .resetCompleted else {
-                throw invalidPayload("Operator events must be completed resets.")
+            guard kind == .resetCompleted || kind == .resetScheduled else {
+                throw invalidPayload("Operator events must be completed or scheduled resets.")
             }
             guard RateLimitResetTodaySource.isOperatorEventID(source.postID),
                   source.handle == nil,
@@ -284,7 +284,16 @@ private extension RateLimitResetTodayEvent {
                 }
             }
         case .resetScheduled:
-            if scheduleBasis == .contextualInference {
+            if source.isOperator {
+                switch resetType {
+                case .global:
+                    ["Operator-confirmed Codex quota reset schedule without an X announcement."]
+                case .banked:
+                    ["Operator-confirmed Codex reset-bank credit schedule without an X announcement."]
+                case .globalAndBanked:
+                    ["Operator-confirmed Codex global reset and reset-bank credit schedule without an X announcement."]
+                }
+            } else if scheduleBasis == .contextualInference {
                 switch resetType {
                 case .global:
                     ["High-probability Codex quota reset preview inferred from context."]

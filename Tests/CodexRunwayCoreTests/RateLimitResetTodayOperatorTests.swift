@@ -87,20 +87,29 @@ struct RateLimitResetTodayOperatorTests {
         }
     }
 
-    @Test("rejects operator events that are not completed resets")
-    func rejectsNonCompletedOperatorEvents() throws {
+    @Test("rejects operator events that are not completed or scheduled resets")
+    func rejectsUnsupportedOperatorEventKinds() throws {
         let now = try resetStatusDate("2026-08-25T16:00:00Z")
-        let scheduled = ResetStatusEventFixture(
-            kind: "reset_scheduled",
+        let uncertain = ResetStatusEventFixture(
+            kind: "uncertain",
             announcedAt: "2026-08-25T14:00:00Z",
-            effectiveAt: "2026-08-26T14:00:00Z",
+            postID: operatorPostID,
+            origin: "operator",
+            handle: nil,
+            includeURL: false)
+        let banked = ResetStatusEventFixture(
+            kind: "banked_reset",
+            announcedAt: "2026-08-25T14:00:00Z",
             postID: operatorPostID,
             origin: "operator",
             handle: nil,
             includeURL: false)
 
         #expect(throws: DecodingError.self) {
-            try ResetStatusFeedFixture(event: scheduled, now: now).decode()
+            try ResetStatusFeedFixture(event: uncertain, now: now).decode()
+        }
+        #expect(throws: DecodingError.self) {
+            try ResetStatusFeedFixture(event: banked, now: now).decode()
         }
     }
 
@@ -169,6 +178,109 @@ struct RateLimitResetTodayOperatorTests {
 
         #expect(snapshot.resetTimeline?.fulfilledSchedules.first?.completionPostID == operatorPostID)
         #expect(snapshot.resolvedState(now: now, calendar: resetStatusUTCCalendar) == .yes)
+    }
+
+    @Test("expired operator schedule with empty nextSchedule is no, not unknown")
+    func expiredOperatorScheduleIsUnconfirmedNo() throws {
+        let now = try resetStatusDate("2026-09-02T13:48:03Z")
+        let scheduledID = "op_77973cda8bc5d0be9afde39e"
+        let scheduled = ResetStatusEventFixture(
+            kind: "reset_scheduled",
+            resetType: "global",
+            announcedAt: "2026-09-01T00:12:30Z",
+            effectiveAt: "2026-09-01T14:00:00Z",
+            schedulePrecision: "date",
+            scheduleBasis: "explicit",
+            postID: scheduledID,
+            origin: "operator",
+            handle: nil,
+            includeURL: false)
+        let completed = ResetStatusEventFixture(
+            kind: "reset_completed",
+            announcedAt: "2026-08-31T02:34:27Z",
+            postID: "2094252447271366730")
+        let snapshot = try ResetStatusFeedFixture(
+            eventsJSON: "\(scheduled.json),\n\(completed.json)",
+            now: now)
+            .checked(at: "2026-09-02T13:48:03Z")
+            .using(resetStatusUTCCalendar)
+            .withTimeline(
+                resetStatusEmptyTimelineJSON(recentNonCompletedPostId: scheduledID))
+            .decode()
+        let l10n = L10n(language: .simplifiedChinese)
+        let hint = try #require(
+            snapshot.unconfirmedScheduleHint(
+                l10n: l10n,
+                now: now,
+                calendar: resetStatusUTCCalendar))
+
+        #expect(snapshot.resolvedState(now: now, calendar: resetStatusUTCCalendar) == .no)
+        #expect(snapshot.nextScheduledReset(now: now) == nil)
+        #expect(
+            snapshot.primaryEvidenceEvent(now: now, calendar: resetStatusUTCCalendar)?.source.postID
+                == scheduledID)
+        #expect(
+            snapshot.evidenceLine(
+                l10n: l10n,
+                now: now,
+                calendar: resetStatusUTCCalendar)
+                == "运营确认已排期重置，Tibo 未发 X。")
+        #expect(hint.resetType == .global)
+        #expect(hint.text == "已排期的全局重置时间已过，但未得到确认")
+        #expect(
+            snapshot.unconfirmedScheduleHint(
+                l10n: L10n(language: .english),
+                now: now,
+                calendar: resetStatusUTCCalendar)?.text
+                == "The scheduled Global reset time passed without confirmation")
+    }
+
+    @Test("pending operator schedule on nextSchedule is yes")
+    func pendingOperatorScheduleIsYes() throws {
+        let now = try resetStatusDate("2026-09-01T08:00:00Z")
+        let scheduled = ResetStatusEventFixture(
+            kind: "reset_scheduled",
+            resetType: "global",
+            announcedAt: "2026-09-01T00:12:30Z",
+            effectiveAt: "2026-09-01T18:00:00Z",
+            schedulePrecision: "datetime",
+            scheduleBasis: "explicit",
+            postID: operatorPostID,
+            origin: "operator",
+            handle: nil,
+            includeURL: false)
+        let snapshot = try ResetStatusFeedFixture(event: scheduled, now: now)
+            .checked(at: "2026-09-01T08:00:00Z")
+            .using(resetStatusUTCCalendar)
+            .withTimeline(
+                resetStatusEmptyTimelineJSON(
+                    nextScheduleJSON: scheduled.json,
+                    recentNonCompletedPostId: operatorPostID))
+            .decode()
+
+        #expect(snapshot.resolvedState(now: now, calendar: resetStatusUTCCalendar) == .yes)
+        #expect(snapshot.nextScheduledReset(now: now)?.event.source.postID == operatorPostID)
+        #expect(snapshot.unconfirmedExpiredSchedule(now: now, calendar: resetStatusUTCCalendar) == nil)
+        #expect(
+            snapshot.evidenceLine(
+                l10n: L10n(language: .simplifiedChinese),
+                now: now,
+                calendar: resetStatusUTCCalendar)
+                == "运营确认已排期重置，Tibo 未发 X。")
+    }
+
+    @Test("rejects a non-event recentNonCompletedPostId")
+    func rejectsInvalidRecentNonCompletedPostID() throws {
+        let now = try resetStatusDate("2026-09-02T13:48:03Z")
+        let completed = ResetStatusEventFixture(
+            kind: "reset_completed",
+            announcedAt: "2026-08-31T02:34:27Z")
+
+        #expect(throws: DecodingError.self) {
+            try ResetStatusFeedFixture(event: completed, now: now)
+                .withTimeline(resetStatusEmptyTimelineJSON(recentNonCompletedPostId: "not-an-id"))
+                .decode()
+        }
     }
 
     private func operatorEvent(

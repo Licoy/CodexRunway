@@ -580,7 +580,10 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
             {
                 return sameDayCommentary
             }
-            return nextScheduledReset(now: now)?.event
+            if let next = nextScheduledReset(now: now)?.event {
+                return next
+            }
+            return unconfirmedExpiredSchedule(now: now, calendar: calendar)
         case .unknown:
             return latestEvent
         }
@@ -631,7 +634,9 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
                 }
             }
         case .resetScheduled:
-            if event.scheduleBasis == .contextualInference {
+            if event.source.isOperator {
+                .rateLimitResetTodayEvidenceOperatorScheduled
+            } else if event.scheduleBasis == .contextualInference {
                 switch event.resetType {
                 case .global:
                     .rateLimitResetTodayEvidenceResetPreview
@@ -695,6 +700,40 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
 
     public func latestResetAt(now: Date = Date()) -> Date? {
         latestReset(now: now)?.at
+    }
+
+    /// Hosted "no" copy when a published schedule expired without a completion.
+    ///
+    /// `resetTimeline.nextSchedule` is authoritative: a date-precision window may
+    /// still be open locally after the producer already cleared nextSchedule and
+    /// pointed `recentNonCompletedPostId` at the expired event.
+    public func unconfirmedExpiredSchedule(
+        now: Date = Date(),
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> RateLimitResetTodayEvent?
+    {
+        guard resolvedState(now: now, calendar: calendar) == .no,
+              let postID = resetTimeline?.recentNonCompletedPostId,
+              let event = events.first(where: { $0.source.postID == postID }),
+              event.kind == .resetScheduled
+        else {
+            return nil
+        }
+        if nextScheduledReset(now: now)?.event.source.postID == postID {
+            return nil
+        }
+        return event
+    }
+
+    public func unconfirmedScheduleHint(
+        l10n: L10n,
+        now: Date = Date(),
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar)
+        -> (resetType: RateLimitResetType, text: String)?
+    {
+        guard let event = unconfirmedExpiredSchedule(now: now, calendar: calendar) else { return nil }
+        let type = event.resetType.localizedName(l10n: l10n)
+        let template = l10n.text(.rateLimitResetTodayNoHintUnconfirmedSchedule)
+        return (event.resetType, RateLimitResetNoneHint.plain(template: template, type: type, ago: ""))
     }
 
     /// Hosted "no" copy when nothing is completed or scheduled today, but history exists.

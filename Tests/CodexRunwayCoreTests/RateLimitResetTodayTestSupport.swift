@@ -75,7 +75,16 @@ struct ResetStatusEventFixture {
                 }
             }
         case "reset_scheduled":
-            if scheduleBasis == "contextual_inference" {
+            if origin == "operator" {
+                switch resetType {
+                case "banked":
+                    "Operator-confirmed Codex reset-bank credit schedule without an X announcement."
+                case "global_and_banked":
+                    "Operator-confirmed Codex global reset and reset-bank credit schedule without an X announcement."
+                default:
+                    "Operator-confirmed Codex quota reset schedule without an X announcement."
+                }
+            } else if scheduleBasis == "contextual_inference" {
                 switch resetType {
                 case "banked":
                     "High-probability Codex reset-bank credit preview inferred from context."
