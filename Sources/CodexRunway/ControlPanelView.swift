@@ -175,6 +175,17 @@ struct ControlPanelView: View {
                     }
                     .pickerStyle(.segmented)
                 }
+                PickerRow(
+                    title: l10n.text(.mainPanelBackground),
+                    subtitle: l10n.text(.mainPanelBackgroundDescription))
+                {
+                    Picker(l10n.text(.mainPanelBackground), selection: mainPanelBackgroundBinding) {
+                        ForEach(MainPanelBackgroundStyle.allCases, id: \.self) { style in
+                            Text(style.title(l10n)).tag(style)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
                 PickerRow(title: l10n.text(.statusBarStyle), subtitle: l10n.text(.display)) {
                     Picker(l10n.text(.statusBarStyle), selection: statusBarStyleBinding) {
                         ForEach(StatusBarDisplayStyle.allCases, id: \.self) { style in
@@ -397,6 +408,12 @@ struct ControlPanelView: View {
 
     private var appearanceBinding: Binding<AppearancePreference> {
         Binding(get: { settings.preferences.appearance }, set: { settings.updateAppearance($0) })
+    }
+
+    private var mainPanelBackgroundBinding: Binding<MainPanelBackgroundStyle> {
+        Binding(
+            get: { settings.preferences.mainPanelBackgroundStyle },
+            set: { settings.updateMainPanelBackgroundStyle($0) })
     }
 
     private var refreshBinding: Binding<Int> {
@@ -658,6 +675,15 @@ private struct AboutLogoView: View {
         let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent("Resources/AppIcon.png")
         return NSImage(contentsOf: url)
+    }
+}
+
+private extension MainPanelBackgroundStyle {
+    func title(_ l10n: L10n) -> String {
+        switch self {
+        case .translucent: l10n.text(.mainPanelBackgroundTranslucent)
+        case .opaque: l10n.text(.mainPanelBackgroundOpaque)
+        }
     }
 }
 

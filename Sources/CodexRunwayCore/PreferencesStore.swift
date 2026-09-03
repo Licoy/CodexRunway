@@ -27,6 +27,11 @@ public enum AppearancePreference: String, CaseIterable, Codable, Sendable {
     case dark
 }
 
+public enum MainPanelBackgroundStyle: String, CaseIterable, Codable, Sendable {
+    case translucent
+    case opaque
+}
+
 public enum StatusBarDisplayStyle: String, CaseIterable, Codable, Sendable {
     case meters
     case countdown
@@ -88,6 +93,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     public var selectedProvider: RunwayProvider
     public var language: LanguagePreference
     public var appearance: AppearancePreference
+    public var mainPanelBackgroundStyle: MainPanelBackgroundStyle
     public var statusBarDisplayStyle: StatusBarDisplayStyle
     public var statusBarMetersDetailStyle: StatusBarMetersDetailStyle
     public var statusBarBatteryScope: StatusBarBatteryScope
@@ -140,6 +146,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         selectedProvider: RunwayProvider = .codex,
         language: LanguagePreference = .system,
         appearance: AppearancePreference = .system,
+        mainPanelBackgroundStyle: MainPanelBackgroundStyle = .translucent,
         statusBarDisplayStyle: StatusBarDisplayStyle = .meters,
         statusBarMetersDetailStyle: StatusBarMetersDetailStyle = .remainingPercent,
         statusBarBatteryScope: StatusBarBatteryScope = .fiveHour,
@@ -171,6 +178,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         self.selectedProvider = selectedProvider
         self.language = language
         self.appearance = appearance
+        self.mainPanelBackgroundStyle = mainPanelBackgroundStyle
         self.statusBarDisplayStyle = statusBarDisplayStyle
         self.statusBarMetersDetailStyle = statusBarMetersDetailStyle
         self.statusBarBatteryScope = statusBarBatteryScope
@@ -251,6 +259,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         case selectedProvider
         case language
         case appearance
+        case mainPanelBackgroundStyle
         case statusBarDisplayStyle
         case statusBarMetersDetailStyle
         case statusBarBatteryScope
@@ -285,6 +294,9 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         selectedProvider = try container.decodeIfPresent(RunwayProvider.self, forKey: .selectedProvider) ?? .codex
         language = try container.decodeIfPresent(LanguagePreference.self, forKey: .language) ?? .system
         appearance = try container.decodeIfPresent(AppearancePreference.self, forKey: .appearance) ?? .system
+        mainPanelBackgroundStyle = try container.decodeIfPresent(
+            MainPanelBackgroundStyle.self,
+            forKey: .mainPanelBackgroundStyle) ?? .translucent
         statusBarDisplayStyle = try container.decodeIfPresent(StatusBarDisplayStyle.self, forKey: .statusBarDisplayStyle) ?? .meters
         statusBarMetersDetailStyle = try container.decodeIfPresent(StatusBarMetersDetailStyle.self, forKey: .statusBarMetersDetailStyle) ?? .remainingPercent
         statusBarBatteryScope = try container.decodeIfPresent(StatusBarBatteryScope.self, forKey: .statusBarBatteryScope) ?? .fiveHour

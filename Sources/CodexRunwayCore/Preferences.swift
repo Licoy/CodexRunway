@@ -110,6 +110,10 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case duplicateIndexIDs
     case display
     case displayAppearanceSection
+    case mainPanelBackground
+    case mainPanelBackgroundDescription
+    case mainPanelBackgroundOpaque
+    case mainPanelBackgroundTranslucent
     case endDate
     case estimatedAPICost
     case expiresRemaining

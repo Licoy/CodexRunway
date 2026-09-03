@@ -137,6 +137,29 @@ struct PreferencesTests {
         #expect(decoded.language == .traditionalChinese)
     }
 
+    @Test("missing panel background style defaults to translucent")
+    func panelBackgroundDefaultsToTranslucent() throws {
+        #expect(RunwayPreferences().mainPanelBackgroundStyle == .translucent)
+        #expect(MainPanelBackgroundStyle.allCases == [.translucent, .opaque])
+
+        let oldData = """
+        {
+          "language": "english",
+          "appearance": "dark",
+          "refreshIntervalSeconds": 300
+        }
+        """.data(using: .utf8)!
+        let oldPreferences = try JSONDecoder().decode(RunwayPreferences.self, from: oldData)
+        #expect(oldPreferences.mainPanelBackgroundStyle == .translucent)
+
+        let opaqueData = """
+        { "mainPanelBackgroundStyle": "opaque" }
+        """.data(using: .utf8)!
+        #expect(
+            try JSONDecoder().decode(RunwayPreferences.self, from: opaqueData)
+                .mainPanelBackgroundStyle == .opaque)
+    }
+
     @Test("quota bars are the default and first status-bar style")
     func statusBarStyleOrdering() {
         #expect(StatusBarDisplayStyle.allCases.first == .meters)
@@ -155,6 +178,7 @@ struct PreferencesTests {
             selectedProvider: .grok,
             language: .english,
             appearance: .dark,
+            mainPanelBackgroundStyle: .opaque,
             statusBarDisplayStyle: .rings,
             statusBarMetersDetailStyle: .both,
             statusBarBatteryScope: .both,
@@ -179,6 +203,7 @@ struct PreferencesTests {
         #expect(store.load().selectedProvider == .grok)
         #expect(store.load().language == .english)
         #expect(store.load().appearance == .dark)
+        #expect(store.load().mainPanelBackgroundStyle == .opaque)
         #expect(store.load().statusBarDisplayStyle == .rings)
         #expect(store.load().statusBarMetersDetailStyle == .both)
         #expect(store.load().statusBarBatteryScope == .both)

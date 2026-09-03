@@ -135,9 +135,10 @@ enum MainPanelMockRender {
     static func render(
         page: Page,
         appearance: Appearance,
-        language: ResolvedLanguage) throws -> Data
+        language: ResolvedLanguage,
+        backgroundStyle: MainPanelBackgroundStyle = .translucent) throws -> Data
     {
-        let settings = fixtureSettings(language: language)
+        let settings = fixtureSettings(language: language, backgroundStyle: backgroundStyle)
         let model = fixtureModel(settings: settings)
         let visibility = MainPanelVisibility()
         visibility.isVisible = true
@@ -197,7 +198,10 @@ enum MainPanelMockRender {
     /// Isolated preferences so the render never reads or writes the user's real settings.
     /// One fixed suite, wiped per render: unique names would leak a plist per run.
     @MainActor
-    private static func fixtureSettings(language: ResolvedLanguage) -> RunwaySettings {
+    private static func fixtureSettings(
+        language: ResolvedLanguage,
+        backgroundStyle: MainPanelBackgroundStyle = .translucent) -> RunwaySettings
+    {
         let suiteName = "codex-runway-mock-render"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
             preconditionFailure("cannot create mock-render defaults suite")
@@ -205,6 +209,7 @@ enum MainPanelMockRender {
         defaults.removePersistentDomain(forName: suiteName)
         let settings = RunwaySettings(store: PreferencesStore(defaults: defaults))
         settings.updateLanguage(language.preference)
+        settings.updateMainPanelBackgroundStyle(backgroundStyle)
         settings.updateShowsRecentSessions(true)
         settings.updateShowsRateLimitResetToday(true)
         settings.updateShowsCostSummary(true)

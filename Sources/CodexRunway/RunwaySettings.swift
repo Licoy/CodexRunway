@@ -41,6 +41,10 @@ final class RunwaySettings: ObservableObject {
         update { $0.appearance = appearance }
     }
 
+    func updateMainPanelBackgroundStyle(_ style: MainPanelBackgroundStyle) {
+        update { $0.mainPanelBackgroundStyle = style }
+    }
+
     func updateStatusBarDisplayStyle(_ style: StatusBarDisplayStyle) {
         update { $0.statusBarDisplayStyle = style }
     }

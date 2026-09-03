@@ -21,7 +21,7 @@ enum RunwaySurface {
 
     // MARK: Surfaces
 
-    /// Keep panel contrast independent of windows behind the native popover.
+    /// Opaque panel fill when the user turns off popover translucency.
     static let panel = Color(nsColor: .windowBackgroundColor)
 
     /// Cards and interactive rows sitting on the panel.

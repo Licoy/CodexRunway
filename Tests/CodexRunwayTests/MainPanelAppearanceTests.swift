@@ -1,15 +1,19 @@
 import AppKit
 import Testing
 @testable import CodexRunway
+@testable import CodexRunwayCore
 
 @Suite("Main panel appearance")
 struct MainPanelAppearanceTests {
-    @Test("main and detail panels paint an opaque background in both appearances")
+    @Test("opaque main and detail panels paint a solid background in both appearances")
     @MainActor
-    func panelBackgroundDoesNotRevealTheDesktop() throws {
+    func opaquePanelBackgroundDoesNotRevealTheDesktop() throws {
         for page in [MainPanelMockRender.Page.main, .apiCost] {
             for appearance in MainPanelMockRender.Appearance.allCases {
-                let colors = try marginColors(page: page, appearance: appearance)
+                let colors = try marginColors(
+                    page: page,
+                    appearance: appearance,
+                    backgroundStyle: .opaque)
                 for color in colors {
                     // An opaque panel has the same result over white and black
                     // windows. Do not supply an extra background in the renderer:
@@ -20,27 +24,51 @@ struct MainPanelAppearanceTests {
         }
     }
 
-    @Test("main and detail panel backgrounds follow light and dark appearance")
+    @Test("opaque main and detail panel backgrounds follow light and dark appearance")
     @MainActor
-    func panelBackgroundFollowsAppearance() throws {
+    func opaquePanelBackgroundFollowsAppearance() throws {
         for page in [MainPanelMockRender.Page.main, .apiCost] {
-            let light = try #require(marginColors(page: page, appearance: .light).first)
-            let dark = try #require(marginColors(page: page, appearance: .dark).first)
+            let light = try #require(marginColors(
+                page: page,
+                appearance: .light,
+                backgroundStyle: .opaque).first)
+            let dark = try #require(marginColors(
+                page: page,
+                appearance: .dark,
+                backgroundStyle: .opaque).first)
 
             // Check the theme relationship, not a particular macOS RGB value.
             #expect(luminance(light) > luminance(dark) + 0.25)
         }
     }
 
+    @Test("translucent main and detail panels do not paint an opaque fill")
+    @MainActor
+    func translucentPanelBackgroundDoesNotPaintAnOpaqueFill() throws {
+        for page in [MainPanelMockRender.Page.main, .apiCost] {
+            for appearance in MainPanelMockRender.Appearance.allCases {
+                let colors = try marginColors(
+                    page: page,
+                    appearance: appearance,
+                    backgroundStyle: .translucent)
+                for color in colors {
+                    #expect(color.alphaComponent < 0.05)
+                }
+            }
+        }
+    }
+
     @MainActor
     private func marginColors(
         page: MainPanelMockRender.Page,
-        appearance: MainPanelMockRender.Appearance) throws -> [NSColor]
+        appearance: MainPanelMockRender.Appearance,
+        backgroundStyle: MainPanelBackgroundStyle) throws -> [NSColor]
     {
         let data = try MainPanelMockRender.render(
             page: page,
             appearance: appearance,
-            language: .simplifiedChinese)
+            language: .simplifiedChinese,
+            backgroundStyle: backgroundStyle)
         let image = try #require(NSBitmapImageRep(data: data))
         #expect(image.pixelsWide > 100)
         #expect(image.pixelsHigh > 100)

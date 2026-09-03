@@ -141,7 +141,11 @@ struct RunwayPopoverView: View {
             }
         }
         .frame(width: Self.panelSize.width, height: panelHeight, alignment: .topLeading)
-        .background(RunwaySurface.panel)
+        .background {
+            if settings.preferences.mainPanelBackgroundStyle == .opaque {
+                RunwaySurface.panel
+            }
+        }
         .overlay(alignment: .bottom) {
             MainPanelResizeHandle(
                 panelHeight: $panelHeight,
