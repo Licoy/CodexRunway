@@ -150,7 +150,6 @@ enum MainPanelMockRender {
             openGitHub: {},
             openControlPanel: { _ in },
             initialDetailPage: page.sidePanel)
-            .background(Color(nsColor: .windowBackgroundColor))
 
         let host = NSHostingView(rootView: AnyView(root))
         host.appearance = appearance.nsAppearance
