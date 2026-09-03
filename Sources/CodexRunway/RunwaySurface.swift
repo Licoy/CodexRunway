@@ -21,6 +21,9 @@ enum RunwaySurface {
 
     // MARK: Surfaces
 
+    /// Keep panel contrast independent of windows behind the native popover.
+    static let panel = Color(nsColor: .windowBackgroundColor)
+
     /// Cards and interactive rows sitting on the panel.
     static let raised = dynamic(
         light: NSColor.black.withAlphaComponent(0.045),
@@ -63,7 +66,7 @@ enum RunwaySurface {
 }
 
 /// Card chrome per scheme: light gets a translucent gray wash that blends into
-/// the popover material — no outline, no shadow (both read as clutter there);
+/// the panel background — no outline, no shadow (both read as clutter there);
 /// dark keeps translucent fills with a hairline stroke carrying the elevation.
 struct RunwayCardSurface: ViewModifier {
     enum Kind {

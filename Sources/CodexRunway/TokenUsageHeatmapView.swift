@@ -473,7 +473,7 @@ struct TokenUsageHeatmapView: View {
             for label in snapshot.monthLabels {
                 let text = Text(monthTitle(label.month))
                     .font(.caption2)
-                    .foregroundColor(Color(nsColor: .tertiaryLabelColor))
+                    .foregroundColor(Color(nsColor: .secondaryLabelColor))
                 context.draw(
                     context.resolve(text),
                     at: CGPoint(x: CGFloat(label.weekIndex) * step, y: 0),
@@ -1009,7 +1009,7 @@ private struct TokenUsageTrendChartView: View {
             Text("0")
         }
         .font(.system(size: 9, weight: .regular, design: .monospaced))
-        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+        .foregroundStyle(Color(nsColor: .secondaryLabelColor))
         .padding(.trailing, 4)
     }
 
@@ -1021,7 +1021,7 @@ private struct TokenUsageTrendChartView: View {
                 let x = layout.xPosition(for: label.pointIndex)
                 let text = Text(label.title)
                     .font(.caption2)
-                    .foregroundColor(Color(nsColor: .tertiaryLabelColor))
+                    .foregroundColor(Color(nsColor: .secondaryLabelColor))
                 context.draw(context.resolve(text), at: CGPoint(x: x, y: 0), anchor: .top)
             }
         }
