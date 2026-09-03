@@ -117,6 +117,13 @@ private struct QuotaEstimateDetailView: View {
                     meta: methodText(snapshot),
                     figure: snapshot.estimatedCredits.map(QuotaEstimateFormatting.credits) ?? "—")
                 statGrid(snapshot)
+                if let reason = snapshot.unavailableReason {
+                    Text(QuotaEstimatePresentation.unavailableText(reason, l10n: l10n))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                QuotaEstimateDataStatusView(snapshot: snapshot, error: error, l10n: l10n)
                 Text(l10n.text(.quotaEstimateInfo))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -155,7 +162,7 @@ private struct QuotaEstimateDetailView: View {
                 color: Color(nsColor: .systemBlue))
             RunwayStatCard(
                 title: l10n.text(.quotaEstimateThisWeekUsed),
-                value: QuotaEstimateFormatting.credits(snapshot.usedCredits),
+                value: snapshot.creditsComplete ? QuotaEstimateFormatting.credits(snapshot.usedCredits) : "—",
                 color: Color(nsColor: .systemOrange))
             RunwayStatCard(
                 title: l10n.text(.quotaEstimateWeeklyAllowance),
@@ -184,9 +191,10 @@ private struct QuotaEstimateDetailView: View {
                         QuotaEstimateWeekRow(row: row, isFirst: index == 0)
                     }
                     QuotaEstimateWeekFooter(
-                        credits: snapshot.usedCredits,
-                        tokens: snapshot.currentRows.reduce(0) { $0 + $1.tokens },
-                        usd: snapshot.usedUSD,
+                        credits: snapshot.creditsComplete ? snapshot.usedCredits : nil,
+                        tokens: snapshot.currentRows.allSatisfy(\.totalsReported)
+                            ? snapshot.currentRows.reduce(0) { $0 + $1.tokens } : nil,
+                        usd: snapshot.apiEquivalentUSD,
                         l10n: l10n)
                 }
             }
@@ -259,11 +267,11 @@ private struct QuotaEstimateWeekRow: View {
     var body: some View {
         HStack {
             Text(row.date).frame(width: 78, alignment: .leading)
-            Text(QuotaEstimateFormatting.tableCredits(row.credits))
+            Text(row.creditsReported ? QuotaEstimateFormatting.tableCredits(row.credits) : "—")
                 .frame(maxWidth: .infinity, alignment: .trailing)
-            Text(QuotaEstimateCalculator.compactTokens(row.tokens))
+            Text(row.totalsReported ? QuotaEstimateCalculator.compactTokens(row.tokens) : "—")
                 .frame(maxWidth: .infinity, alignment: .trailing)
-            Text(QuotaEstimateFormatting.usd(row.usd))
+            Text(row.usd.map(QuotaEstimateFormatting.usd) ?? "—")
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .font(.caption.monospacedDigit())
@@ -274,19 +282,19 @@ private struct QuotaEstimateWeekRow: View {
 }
 
 private struct QuotaEstimateWeekFooter: View {
-    var credits: Double
-    var tokens: Int
-    var usd: Double
+    var credits: Double?
+    var tokens: Int?
+    var usd: Double?
     var l10n: L10n
 
     var body: some View {
         HStack {
             Text(l10n.text(.total)).frame(width: 78, alignment: .leading)
-            Text(QuotaEstimateFormatting.tableCredits(credits))
+            Text(credits.map(QuotaEstimateFormatting.tableCredits) ?? "—")
                 .frame(maxWidth: .infinity, alignment: .trailing)
-            Text(QuotaEstimateCalculator.compactTokens(tokens))
+            Text(tokens.map(QuotaEstimateCalculator.compactTokens) ?? "—")
                 .frame(maxWidth: .infinity, alignment: .trailing)
-            Text(QuotaEstimateFormatting.usd(usd))
+            Text(usd.map(QuotaEstimateFormatting.usd) ?? "—")
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .font(.caption.weight(.semibold).monospacedDigit())

@@ -380,7 +380,7 @@ struct RunwayModelRefreshTests {
         try await profileService.waitUntilFirstRequest()
         model.switchAccount(id: secondAccount.id, restartCodex: false)
         try await waitForActiveAccount(secondAccount.id, in: store)
-        await profileService.releaseFirstRequest()
+        profileService.releaseFirstRequest()
         try await waitForAccountSwitch(secondAccount.id, in: model)
 
         #expect(model.tokenHeatmapAllDevicesTokens["2026-07-26"] == 200)
@@ -1166,7 +1166,9 @@ struct RunwayModelRefreshTests {
                     date: day,
                     totals: totals,
                     estimatedUSD: 0.5,
-                    rawCredits: 30),
+                    rawCredits: 30,
+                    creditsReported: true,
+                    totalsReported: true),
             ],
             modelRows: [],
             clientRows: [],
@@ -1355,7 +1357,9 @@ private actor FailOnceProfileUsageService {
     }
 }
 
-private actor BlockingProfileUsageService {
+// Keep wait budgets on the model's executor while other UI tests occupy MainActor.
+@MainActor
+private final class BlockingProfileUsageService {
     private var firstRequestStarted = false
     private var firstRequestContinuation: CheckedContinuation<Void, Never>?
 

@@ -983,6 +983,7 @@ struct QuotaEstimateSummaryView: View {
                 subtitleLine(snapshot)
                     .font(.caption)
                     .fixedSize(horizontal: false, vertical: true)
+                QuotaEstimateDataStatusView(snapshot: snapshot, error: error, l10n: l10n)
                 SidePanelDisclosureRow(
                     title: l10n.text(.quotaEstimateThisWeek),
                     action: onDetailsSelect)
@@ -1016,8 +1017,8 @@ struct QuotaEstimateSummaryView: View {
 
     private func subtitleLine(_ snapshot: QuotaEstimateSnapshot) -> Text {
         let unit = l10n.text(.quotaEstimateCredits)
-        if snapshot.usedCredits <= 0, !snapshot.canExtrapolate {
-            return Text(l10n.text(.quotaEstimateCannotExtrapolate))
+        if let reason = snapshot.unavailableReason {
+            return Text(QuotaEstimatePresentation.unavailableText(reason, l10n: l10n))
                 .foregroundColor(.secondary)
         }
 
@@ -1029,9 +1030,6 @@ struct QuotaEstimateSummaryView: View {
         }
         if snapshot.canExtrapolate {
             text = text + Text(" · \(QuotaEstimateFormatting.percent(snapshot.usedPercent))")
-                .foregroundColor(.secondary)
-        } else {
-            text = text + Text(" · \(l10n.text(.quotaEstimateCannotExtrapolate))")
                 .foregroundColor(.secondary)
         }
         if let change = changeText(snapshot) {

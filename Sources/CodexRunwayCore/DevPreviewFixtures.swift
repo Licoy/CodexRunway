@@ -53,7 +53,9 @@ public enum RunwayPreviewFixtures {
                     turns: 12 + offset,
                     threads: 3),
                 estimatedUSD: nil,
-                rawCredits: credits)
+                rawCredits: credits,
+                creditsReported: true,
+                totalsReported: true)
         }
         let previous = QuotaEstimateHistorySample(
             cycleStartDate: QuotaEstimateCalculator.addUTCDays(QuotaEstimateCalculator.utcDay(now), -13),

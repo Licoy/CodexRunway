@@ -42,14 +42,26 @@ public struct QuotaEstimateDailyRow: Sendable, Equatable, Identifiable {
     public var credits: Double
     public var tokens: Int
     public var turns: Int
-    public var usd: Double
+    public var usd: Double?
+    public var creditsReported: Bool
+    public var totalsReported: Bool
 
-    public init(date: String, credits: Double, tokens: Int, turns: Int, usd: Double) {
+    public init(
+        date: String,
+        credits: Double,
+        tokens: Int,
+        turns: Int,
+        usd: Double?,
+        creditsReported: Bool = false,
+        totalsReported: Bool = false)
+    {
         self.date = date
         self.credits = credits
         self.tokens = tokens
         self.turns = turns
         self.usd = usd
+        self.creditsReported = creditsReported
+        self.totalsReported = totalsReported
     }
 
     public static func usd(forCredits credits: Double) -> Double {
@@ -96,6 +108,7 @@ public struct QuotaEstimateSnapshot: Sendable, Equatable {
     public var changeKind: QuotaEstimateChangeKind?
     public var history: [QuotaEstimateHistorySample]
     public var calculatedAt: Date
+    public var unavailableReason: QuotaEstimateUnavailableReason?
 
     public init(
         windowMode: QuotaEstimateWindowMode,
@@ -113,7 +126,8 @@ public struct QuotaEstimateSnapshot: Sendable, Equatable {
         changePercent: Double?,
         changeKind: QuotaEstimateChangeKind?,
         history: [QuotaEstimateHistorySample],
-        calculatedAt: Date)
+        calculatedAt: Date,
+        unavailableReason: QuotaEstimateUnavailableReason? = nil)
     {
         self.windowMode = windowMode
         self.cycleStartDate = cycleStartDate
@@ -131,6 +145,7 @@ public struct QuotaEstimateSnapshot: Sendable, Equatable {
         self.changeKind = changeKind
         self.history = history
         self.calculatedAt = calculatedAt
+        self.unavailableReason = unavailableReason
     }
 }
 
@@ -195,7 +210,8 @@ public enum QuotaEstimateCalculator {
             .map(row(from:))
         let usedCredits = currentRows.reduce(0) { $0 + $1.credits }
         let usedPercent = meter?.usedPercentExact ?? 0
-        let canExtrapolate = meter != nil && usedPercent > 0 && usedCredits > 0
+        let unavailableReason = QuotaEstimateUnavailableReason.evaluate(meter: meter, rows: currentRows)
+        let canExtrapolate = unavailableReason == nil
         let estimatedCredits = canExtrapolate ? usedCredits / (usedPercent / 100) : nil
         let comparison = compare(
             estimatedCredits: estimatedCredits,
@@ -218,7 +234,8 @@ public enum QuotaEstimateCalculator {
             changePercent: comparison.changePercent,
             changeKind: comparison.kind,
             history: QuotaEstimateHistoryStore.normalized(history),
-            calculatedAt: now)
+            calculatedAt: now,
+            unavailableReason: unavailableReason)
     }
 
     public static func sample(from snapshot: QuotaEstimateSnapshot) -> QuotaEstimateHistorySample? {
@@ -287,7 +304,9 @@ public enum QuotaEstimateCalculator {
             credits: daily.rawCredits,
             tokens: daily.totals.totalTokens,
             turns: daily.totals.turns,
-            usd: QuotaEstimateDailyRow.usd(forCredits: daily.rawCredits))
+            usd: daily.estimatedUSD.map { NSDecimalNumber(decimal: $0).doubleValue },
+            creditsReported: daily.creditsReported == true,
+            totalsReported: daily.totalsReported == true)
     }
 
     private static func compare(

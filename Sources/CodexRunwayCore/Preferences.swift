@@ -270,15 +270,22 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case quotaEstimateInfo
     case quotaEstimateMethodOfficial
     case quotaEstimateMethodRolling
+    case quotaEstimateMissingCredits
+    case quotaEstimateNoUsage
+    case quotaEstimateShowingPreviousData
+    case quotaEstimateStatsThrough
     case quotaEstimateThisWeek
     case quotaEstimateThisWeekUsed
     case quotaEstimateUsedPercent
+    case quotaEstimateUnavailableWindow
     case quotaEstimateWeekValue
     case quotaEstimateWeeklyAllowance
     case quotaEstimateWindowMode
     case quotaEstimateWindowOfficial
     case quotaEstimateWindowRolling
     case quotaEstimateVsLast
+    case quotaEstimateZeroCreditsWithUsage
+    case quotaEstimateZeroPercent
     case rateLimitResetDetectedAlertBody
     case rateLimitResetDetectedBankedAlertBody
     case rateLimitResetDetectedGlobalAndBankedAlertBody

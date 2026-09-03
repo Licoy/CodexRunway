@@ -39,6 +39,10 @@ public struct ApiEquivalentDailyRow: Codable, Sendable, Equatable, Identifiable 
     public var totals: ApiEquivalentTotals
     public var estimatedUSD: Decimal?
     public var rawCredits: Double
+    /// Nil for local or legacy data whose credit reporting status is unknown.
+    public var creditsReported: Bool? = nil
+    /// Nil for local or legacy data whose daily totals reporting status is unknown.
+    public var totalsReported: Bool? = nil
 }
 
 public struct ApiEquivalentBreakdownRow: Codable, Sendable, Equatable, Identifiable {
@@ -171,23 +175,29 @@ public struct ApiEquivalentSummary: Codable, Sendable, Equatable {
                 date: item.date,
                 totals: totals,
                 estimatedUSD: totals.hasTokenParts ? PricingTable.equivalentCost(totals: totals) : nil,
-                rawCredits: item.totals?.credits ?? 0)
+                rawCredits: item.totals?.credits ?? 0,
+                creditsReported: item.totals?.creditsReported ?? false,
+                totalsReported: item.totals != nil)
         }
         let totals = try ApiEquivalentTotals.sum(rows.map(\.totals))
         let estimated = rows.compactMap(\.estimatedUSD).reduce(Decimal(0), +)
+        let hasUnpricedUsage = rows.contains {
+            $0.totalsReported != true || ($0.totals.totalTokens > 0 && $0.estimatedUSD == nil)
+        }
+        let hasCompleteCost = totals.hasTokenParts && !hasUnpricedUsage
         let rawCredits = try checkedFiniteSum(rows.map(\.rawCredits), field: "analytics credits")
         return ApiEquivalentSummary(
             source: .onlineAnalytics,
-            confidence: totals.hasTokenParts ? .priced : (totals.totalTokens > 0 ? .tokensOnly : .unavailable),
+            confidence: hasCompleteCost ? .priced : (totals.totalTokens > 0 ? .tokensOnly : .unavailable),
             window: window,
-            estimatedUSD: totals.hasTokenParts ? estimated : nil,
+            estimatedUSD: hasCompleteCost ? estimated : nil,
             totals: totals,
             dailyRows: rows,
             modelRows: try breakdown(items.flatMap(\.models)),
             projectRows: [],
             clientRows: try breakdown(items.flatMap(\.clients)),
             rawCredits: rawCredits,
-            warnings: totals.hasTokenParts ? [] : ["analytics-token-parts-missing"],
+            warnings: hasCompleteCost ? [] : ["analytics-token-parts-missing"],
             pricingVersion: PricingTable.version,
             calculatedAt: calculatedAt)
     }
@@ -284,6 +294,7 @@ private struct ApiAnalyticsBreakdownItem: Decodable {
 
 private struct ApiAnalyticsTotals: Decodable {
     var credits: Double
+    var creditsReported: Bool
     var turns: Int
     var threads: Int
     var textTotalTokens: Int
@@ -304,6 +315,8 @@ private struct ApiAnalyticsTotals: Decodable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         credits = try container.flexibleDouble(.credits)
+        guard credits >= 0 else { throw UsageCostArithmeticError.invalidValue(field: "analytics credits") }
+        creditsReported = try container.contains(.credits) && !container.decodeNil(forKey: .credits)
         turns = try container.flexibleInt(.turns)
         threads = try container.flexibleInt(.threads)
         textTotalTokens = try container.flexibleInt(.textTotalTokens)

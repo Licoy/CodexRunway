@@ -1365,12 +1365,17 @@ final class RunwayModel: ObservableObject {
         }
     }
 
-    private func refreshQuotaEstimateNow() async {
+    func refreshQuotaEstimateNow() async {
+        var expectedGeneration = accountStateGeneration
+        var expectedAuth: CodexAuth?
         do {
             let auth = try await loadValidAuth(preferCached: true)
+            expectedAuth = auth
+            expectedGeneration = accountStateGeneration
             var quota = latestQuota
             if quota == nil {
                 let snapshot = try await services.fetchQuota(auth)
+                guard isCurrentAccount(auth, generation: expectedGeneration) else { return }
                 latestQuota = snapshot
                 applyQuota(snapshot)
                 quota = snapshot
@@ -1378,11 +1383,14 @@ final class RunwayModel: ObservableObject {
             guard let quota else { return }
             await loadQuotaEstimate(auth: auth, quota: quota)
         } catch {
+            guard expectedGeneration == accountStateGeneration else { return }
+            if let expectedAuth, !isCurrentAccount(expectedAuth, generation: expectedGeneration) { return }
             quotaEstimateError = error.localizedDescription
         }
     }
 
     private func loadQuotaEstimate(auth: CodexAuth, quota: QuotaSnapshot) async {
+        let expectedGeneration = accountStateGeneration
         await withRefresh([.quotaEstimate]) {
             do {
                 let range = QuotaEstimateCalculator.analyticsRange()
@@ -1392,13 +1400,14 @@ final class RunwayModel: ObservableObject {
                     range.end,
                     range.window,
                     Date())
-                guard isCurrentAccount(auth, generation: accountStateGeneration) else { return }
+                guard isCurrentAccount(auth, generation: expectedGeneration) else { return }
                 latestQuotaEstimateDaily = summary
                 applyQuotaEstimate(quota: quota, daily: summary, persist: true)
                 quotaEstimateError = nil
             } catch is CancellationError {
                 return
             } catch {
+                guard isCurrentAccount(auth, generation: expectedGeneration) else { return }
                 quotaEstimateError = error.localizedDescription
             }
         }
@@ -1416,7 +1425,7 @@ final class RunwayModel: ObservableObject {
             dailyRows: daily.dailyRows,
             mode: settings.preferences.quotaEstimateWindowMode,
             history: history,
-            now: Date())
+            now: daily.calculatedAt)
         if persist, let sample = QuotaEstimateCalculator.sample(from: snapshot) {
             snapshot.history = quotaEstimateHistoryStore.upsert(accountKey: accountKey, sample: sample)
         }

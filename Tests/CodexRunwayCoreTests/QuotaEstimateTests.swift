@@ -141,6 +141,24 @@ struct QuotaEstimateTests {
         #expect(estimate.estimatedCredits == nil)
     }
 
+    @Test("zero credits do not erase the API cost of substantial token usage")
+    func zeroCreditsPreserveTokenCost() throws {
+        let data = Data(#"{"data":[{"date":"2026-06-29","totals":{"credits":0,"text_total_tokens":694950000,"cached_text_input_tokens":600000000,"uncached_text_input_tokens":90000000,"text_output_tokens":4950000}}]}"#.utf8)
+        let summary = try ApiEquivalentSummary.decodeAnalytics(
+            from: data,
+            window: DateInterval(start: now.addingTimeInterval(-7 * 86_400), end: now))
+        let estimate = QuotaEstimateCalculator.make(
+            quota: weeklyQuota(usedPercent: 47),
+            dailyRows: summary.dailyRows,
+            mode: .rollingWeek,
+            now: now)
+        let cost = try #require(summary.dailyRows.first?.estimatedUSD)
+        #expect(cost > 0)
+        #expect(estimate.currentRows.first?.usd == NSDecimalNumber(decimal: cost).doubleValue)
+        #expect(estimate.usedCredits == 0)
+        #expect(estimate.estimatedCredits == nil)
+    }
+
     @Test("uses exact used percent for extrapolation")
     func usesExactUsedPercent() {
         let quota = snapshot(
@@ -312,6 +330,8 @@ struct QuotaEstimateTests {
                 turns: 2,
                 threads: 1),
             estimatedUSD: nil,
-            rawCredits: credits)
+            rawCredits: credits,
+            creditsReported: true,
+            totalsReported: true)
     }
 }
