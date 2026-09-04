@@ -31,7 +31,7 @@ struct RunwayResetTypePresentationTests {
         let nextLine = try #require(model.rateLimitResetTodayLines.first {
             $0.title == "预计下次重置"
         })
-        #expect(nextLine.value.contains("重置银行 · "))
+        #expect(nextLine.value.contains("重置卡 · "))
         let widget = try #require(model.makeWidgetSnapshot(now: now).resetToday)
         #expect(widget.resetType == .global)
         #expect(widget.nextScheduledResetType == .banked)
