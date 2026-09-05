@@ -171,7 +171,7 @@ struct QuotaTests {
         #expect(snapshot.nextDueReset(after: primaryReset, now: Date(timeIntervalSince1970: 2_001)) == weeklyReset)
     }
 
-    @Test("reset credit summary filters available credits and finds next expiry")
+    @Test("reset credit summary filters available credits and finds expiry bounds")
     func resetCreditSummary() {
         let now = Date(timeIntervalSince1970: 1_000)
         let snapshot = ResetCreditsSnapshot(
@@ -187,9 +187,10 @@ struct QuotaTests {
 
         #expect(summary.availableCount == 2)
         #expect(summary.totalCount == 3)
-        #expect(summary.totalRemainingDuration == 400)
         #expect(summary.nextExpiryDate == Date(timeIntervalSince1970: 1_100))
         #expect(summary.nextExpiryRemaining == 100)
+        #expect(summary.latestExpiryDate == Date(timeIntervalSince1970: 1_300))
+        #expect(summary.latestExpiryRemaining == 300)
     }
 
     @Test("reset credit summary classifies expiration risk")

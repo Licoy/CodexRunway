@@ -215,6 +215,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case missingFromIndex
     case nextResetIn
     case nextExpiry
+    case latestExpiry
+    case resetExpiryUnavailable
+    case resetExpirySummaryHelp
     case needsAttention
     case noExpiry
     case noAvailableResetCredits
@@ -501,7 +504,6 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case updateVersionAvailable
     case upToDate
     case total
-    case totalRemaining
     case tokens
     case tokensOnly
     case testNotification

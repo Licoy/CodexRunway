@@ -90,9 +90,10 @@ public struct ResetCreditSummary: Sendable, Equatable {
     public var expiringCount: Int
     public var unavailableCount: Int
     public var totalCount: Int
-    public var totalRemainingDuration: TimeInterval
     public var nextExpiryDate: Date?
     public var nextExpiryRemaining: TimeInterval?
+    public var latestExpiryDate: Date?
+    public var latestExpiryRemaining: TimeInterval?
     public var updatedAt: Date
 
     public init(snapshot: ResetCreditsSnapshot) {
@@ -103,13 +104,16 @@ public struct ResetCreditSummary: Sendable, Equatable {
         self.expiringCount = risks.filter { $0 == .expiring }.count
         self.unavailableCount = risks.filter { $0 == .unavailable }.count
         self.totalCount = snapshot.credits.count
-        self.totalRemainingDuration = available.reduce(TimeInterval(0)) { $0 + $1.remainingSeconds }
-        let next = available.compactMap { credit -> (Date, TimeInterval)? in
+        let expiries = available.compactMap { credit -> (Date, TimeInterval)? in
             guard let expiry = credit.expiresAt else { return nil }
             return (expiry, credit.remainingSeconds)
-        }.min { $0.0 < $1.0 }
+        }
+        let next = expiries.min { $0.0 < $1.0 }
+        let latest = expiries.max { $0.0 < $1.0 }
         self.nextExpiryDate = next?.0
         self.nextExpiryRemaining = next?.1
+        self.latestExpiryDate = latest?.0
+        self.latestExpiryRemaining = latest?.1
         self.updatedAt = snapshot.updatedAt
     }
 

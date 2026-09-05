@@ -1136,18 +1136,19 @@ struct ResetCreditsSummaryView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
-                HStack(alignment: .firstTextBaseline) {
-                    Text("\(l10n.text(.totalRemaining)): \(duration(summary.totalRemainingDuration))")
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("\(l10n.text(.nextExpiry)): \(ResetCreditExpiryPresentation.duration(summary.nextExpiryRemaining, l10n: l10n))")
                         .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 8)
-                    if let remaining = summary.nextExpiryRemaining {
-                        Text("\(l10n.text(.left)) \(duration(remaining))")
-                            .monospacedDigit()
-                            .fixedSize(horizontal: false, vertical: true)
-                            .multilineTextAlignment(.trailing)
-                    }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .help(ResetCreditExpiryPresentation.help(date: summary.nextExpiryDate, updatedAt: summary.updatedAt, l10n: l10n))
+                    Text("\(l10n.text(.latestExpiry)): \(ResetCreditExpiryPresentation.duration(summary.latestExpiryRemaining, l10n: l10n))")
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .help(ResetCreditExpiryPresentation.help(date: summary.latestExpiryDate, updatedAt: summary.updatedAt, l10n: l10n))
                 }
                 .font(.caption)
+                .monospacedDigit()
                 .foregroundStyle(.secondary)
                 SidePanelDisclosureRow(
                     title: "\(summary.availableCount) \(l10n.text(.availableResets))",
@@ -1158,10 +1159,6 @@ struct ResetCreditsSummaryView: View {
                     .foregroundStyle(.secondary)
             }
         }
-    }
-
-    private func duration(_ seconds: TimeInterval) -> String {
-        DurationFormatter.localized(seconds, language: l10n.language)
     }
 }
 

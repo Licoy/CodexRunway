@@ -367,8 +367,16 @@ private struct ResetCreditsDetailView: View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
             RunwayStatCard(title: l10n.text(.available), value: "\(summary.availableCount)", color: Color(nsColor: .systemGreen))
             RunwayStatCard(title: l10n.text(.expiringSoon), value: "\(summary.expiringCount)", color: Color(nsColor: .systemYellow))
-            RunwayStatCard(title: l10n.text(.totalRemaining), value: duration(summary.totalRemainingDuration), color: Color(nsColor: .systemBlue))
-            RunwayStatCard(title: l10n.text(.nextExpiry), value: summary.nextExpiryRemaining.map(duration) ?? "--", color: Color(nsColor: .systemOrange))
+            RunwayStatCard(
+                title: l10n.text(.nextExpiry),
+                value: ResetCreditExpiryPresentation.duration(summary.nextExpiryRemaining, l10n: l10n),
+                color: Color(nsColor: .systemOrange))
+                .help(ResetCreditExpiryPresentation.help(date: summary.nextExpiryDate, updatedAt: summary.updatedAt, l10n: l10n))
+            RunwayStatCard(
+                title: l10n.text(.latestExpiry),
+                value: ResetCreditExpiryPresentation.duration(summary.latestExpiryRemaining, l10n: l10n),
+                color: Color(nsColor: .systemBlue))
+                .help(ResetCreditExpiryPresentation.help(date: summary.latestExpiryDate, updatedAt: summary.updatedAt, l10n: l10n))
         }
     }
 
@@ -391,10 +399,6 @@ private struct ResetCreditsDetailView: View {
                 }
             }
         }
-    }
-
-    private func duration(_ seconds: TimeInterval) -> String {
-        DurationFormatter.localized(seconds, language: l10n.language, includeSeconds: false)
     }
 }
 

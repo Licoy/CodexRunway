@@ -139,6 +139,7 @@ struct GrokQuotaPresentationTests {
         #expect(summary.availableCount == 1)
         #expect(summary.totalCount == 1)
         #expect(summary.nextExpiryDate == expiry)
+        #expect(summary.latestExpiryDate == expiry)
         #expect(details.count == 1)
         #expect(details[0].id == "restok_ui")
         #expect(details[0].state == .available)
@@ -149,8 +150,31 @@ struct GrokQuotaPresentationTests {
             GrokResetCreditsSnapshot(availableCount: 0, tokens: [], updatedAt: now))
         #expect(empty.availableCount == 0)
         #expect(empty.totalCount == 0)
+        #expect(empty.latestExpiryDate == nil)
+        #expect(empty.latestExpiryRemaining == nil)
         #expect(GrokResetCreditsPresentation.details(
             GrokResetCreditsSnapshot(availableCount: 0, tokens: [], updatedAt: now),
             l10n: l10n).isEmpty)
+    }
+
+    @Test("reset-credit expiry bounds follow multiple Grok validity end dates")
+    func resetCreditExpiryBounds() {
+        let now = Date(timeIntervalSince1970: 1_786_601_000)
+        let snapshot = GrokResetCreditsSnapshot(
+            availableCount: 2,
+            tokens: [
+                GrokResetToken(tokenID: "latest", validityStart: nil, validityEnd: now.addingTimeInterval(25 * 86_400)),
+                GrokResetToken(tokenID: "expired", validityStart: nil, validityEnd: now.addingTimeInterval(-86_400)),
+                GrokResetToken(tokenID: "next", validityStart: nil, validityEnd: now.addingTimeInterval(3 * 86_400)),
+            ],
+            updatedAt: now)
+        let summary = GrokResetCreditsPresentation.summary(snapshot)
+        #expect(summary.nextExpiryDate == now.addingTimeInterval(3 * 86_400))
+        #expect(summary.latestExpiryDate == now.addingTimeInterval(25 * 86_400))
+        #expect(summary.nextExpiryRemaining == TimeInterval(3 * 86_400))
+        #expect(summary.latestExpiryRemaining == TimeInterval(25 * 86_400))
+        #expect(summary.availableCount == 2)
+        #expect(summary.expiringCount == 1)
+        #expect(summary.unavailableCount == 1)
     }
 }
