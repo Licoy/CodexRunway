@@ -408,7 +408,7 @@ private struct AccountDetailCard: View {
         Text(text)
             .font(.caption)
             .foregroundStyle(color)
-            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder

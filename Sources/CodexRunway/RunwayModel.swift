@@ -295,7 +295,7 @@ final class RunwayModel: ObservableObject {
         self.quotaEstimateHistoryStore = quotaEstimateHistoryStore
         self.grokModule = grokModule
         self.grokCLIAvailable = grokCLIAvailable
-        self.accountSwitcher = AccountSwitcher(store: accountStore)
+        self.accountSwitcher = AccountSwitcher(store: accountStore, fetchQuota: services.fetchQuota)
         self.accountImporter = AccountImporter(store: accountStore)
         self.accountQuotaRefresher = AccountQuotaRefresher(
             store: accountStore,
@@ -410,12 +410,16 @@ final class RunwayModel: ObservableObject {
                 }
             } catch {
                 accountOperationMessage = nil
+                reloadAccountIndex()
                 lastError = switchFailureMessage(error)
             }
         }
     }
 
     private func switchFailureMessage(_ error: Error) -> String {
+        if isAuthenticationFailure(error) {
+            return l10n.text(.accountsNeedsReauth)
+        }
         if let storeError = error as? AccountStoreError {
             switch storeError {
             case .missingRefreshToken, .expiredAccessWithoutRefresh:

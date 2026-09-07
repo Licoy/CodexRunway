@@ -101,6 +101,9 @@ public struct QuotaClient: Sendable {
             request.setValue(accountId, forHTTPHeaderField: "ChatGPT-Account-Id")
         }
         let (data, response) = try await RunwayNetwork.data(for: request, session: session)
+        if let http = response as? HTTPURLResponse, http.statusCode == 401 {
+            throw URLError(.userAuthenticationRequired)
+        }
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
             throw URLError(.badServerResponse)
         }

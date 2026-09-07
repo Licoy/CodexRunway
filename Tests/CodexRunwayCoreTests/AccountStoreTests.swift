@@ -662,7 +662,7 @@ struct AccountStoreTests {
             userId: "user-two")
         let first = try store.upsert(auth: firstAuth, makeActive: true)
         let second = try store.upsert(auth: secondAuth)
-        let switcher = AccountSwitcher(store: store)
+        let switcher = AccountSwitcher(store: store, fetchQuota: { try await SwitchQuotaURLProtocol.client().fetchQuota(auth: $0) })
 
         _ = try await switcher.switchTo(accountId: second.id)
         #expect(CodexIdentityClaims.decode(try store.loadOfficialAuth().tokens.idToken)?.userId == "user-two")

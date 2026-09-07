@@ -9,10 +9,18 @@ public struct AccountSwitchResult: Sendable, Equatable {
 public struct AccountSwitcher: Sendable {
     public var store: AccountStore
     public var tokenRefresher: TokenRefresher
+    public var fetchQuota: @Sendable (CodexAuth) async throws -> QuotaSnapshot
 
-    public init(store: AccountStore = AccountStore(), tokenRefresher: TokenRefresher = TokenRefresher()) {
+    public init(
+        store: AccountStore = AccountStore(),
+        tokenRefresher: TokenRefresher = TokenRefresher(),
+        fetchQuota: @escaping @Sendable (CodexAuth) async throws -> QuotaSnapshot = {
+            try await QuotaClient().fetchQuota(auth: $0)
+        })
+    {
         self.store = store
         self.tokenRefresher = tokenRefresher
+        self.fetchQuota = fetchQuota
     }
 
     public func switchTo(accountId: String, now: Date = Date()) async throws -> AccountSwitchResult {
@@ -29,7 +37,20 @@ public struct AccountSwitcher: Sendable {
             throw AccountStoreError.notUsableAsCodexLogin
         }
 
-        auth = try await ensureValid(auth: auth, accountId: accountId, isActiveTarget: true)
+        // Validate the target before replacing the current login or restarting the app.
+        do {
+            auth = try await ensureValid(auth: auth, accountId: accountId, isActiveTarget: false)
+            if !auth.isAPIKeyAuth {
+                _ = try await fetchQuota(auth)
+            }
+        } catch {
+            if (error as? URLError)?.code == .userAuthenticationRequired,
+               let account = try? store.loadIndex().account(id: accountId)
+            {
+                try? store.updateMetadata(account.applying(error: error.localizedDescription, requiresReauth: true))
+            }
+            throw error
+        }
 
         switch auth.loginUsability {
         case .usable:
