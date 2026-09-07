@@ -53,6 +53,7 @@ extension L10n {
         .accountsAPIKeyHint: "Collez une clé API OpenAI. Les comptes API n’affichent pas les jauges de quota ChatGPT.",
         .accountsCurrent: "Actuel",
         .accountsDelete: "Retirer",
+        .accountsActions: "Actions du compte",
         .accountsDeleteConfirmMessage: "Retirer ce compte de CodexRunway ? La connexion officielle Codex reste inchangée, sauf s’il s’agit du compte actuel.",
         .accountsDeleteConfirmTitle: "Retirer le compte ?",
         .accountsDeselectAll: "Tout désélectionner",

@@ -31,6 +31,27 @@ struct AccountSwitcherTests {
         #expect(try store.loadOfficialAuth().tokens.refreshToken.hasPrefix("refresh-current"))
     }
 
+    @Test("removing an inactive account keeps official auth and the other credentials")
+    func removesOnlySelectedAccount() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let official = root.appendingPathComponent("auth.json")
+        let store = AccountStore(rootURL: root.appendingPathComponent("accounts"), officialAuthURL: official)
+        let auth = sampleAuth(accountId: "current", email: "current@example.com", refresh: "refresh-current")
+        let current = try store.upsert(auth: auth, makeActive: true)
+        let removed = try store.upsert(auth: sampleAuth(accountId: "removed", email: "removed@example.com", refresh: "refresh-removed"))
+        try store.saveOfficialAuth(auth)
+        let before = try Data(contentsOf: official)
+
+        try store.deleteAccount(id: removed.id)
+
+        #expect(try Data(contentsOf: official) == before)
+        #expect(try store.loadIndex().accounts.map(\.id) == [current.id])
+        #expect(try store.loadIndex().activeAccountId == current.id)
+        #expect(!FileManager.default.fileExists(atPath: store.credentialURL(id: removed.id).path))
+        #expect(FileManager.default.fileExists(atPath: store.credentialURL(id: current.id).path))
+    }
+
     private func sampleAuth(accountId: String, email: String, refresh: String) -> CodexAuth {
         let idToken = jwt(payload: [
             "email": email,

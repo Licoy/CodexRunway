@@ -9,6 +9,7 @@ struct AccountsDetailView: View {
     var onAddAccount: () -> Void
 
     @State private var accountPendingSwitch: ManagedAccount?
+    @State private var accountPendingDelete: ManagedAccount?
     @State private var restartAfterSwitch = true
 
     var body: some View {
@@ -36,6 +37,8 @@ struct AccountsDetailView: View {
                                 accountPendingSwitch = account
                             } onRefresh: {
                                 model.refreshAccountQuota(id: account.id)
+                            } onDelete: {
+                                accountPendingDelete = account
                             }
                         }
                     }
@@ -57,6 +60,25 @@ struct AccountsDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .alert(
+            l10n.text(.accountsDeleteConfirmTitle),
+            isPresented: Binding(
+                get: { accountPendingDelete != nil },
+                set: { if !$0 { accountPendingDelete = nil } }))
+        {
+            Button(l10n.text(.accountsDelete), role: .destructive) {
+                if let id = accountPendingDelete?.id {
+                    model.deleteAccount(id: id)
+                }
+                accountPendingDelete = nil
+            }
+            Button(l10n.text(.cancel), role: .cancel) {
+                accountPendingDelete = nil
+            }
+            .keyboardShortcut(.defaultAction)
+        } message: {
+            Text("\(accountPendingDelete?.resolvedDisplayName ?? "")\n\n\(l10n.text(.accountsDeleteConfirmMessage))")
+        }
         .sheet(isPresented: Binding(
             get: { accountPendingSwitch != nil },
             set: { if !$0 { accountPendingSwitch = nil } }))
@@ -310,6 +332,7 @@ private struct AccountDetailCard: View {
     var isRefreshing: Bool
     var onSelect: () -> Void
     var onRefresh: () -> Void
+    var onDelete: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -361,6 +384,22 @@ private struct AccountDetailCard: View {
                     isLoading: isRefreshing,
                     tone: .normal,
                     action: onRefresh)
+                Menu {
+                    Button(role: .destructive, action: onDelete) {
+                        Label(l10n.text(.accountsDelete), systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.body)
+                        .frame(width: 28, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .disabled(isBusy || isRefreshing)
+                .help(l10n.text(.accountsActions))
+                .accessibilityLabel(l10n.text(.accountsActions))
             }
         }
     }
