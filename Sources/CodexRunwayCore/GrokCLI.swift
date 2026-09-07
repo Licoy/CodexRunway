@@ -74,7 +74,7 @@ public struct GrokCLIClient: Sendable {
     public init(
         executableURL: URL? = GrokExecutableLocator.locate(),
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        session: URLSession = RunwayNetwork.session,
+        session: URLSession? = nil,
         billingBaseURL: URL = URL(string: "https://cli-chat-proxy.grok.com/v1")!,
         commandTimeout: TimeInterval = 300,
         openURL: @escaping GrokOAuthLogin.OpenURL = GrokOAuthLogin.openInDefaultBrowser,

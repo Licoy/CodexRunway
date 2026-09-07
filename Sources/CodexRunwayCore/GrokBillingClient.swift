@@ -22,7 +22,7 @@ public struct GrokBillingClient: Sendable {
     public static let defaultResetCreditsURL = URL(
         string: "https://grok.com/prod_mc_billing.ConsumerUiSvc/GetRemainingResets")!
 
-    public var session: URLSession
+    public var session: URLSession?
     public var baseURL: URL
     /// Official Connect / gRPC-Web RPC that lists remaining usage-reset cards.
     public var resetCreditsURL: URL
@@ -30,7 +30,7 @@ public struct GrokBillingClient: Sendable {
     public var clientVersionProvider: ClientVersionProvider
 
     public init(
-        session: URLSession = RunwayNetwork.session,
+        session: URLSession? = nil,
         baseURL: URL = URL(string: "https://cli-chat-proxy.grok.com/v1")!,
         resetCreditsURL: URL = GrokBillingClient.defaultResetCreditsURL,
         clientVersionProvider: @escaping ClientVersionProvider)
@@ -42,7 +42,7 @@ public struct GrokBillingClient: Sendable {
     }
 
     public init(
-        session: URLSession = RunwayNetwork.session,
+        session: URLSession? = nil,
         baseURL: URL = URL(string: "https://cli-chat-proxy.grok.com/v1")!,
         resetCreditsURL: URL = GrokBillingClient.defaultResetCreditsURL,
         clientVersion: GrokCLIClientVersionProvider? = nil)
@@ -184,7 +184,7 @@ public struct GrokBillingClient: Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await RunwayNetwork.data(for: request, session: session)
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as URLError where error.code == .timedOut || error.code == .cancelled {
@@ -223,7 +223,7 @@ public struct GrokBillingClient: Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await RunwayNetwork.data(for: request, session: session)
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as URLError where error.code == .timedOut || error.code == .cancelled {

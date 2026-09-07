@@ -1,11 +1,11 @@
 import Foundation
 
 public struct QuotaClient: Sendable {
-    public var session: URLSession
+    public var session: URLSession?
     public var baseURL: URL
 
     public init(
-        session: URLSession = RunwayNetwork.session,
+        session: URLSession? = nil,
         baseURL: URL = URL(string: "https://chatgpt.com/backend-api")!)
     {
         self.session = session
@@ -100,7 +100,7 @@ public struct QuotaClient: Sendable {
         if let accountId = AccountIdentity.oauthAccountId(for: auth), !accountId.isEmpty {
             request.setValue(accountId, forHTTPHeaderField: "ChatGPT-Account-Id")
         }
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await RunwayNetwork.data(for: request, session: session)
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
             throw URLError(.badServerResponse)
         }

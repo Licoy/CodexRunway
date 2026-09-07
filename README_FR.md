@@ -135,6 +135,12 @@ bash Scripts/package-app.sh
 
 L’app est écrite dans `dist/CodexRunway.app`. Les versions publiques contenant ce correctif et les builds ad hoc locaux utilisent l’instantané dérivé versionné en lecture seule `~/.codex-runway/widget-snapshot.json` avec les droits `0600`. Un build Developer ID avec un App Group enregistré peut utiliser `RUNWAY_WIDGET_STORAGE_MODE=app-group`. L’instantané ne contient ni e-mail, ni ID de compte, ni jeton, ni JSON d’auth, ni texte brut d’événement externe. La signature Developer ID, l’enregistrement App Group et la notarisation restent un travail de distribution futur.
 
+## Proxy réseau
+
+Dans **Panneau de contrôle → Général → Réseau**, choisissez **Réglages système**, **Proxy HTTP** ou **Proxy SOCKS5**. Les proxys personnalisés acceptent un nom d’utilisateur et un mot de passe. Le réglage couvre les requêtes Codex, les requêtes et opérations CLI Grok lancées par l’app, les flux publics de statut et de prix, ainsi que la recherche de mises à jour, leurs notes et leurs fichiers. Les pages de connexion du navigateur et les CLI externes déjà lancées gardent leurs propres réglages ; le proxy système reste inchangé.
+
+Cliquez sur **Enregistrer le proxy** pour appliquer les changements ; une mise à jour en cours conserve sa configuration initiale. **Tester la connexion** récupère uniquement le flux public des mises à jour avec les réglages en cours de saisie, sans envoyer d’identifiants de compte ni enregistrer ces réglages. Les identifiants du proxy sont stockés dans le trousseau macOS, séparément des préférences non sensibles. Une configuration invalide, des identifiants indisponibles ou un échec du proxy personnalisé ne provoquent pas de connexion directe ; corrigez les réglages ou choisissez explicitement **Réglages système**.
+
 ## Confidentialité
 
 - Les jetons sont lus depuis le `~/.codex/auth.json` local ; les identifiants multi-comptes sont stockés uniquement sous `~/.codex-runway/accounts/<id>/auth.json` (répertoire `0700`, fichier `0600`). L’index des comptes `index.json` ne contient jamais de jetons.

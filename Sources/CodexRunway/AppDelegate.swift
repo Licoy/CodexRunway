@@ -29,6 +29,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        controller?.stop()
+    }
+
     private func finishLaunching(initialWidgetReloadAllowed: Bool) {
         controller = StatusController(
             initialWidgetReloadAllowed: initialWidgetReloadAllowed)

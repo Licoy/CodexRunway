@@ -1,11 +1,11 @@
 import Foundation
 
 public struct TokenRefresher: Sendable {
-    public var session: URLSession
+    public var session: URLSession?
     public var tokenURL: URL
 
     public init(
-        session: URLSession = RunwayNetwork.session,
+        session: URLSession? = nil,
         tokenURL: URL = URL(string: "https://auth.openai.com/oauth/token")!)
     {
         self.session = session
@@ -40,7 +40,7 @@ public struct TokenRefresher: Sendable {
             parts.append("client_id=\(CodexOAuthLogin.clientID.urlFormEncoded)")
         }
         request.httpBody = Data(parts.joined(separator: "&").utf8)
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await RunwayNetwork.data(for: request, session: session)
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
             throw URLError(.userAuthenticationRequired)
         }

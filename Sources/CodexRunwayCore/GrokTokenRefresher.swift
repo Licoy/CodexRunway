@@ -6,14 +6,14 @@ import Foundation
 /// Writes never happen here — callers persist the returned auth.json bytes with the correct
 /// home (managed copy only for non-current; official + managed for current).
 public struct GrokTokenRefresher: Sendable {
-    public var session: URLSession
+    public var session: URLSession?
     public var tokenURL: URL
     /// Refresh when remaining lifetime is at or below this skew (default 2 minutes).
     public var skewSeconds: TimeInterval
     public var clientIDFallback: String
 
     public init(
-        session: URLSession = RunwayNetwork.session,
+        session: URLSession? = nil,
         tokenURL: URL = URL(string: "https://auth.x.ai/oauth2/token")!,
         skewSeconds: TimeInterval = 120,
         clientIDFallback: String = GrokOAuthLogin.clientID)
@@ -98,7 +98,7 @@ public struct GrokTokenRefresher: Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await RunwayNetwork.data(for: request, session: session)
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as URLError where error.code == .timedOut || error.code == .cancelled {

@@ -135,6 +135,12 @@ bash Scripts/package-app.sh
 
 產生的應用程式位於 `dist/CodexRunway.app`。包含此修復的正式 Release 和本機 ad-hoc 建置預設從 `~/.codex-runway/widget-snapshot.json` 讀取權限為 `0600` 的版本化衍生快照；已註冊 App Group 的 Developer ID 建置可改用 `RUNWAY_WIDGET_STORAGE_MODE=app-group`。快照不含信箱、帳號 ID、token、認證 JSON 或外部事件原文。後續仍可接入 Developer ID、App Group 註冊與公證。
 
+## 網路代理
+
+在 **控制面板 → 一般 → 網路** 中選擇 **跟隨系統**、**HTTP 代理** 或 **SOCKS5 代理**，自訂代理支援使用者名稱與密碼驗證；設定涵蓋 Codex 請求、應用程式發起的 Grok 請求與 CLI 操作、公開狀態與價格來源，以及軟體更新檢查、更新說明與安裝套件下載；瀏覽器登入頁面與已執行的外部 CLI 程序沿用各自的網路設定，不修改系統代理
+
+修改須點擊 **儲存代理設定** 後生效，進行中的更新沿用開始時的設定；**測試連線** 僅用目前草稿讀取公開更新來源，不傳送帳號憑據，也不儲存草稿；代理憑據儲存在 macOS 鑰匙圈，與非機密設定分開存放；設定損壞、憑據無法使用或自訂代理失敗時不會自動直接連線，請修復設定或主動改回 **跟隨系統**
+
 ## 隱私
 
 - token 從本機 `~/.codex/auth.json` 讀取；多帳號憑證僅保存在 `~/.codex-runway/accounts/<id>/auth.json`（目錄 `0700`、檔案 `0600`）。帳號索引 `index.json` 不含 token。

@@ -82,6 +82,8 @@ struct PreferencesTests {
         #expect(chinese.text(.statusBarMetersDetailBoth) == "两者都显示")
         #expect(english.text(.updateNetworkProxyHint).contains("system proxy bypass"))
         #expect(chinese.text(.updateNetworkProxyHint).contains("系统代理绕过"))
+        #expect(english.text(.updateNetworkProxyHint).contains("app proxy address, port, username and password"))
+        #expect(chinese.text(.updateNetworkProxyHint).contains("应用代理的地址、端口、用户名和密码"))
         #expect(english.text(.accountsForceCurrent) == "Force this account as the current login")
         #expect(chinese.text(.accountsForceCurrent) == "强制设为环境当前账号")
         #expect(L10n(language: .traditionalChinese).text(.settings) == "設定")

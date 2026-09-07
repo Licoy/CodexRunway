@@ -90,7 +90,7 @@ public enum CodexOAuthLogin {
     public static func exchangeCode(
         _ code: String,
         session: Session,
-        urlSession: URLSession = .shared) async throws -> TokenExchangeResult
+        urlSession: URLSession? = nil) async throws -> TokenExchangeResult
     {
         var request = URLRequest(url: tokenEndpoint)
         request.httpMethod = "POST"
@@ -104,7 +104,7 @@ public enum CodexOAuthLogin {
             "code_verifier=\(session.codeVerifier.urlFormEncoded)",
         ].joined(separator: "&")
         request.httpBody = Data(body.utf8)
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await RunwayNetwork.data(for: request, session: urlSession)
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
             throw URLError(.userAuthenticationRequired)
         }

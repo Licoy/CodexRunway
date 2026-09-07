@@ -50,6 +50,8 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     }
 
     func start() {
+        // Load proxy credentials before lazy models/updater can start any automatic requests.
+        settings.prepareNetwork()
         let button = statusItem.button
         button?.toolTip = "CodexRunway"
         button?.target = self
@@ -101,6 +103,11 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         beginFullRefresh(
             policy: .ifChanged,
             refreshWidgets: hasActiveWidgets)
+    }
+
+    func stop() {
+        timer?.invalidate()
+        updaterService.stop()
     }
 
     @objc private func handleStatusItemClick(_ sender: NSStatusBarButton) {

@@ -135,6 +135,12 @@ bash Scripts/package-app.sh
 
 The app is written to `dist/CodexRunway.app`. Public releases containing this fix and local ad-hoc builds use the read-only versioned derived snapshot at `~/.codex-runway/widget-snapshot.json` with `0600` permissions. A Developer ID build with a registered App Group can instead set `RUNWAY_WIDGET_STORAGE_MODE=app-group`. The snapshot contains no email, account ID, token, auth JSON, or raw external event text. Developer ID signing, App Group registration, and notarization remain available as future distribution work.
 
+## Network proxy
+
+In **Control Panel → General → Network**, choose **Follow System**, **HTTP Proxy**, or **SOCKS5 Proxy**; custom proxies support username and password authentication. The setting covers Codex requests, app-initiated Grok requests and CLI operations, public status and pricing feeds, and software update checks, release notes, and package downloads. Browser sign-in pages and already-running external CLI processes keep their own network settings; the system proxy is not changed.
+
+Changes apply only after **Save Proxy Settings**; a running update keeps the configuration it started with. **Test Connection** uses the current draft to fetch the public update feed without sending account credentials or saving the draft. Proxy credentials are stored in the macOS Keychain, separately from non-secret preferences. Invalid configuration, unavailable credentials, or a failed custom proxy do not trigger a direct connection; fix the settings or explicitly switch back to **Follow System**.
+
 ## Privacy
 
 - Tokens are read from local `~/.codex/auth.json`; multi-account credentials are stored only under `~/.codex-runway/accounts/<id>/auth.json` (directory mode `0700`, file mode `0600`). The account index `index.json` never contains tokens.

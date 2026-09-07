@@ -88,7 +88,7 @@ public enum GrokOAuthLogin {
     /// Run device-code login and write `auth.json` into `homeURL` (mode `0600`).
     public static func login(
         homeURL: URL,
-        session: URLSession = RunwayNetwork.session,
+        session: URLSession? = nil,
         openURL: @escaping OpenURL = openInDefaultBrowser,
         now: @escaping @Sendable () -> Date = Date.init,
         onDeviceCode: DeviceCodeHandler? = nil) async throws
@@ -107,7 +107,7 @@ public enum GrokOAuthLogin {
         try writeAuthJSON(data, homeURL: homeURL)
     }
 
-    public static func startDeviceFlow(session: URLSession = RunwayNetwork.session) async throws -> DeviceCode {
+    public static func startDeviceFlow(session: URLSession? = nil) async throws -> DeviceCode {
         let discovery = try await discover(session: session)
         return try await requestDeviceCode(
             deviceAuthorizationEndpoint: discovery.deviceAuthorizationEndpoint,
@@ -117,7 +117,7 @@ public enum GrokOAuthLogin {
 
     public static func waitForAuthorization(
         device: DeviceCode,
-        session: URLSession = RunwayNetwork.session) async throws -> TokenBundle
+        session: URLSession? = nil) async throws -> TokenBundle
     {
         var interval = max(device.interval, defaultPollInterval)
         let codeDeadline = Date().addingTimeInterval(max(1, device.expiresIn))
@@ -171,14 +171,14 @@ public enum GrokOAuthLogin {
         var tokenEndpoint: URL
     }
 
-    private static func discover(session: URLSession) async throws -> Discovery {
+    private static func discover(session: URLSession?) async throws -> Discovery {
         var request = URLRequest(url: discoveryURL)
         request.timeoutInterval = 30
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await RunwayNetwork.data(for: request, session: session)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -201,7 +201,7 @@ public enum GrokOAuthLogin {
     private static func requestDeviceCode(
         deviceAuthorizationEndpoint: URL,
         tokenEndpoint: URL,
-        session: URLSession) async throws -> DeviceCode
+        session: URLSession?) async throws -> DeviceCode
     {
         var request = URLRequest(url: deviceAuthorizationEndpoint)
         request.httpMethod = "POST"
@@ -214,7 +214,7 @@ public enum GrokOAuthLogin {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await RunwayNetwork.data(for: request, session: session)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -260,7 +260,7 @@ public enum GrokOAuthLogin {
     private static func exchangeDeviceCode(
         deviceCode: String,
         tokenEndpoint: URL,
-        session: URLSession) async throws -> TokenBundle
+        session: URLSession?) async throws -> TokenBundle
     {
         var request = URLRequest(url: tokenEndpoint)
         request.httpMethod = "POST"
@@ -277,7 +277,7 @@ public enum GrokOAuthLogin {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await RunwayNetwork.data(for: request, session: session)
         } catch is CancellationError {
             throw CancellationError()
         } catch {

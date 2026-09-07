@@ -124,6 +124,36 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case checkForUpdates
     case fiveHourUsage
     case general
+    case networkProxy
+    case networkProxyMode
+    case networkProxySystem
+    case networkProxyHTTP
+    case networkProxySOCKS5
+    case networkProxyHost
+    case networkProxyPort
+    case networkProxyAuthentication
+    case networkProxyUsername
+    case networkProxyPassword
+    case networkProxySavedCredentials
+    case networkProxyLoadCredentials
+    case networkProxySave
+    case networkProxyTest
+    case networkProxyTesting
+    case networkProxyTestSucceeded
+    case networkProxyTestScope
+    case networkProxySaved
+    case networkProxyCleanupFailed
+    case proxyInvalidConfiguration
+    case proxyInvalidHost
+    case proxyInvalidPort
+    case proxyInvalidCredentials
+    case proxyCredentialsUnavailable
+    case proxyCredentialStoreFailed
+    case proxyConnectionFailed
+    case proxyAuthenticationFailed
+    case proxyNotReady
+    case updateProxyUnavailable
+    case proxyInvalidUpdateURL
     case grokAccountsAddFile
     case grokAccountsAddOAuth
     case grokAccountsAddPaste

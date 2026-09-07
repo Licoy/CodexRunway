@@ -37,6 +37,11 @@
   <true/>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+  </dict>
   <key>NSAppDataUsageDescription</key>
   <string>CodexRunway reads local Codex and Grok configuration to show quota, reset credits, and API-equivalent cost.</string>
   <key>SUEnableAutomaticChecks</key>

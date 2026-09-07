@@ -4,13 +4,13 @@ public struct RateLimitResetTodayClient: Sendable {
     public static let siteURL = URL(string: "https://www.codexrunway.com/")!
     public static let statusURL = URL(string: "https://www.codexrunway.com/api/status.json")!
 
-    public var session: URLSession
+    public var session: URLSession?
     public var statusURL: URL
     /// When set, `fetchStatus` returns a local fixture instead of calling the network.
     public var devMockKind: RateLimitResetTodaySnapshot.DevMockKind?
 
     public init(
-        session: URLSession = RunwayNetwork.session,
+        session: URLSession? = nil,
         statusURL: URL = RateLimitResetTodayClient.statusURL,
         devMockKind: RateLimitResetTodaySnapshot.DevMockKind? = RateLimitResetTodayClient.resolveDevMockKind())
     {
@@ -30,7 +30,7 @@ public struct RateLimitResetTodayClient: Sendable {
         request.timeoutInterval = 20
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await RunwayNetwork.data(for: request, session: session)
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
             throw URLError(.badServerResponse)
         }

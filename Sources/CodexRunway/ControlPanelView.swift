@@ -57,6 +57,7 @@ struct ControlPanelView: View {
     @State private var selectedTab: ControlPanelTab
     @State private var confirmRepair = false
     @State private var notificationMessage: String?
+    @State private var networkProxyLayoutVersion = 0
     private var l10n: L10n { settings.l10n }
     private var tabTitles: [String] {
         ControlPanelTab.allCases.map { $0.title(l10n) }
@@ -117,7 +118,7 @@ struct ControlPanelView: View {
     }
 
     private var generalPane: some View {
-        PreferencesPane(remasureToken: l10n.language) {
+        PreferencesPane(remasureToken: "\(l10n.language.rawValue)-\(networkProxyLayoutVersion)") {
             SettingsSection {
                 SectionLabel(l10n.text(.general))
                 PickerRow(
@@ -160,6 +161,7 @@ struct ControlPanelView: View {
                         .buttonStyle(.borderedProminent)
                 }
             }
+            NetworkProxySettingsView(settings: settings) { networkProxyLayoutVersion &+= 1 }
         }
     }
 

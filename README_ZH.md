@@ -135,6 +135,12 @@ bash Scripts/package-app.sh
 
 生成的应用位于 `dist/CodexRunway.app`。包含此修复的正式 Release 和本地 ad-hoc 构建默认从 `~/.codex-runway/widget-snapshot.json` 读取权限为 `0600` 的版本化派生快照；已注册 App Group 的 Developer ID 构建可改用 `RUNWAY_WIDGET_STORAGE_MODE=app-group`。快照不含邮箱、账号 ID、token、认证 JSON 或外部事件原文。后续仍可接入 Developer ID、App Group 注册与公证。
 
+## 网络代理
+
+在 **控制面板 → 通用 → 网络** 中选择 **跟随系统**、**HTTP 代理** 或 **SOCKS5 代理**，自定义代理支持用户名和密码认证；设置覆盖 Codex 请求、应用发起的 Grok 请求和 CLI 操作、公开状态与价格源，以及软件更新检查、更新说明和安装包下载；浏览器登录页面与已经运行的外部 CLI 进程沿用各自的网络设置，不修改系统代理
+
+修改须点击 **保存代理设置** 后生效，进行中的更新沿用开始时的配置；**测试连接** 仅用当前草稿读取公开更新源，不发送账号凭据，也不保存草稿；代理凭据保存在 macOS 钥匙串，与非密钥设置分开存放；配置损坏、凭据不可用或自定义代理失败时不会自动直连，请修复设置或主动改回 **跟随系统**
+
 ## 隐私
 
 - token 从本机 `~/.codex/auth.json` 读取；多账号凭据仅保存在 `~/.codex-runway/accounts/<id>/auth.json`（目录 `0700`、文件 `0600`）。账号索引 `index.json` 不含 token。

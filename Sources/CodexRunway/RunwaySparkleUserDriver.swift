@@ -9,6 +9,7 @@ final class RunwaySparkleUserDriver: NSObject, SPUUserDriver {
     private let statusWindow = RunwayUpdateStatusWindowController()
     private var expectedContentLength: UInt64 = 0
     private var downloadedLength: UInt64 = 0
+    var proxyErrorMessage: (() -> String?)?
 
     init(settings: RunwaySettings) {
         self.settings = settings
@@ -192,7 +193,7 @@ final class RunwaySparkleUserDriver: NSObject, SPUUserDriver {
     }
 
     private func showError(title: L10nKey, error: Error) {
-        let message = Self.errorMessage(for: error, proxyHint: text(.updateNetworkProxyHint))
+        let message = proxyErrorMessage?() ?? Self.errorMessage(for: error, proxyHint: text(.updateNetworkProxyHint))
         _ = alert(title: title, message: message, buttons: [text(.ok)])
     }
 

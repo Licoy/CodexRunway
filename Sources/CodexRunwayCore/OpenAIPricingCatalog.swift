@@ -209,7 +209,7 @@ actor OpenAIPricingCatalogProvider {
         request.setValue("text/markdown", forHTTPHeaderField: "Accept")
         request.setValue("CodexRunway/1", forHTTPHeaderField: "User-Agent")
         if let eTag { request.setValue(eTag, forHTTPHeaderField: "If-None-Match") }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await RunwayNetwork.data(for: request)
         guard let response = response as? HTTPURLResponse else {
             throw OpenAIPricingCatalogError.invalidResponse
         }

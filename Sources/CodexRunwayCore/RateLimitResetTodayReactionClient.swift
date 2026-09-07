@@ -1,13 +1,13 @@
 import Foundation
 
 public struct RateLimitResetTodayReactionClient: Sendable {
-    public var session: URLSession
+    public var session: URLSession?
     public var cookieStore: RateLimitResetTodayReactionCookieStore
     public var devMockKind: RateLimitResetTodaySnapshot.DevMockKind?
     private let mockCounter: MockCounter
 
     public init(
-        session: URLSession = RateLimitResetTodayReactionClient.session,
+        session: URLSession? = nil,
         cookieStore: RateLimitResetTodayReactionCookieStore = RateLimitResetTodayReactionCookieStore(),
         devMockKind: RateLimitResetTodaySnapshot.DevMockKind? = RateLimitResetTodayClient.resolveDevMockKind())
     {
@@ -16,8 +16,6 @@ public struct RateLimitResetTodayReactionClient: Sendable {
         self.devMockKind = devMockKind
         self.mockCounter = MockCounter(count: 266)
     }
-
-    public static let session: URLSession = URLSession(configuration: sessionConfiguration())
 
     public static func sessionConfiguration() -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
@@ -38,7 +36,7 @@ public struct RateLimitResetTodayReactionClient: Sendable {
         let request = RateLimitResetTodayReaction.makeRequest(
             method: "GET",
             visitorID: cookieStore.loadVisitorID())
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await RunwayNetwork.data(for: request, session: session, policy: .withoutCookies)
         cookieStore.saveVisitorID(from: response)
         guard let http = response as? HTTPURLResponse else {
             throw RateLimitResetTodayReactionError.unavailable
@@ -71,7 +69,7 @@ public struct RateLimitResetTodayReactionClient: Sendable {
         let request = RateLimitResetTodayReaction.makeRequest(
             method: "POST",
             visitorID: cookieStore.loadVisitorID())
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await RunwayNetwork.data(for: request, session: session, policy: .withoutCookies)
         cookieStore.saveVisitorID(from: response)
         let parsed: RateLimitResetTodayReactionPostResult
         do {

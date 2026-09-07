@@ -4,14 +4,31 @@ import SwiftUI
 @MainActor
 final class RunwaySettings: ObservableObject {
     @Published private(set) var preferences: RunwayPreferences
+    @Published private(set) var networkProxy = NetworkProxyConfiguration()
+    @Published private(set) var proxyError: NetworkProxyError?
 
     var onChange: (() -> Void)?
 
     private let store: PreferencesStore
+    private let networkProxyStore: NetworkProxyStore
+    private let proxyCredentialStore: ProxyCredentialStore
+    private var hasValidProxyConfiguration = false
 
-    init(store: PreferencesStore = PreferencesStore()) {
+    init(
+        store: PreferencesStore = PreferencesStore(),
+        networkProxyStore: NetworkProxyStore = NetworkProxyStore(),
+        proxyCredentialStore: ProxyCredentialStore = ProxyCredentialStore())
+    {
         self.store = store
+        self.networkProxyStore = networkProxyStore
+        self.proxyCredentialStore = proxyCredentialStore
         self.preferences = store.load()
+        do {
+            networkProxy = try networkProxyStore.load()
+            hasValidProxyConfiguration = true
+        } catch {
+            proxyError = error as? NetworkProxyError ?? .invalidConfiguration
+        }
     }
 
     var l10n: L10n {
@@ -27,6 +44,86 @@ final class RunwaySettings: ObservableObject {
         case .dark:
             return .dark
         }
+    }
+
+    /// Called at application startup, before any clients or updater are started.
+    /// Keeping this separate from init lets settings previews avoid Keychain access.
+    func prepareNetwork() {
+        guard hasValidProxyConfiguration else {
+            RunwayNetwork.block(error: proxyError ?? .invalidConfiguration)
+            return
+        }
+        do {
+            let credentials = try proxyCredentials(for: networkProxy, entered: nil, allowInteraction: false)
+            try RunwayNetwork.configure(configuration: networkProxy, credentials: credentials)
+            proxyError = nil
+        } catch {
+            let failure = error as? NetworkProxyError ?? .invalidConfiguration
+            proxyError = failure
+            RunwayNetwork.block(error: failure)
+        }
+    }
+
+    func loadSavedProxyCredentials() throws -> NetworkProxyCredentials {
+        guard let id = networkProxy.credentialID else { throw NetworkProxyError.credentialsUnavailable }
+        return try proxyCredentialStore.load(id: id, allowInteraction: true)
+    }
+
+    func proxyCredentials(
+        for configuration: NetworkProxyConfiguration,
+        entered: NetworkProxyCredentials?,
+        allowInteraction: Bool = true) throws -> NetworkProxyCredentials?
+    {
+        guard configuration.mode != .system, configuration.usesAuthentication else { return nil }
+        let credentials: NetworkProxyCredentials
+        if let entered {
+            credentials = entered
+        } else if let id = configuration.credentialID {
+            credentials = try proxyCredentialStore.load(id: id, allowInteraction: allowInteraction)
+        } else {
+            throw NetworkProxyError.invalidCredentials
+        }
+        return try credentials.validated(for: configuration.mode)
+    }
+
+    /// Returns false only when saving succeeded but the old credential could not be removed.
+    func saveNetworkProxy(
+        _ configuration: NetworkProxyConfiguration,
+        credentials: NetworkProxyCredentials?) throws -> Bool
+    {
+        var next = try configuration.validated()
+        let credentials = try proxyCredentials(for: next, entered: credentials)
+        next.credentialID = credentials == nil ? nil : UUID().uuidString
+        let context = try RunwayNetworkContext(configuration: next, credentials: credentials)
+        if let id = next.credentialID, let credentials {
+            try proxyCredentialStore.save(credentials, id: id)
+        }
+        do {
+            try networkProxyStore.save(next)
+        } catch let saveError {
+            if let id = next.credentialID {
+                do {
+                    try proxyCredentialStore.delete(id: id)
+                } catch {
+                    throw NetworkProxyError.credentialStoreFailed
+                }
+            }
+            throw saveError
+        }
+        let previousID = networkProxy.credentialID
+        RunwayNetwork.configure(context: context)
+        networkProxy = next
+        proxyError = nil
+        hasValidProxyConfiguration = true
+        onChange?()
+        if let previousID, previousID != next.credentialID {
+            do {
+                try proxyCredentialStore.delete(id: previousID)
+            } catch {
+                return false
+            }
+        }
+        return true
     }
 
     func updateSelectedProvider(_ provider: RunwayProvider) {
