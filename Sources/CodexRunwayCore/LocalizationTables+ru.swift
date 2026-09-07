@@ -452,6 +452,7 @@ extension L10n {
         .status: "Статус",
         .subscriptionExpired: "Истекла",
         .subscriptionExpires: "Действует до",
+        .subscriptionExpiryLocalTime: "Местное время: %@",
         .subscriptionExpiringSoon: "Скоро истечёт",
         .statusAvailable: "доступно",
         .statusError: "ош.",

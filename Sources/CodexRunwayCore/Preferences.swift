@@ -455,6 +455,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case status
     case subscriptionExpired
     case subscriptionExpires
+    case subscriptionExpiryLocalTime
     case subscriptionExpiringSoon
     case statusAvailable
     case statusError

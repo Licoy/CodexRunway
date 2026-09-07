@@ -378,8 +378,10 @@ struct RunwayPopoverView: View {
             if model.selectedProvider == .codex,
                let expiresAt = model.accountDisplay.subscriptionExpiresAt
             {
-                SubscriptionExpiryBadge(expiresAt: expiresAt, l10n: l10n)
-                    .padding(.top, 6)
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    SubscriptionExpiryBadge(expiresAt: expiresAt, l10n: l10n, now: context.date)
+                }
+                .padding(.top, 6)
             }
         }
     }
@@ -653,6 +655,7 @@ struct SubscriptionExpiryBadge: View {
             plate.strokeBorder(look.stroke, lineWidth: 1)
         }
         .lineLimit(1)
+        .help(helpText)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
     }
@@ -672,11 +675,10 @@ struct SubscriptionExpiryBadge: View {
         .frame(width: 11, height: 11)
     }
 
-    private var remainingSeconds: TimeInterval {
-        max(0, SubscriptionDateFormatter.endOfLocalDay(expiresAt).timeIntervalSince(now))
+    var remainingSeconds: TimeInterval {
+        max(0, expiresAt.timeIntervalSince(now))
     }
 
-    /// Still active through the expiry calendar day in the local timezone.
     private var isExpired: Bool {
         SubscriptionDateFormatter.isExpired(expiresAt, now: now)
     }
@@ -734,7 +736,7 @@ struct SubscriptionExpiryBadge: View {
         colorScheme == .light ? Color(nsColor: .secondaryLabelColor) : Color.white.opacity(0.78)
     }
 
-    private var statusLabel: String {
+    var statusLabel: String {
         switch phase {
         case .active:
             return l10n.text(.subscriptionExpires)
@@ -757,8 +759,14 @@ struct SubscriptionExpiryBadge: View {
             includeSeconds: false)
     }
 
-    private var accessibilityText: String {
-        [statusLabel, dateText, remainingText].compactMap(\.self).joined(separator: " ")
+    var helpText: String {
+        String(
+            format: l10n.text(.subscriptionExpiryLocalTime),
+            SubscriptionDateFormatter.expiresAt(expiresAt, language: l10n.language))
+    }
+
+    var accessibilityText: String {
+        [statusLabel, helpText, remainingText].compactMap(\.self).joined(separator: " ")
     }
 }
 

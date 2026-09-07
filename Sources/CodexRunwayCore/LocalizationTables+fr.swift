@@ -452,6 +452,7 @@ extension L10n {
         .status: "État",
         .subscriptionExpired: "Expiré",
         .subscriptionExpires: "Valable jusqu’au",
+        .subscriptionExpiryLocalTime: "Heure locale : %@",
         .subscriptionExpiringSoon: "Expire bientôt",
         .statusAvailable: "disponible",
         .statusError: "err",

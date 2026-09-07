@@ -452,6 +452,7 @@ extension L10n {
         .status: "상태",
         .subscriptionExpired: "만료됨",
         .subscriptionExpires: "유효 기한",
+        .subscriptionExpiryLocalTime: "현지 시간: %@",
         .subscriptionExpiringSoon: "곧 만료",
         .statusAvailable: "사용 가능",
         .statusError: "오류",

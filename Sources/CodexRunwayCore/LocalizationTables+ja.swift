@@ -452,6 +452,7 @@ extension L10n {
         .status: "ステータス",
         .subscriptionExpired: "期限切れ",
         .subscriptionExpires: "有効期限",
+        .subscriptionExpiryLocalTime: "現地時間：%@",
         .subscriptionExpiringSoon: "まもなく期限切れ",
         .statusAvailable: "利用可能",
         .statusError: "エラー",

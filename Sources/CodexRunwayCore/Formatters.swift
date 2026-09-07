@@ -226,14 +226,32 @@ public enum SubscriptionDateFormatter {
         return formatter.string(from: date)
     }
 
-    /// Treat the subscription as active for the entire local calendar day of `expiresAt`.
+    public static func expiresAt(
+        _ date: Date,
+        language: ResolvedLanguage,
+        calendar: Calendar = .autoupdatingCurrent)
+        -> String
+    {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: language.posixLocaleIdentifier)
+        formatter.dateFormat = "HH:mm:ss"
+        let timeText = formatter.string(from: date)
+        formatter.dateFormat = "'UTC'xxx"
+        let offsetText = formatter.string(from: date)
+        let dateText = expiresOn(date, language: language, calendar: calendar)
+        return "\(dateText) \(timeText) (\(offsetText), \(calendar.timeZone.identifier))"
+    }
+
+    /// Expiration compares absolute instants; keep `calendar` for source compatibility.
     public static func isExpired(
         _ expiresAt: Date,
         now: Date = Date(),
-        calendar: Calendar = .autoupdatingCurrent)
+        calendar _: Calendar = .autoupdatingCurrent)
         -> Bool
     {
-        calendar.startOfDay(for: now) > calendar.startOfDay(for: expiresAt)
+        now >= expiresAt
     }
 
     public static func endOfLocalDay(

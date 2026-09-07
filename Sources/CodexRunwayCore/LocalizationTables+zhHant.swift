@@ -450,6 +450,7 @@ extension L10n {
         .status: "狀態",
         .subscriptionExpired: "已到期",
         .subscriptionExpires: "訂閱有效期至",
+        .subscriptionExpiryLocalTime: "本地時間：%@",
         .subscriptionExpiringSoon: "訂閱即將到期",
         .statusAvailable: "可用",
         .statusError: "錯",
