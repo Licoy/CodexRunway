@@ -367,6 +367,10 @@ public struct ManagedAccount: Codable, Sendable, Equatable, Identifiable {
         var copy = self
         copy.lastError = error
         copy.requiresReauth = requiresReauth
+        if requiresReauth {
+            copy.cachedQuota = nil
+            copy.lastQuotaAt = nil
+        }
         return copy
     }
 
