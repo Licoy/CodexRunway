@@ -1200,12 +1200,16 @@ final class RunwayModel: ObservableObject {
         let shouldRefreshRecent = settings.preferences.showsRecentSessions
         async let sessionReport: Void = refreshSessionReportIfNeeded(shouldRefreshSessions)
         async let recentSessions: Void = refreshRecentSessionsIfNeeded(shouldRefreshRecent)
-        // Multi-account quota polling must not block the primary refresh path (or unit tests).
-        Task { await refreshAllAccountQuotasInline() }
         var generation = accountStateGeneration
         var remoteError: Error?
         do {
-            let auth = try await loadValidAuth(preferCached: false)
+            let auth: CodexAuth
+            do {
+                // Finish current-auth metadata writes before background quota results can arrive.
+                // Poll managed accounts even if loading the current credential fails.
+                defer { Task { await refreshAllAccountQuotasInline() } }
+                auth = try await loadValidAuth(preferCached: false)
+            }
             generation = accountStateGeneration
             async let quotaResultTask = refreshQuotaForFullRefresh(auth: auth)
             async let resetErrorTask = refreshResetCreditsForFullRefresh(auth: auth)

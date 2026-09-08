@@ -98,6 +98,35 @@ struct RunwayAccountInvalidationTests {
         }
     }
 
+    @Test("full refresh completes current-auth metadata before polling managed accounts", arguments: [false, true])
+    func fullRefreshOrdersAuthBeforeAccountPolling(authFails: Bool) async throws {
+        let fixture = try AccountInvalidationFixture()
+        defer { fixture.remove() }
+        let model = fixture.model
+        try fixture.store.deleteAccount(id: fixture.accountB.id)
+        model.reloadAccountIndex()
+        model.refreshQuota()
+        try await wait { !model.isRefreshing && !model.quotaMeters.isEmpty }
+        await fixture.gate.holdNextAuth(failing: authFails)
+        let context = try RunwayNetworkContext(sessionFactory: { configuration, delegate in
+            configuration.protocolClasses = [AccountInvalidationURLProtocol.self]
+            return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        })
+        try await RunwayNetwork.$scopedContext.withValue(context) {
+            model.refresh()
+            try await wait { await fixture.gate.authIsHeld }
+            #expect(!model.isRefreshingAccountQuotas)
+            #expect(model.accountDisplay.isAuthenticated)
+            await fixture.gate.releaseAuth()
+            try await wait {
+                !model.isRefreshingAll && !model.isRefreshingAccountQuotas
+                    && model.managedAccounts.first?.requiresReauth == true
+            }
+        }
+        #expect(!model.accountDisplay.isAuthenticated)
+        #expect(model.quotaMeters.isEmpty)
+    }
+
     enum AccountRefreshRoute: CaseIterable {
         case currentAccount, otherAccount, allAccounts, fullRefresh
     }
