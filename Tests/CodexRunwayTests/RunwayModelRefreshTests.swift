@@ -378,10 +378,17 @@ struct RunwayModelRefreshTests {
 
         model.refreshTokenHeatmap()
         try await profileService.waitUntilFirstRequest()
-        model.switchAccount(id: secondAccount.id, restartCodex: false)
-        try await waitForActiveAccount(secondAccount.id, in: store)
-        profileService.releaseFirstRequest()
-        try await waitForAccountSwitch(secondAccount.id, in: model)
+        // Keep the automatic managed-account poll on a deterministic test transport too.
+        let network = try RunwayNetworkContext(sessionFactory: { configuration, delegate in
+            configuration.protocolClasses = [BackgroundQuotaURLProtocol.self]
+            return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        })
+        try await RunwayNetwork.$scopedContext.withValue(network) {
+            model.switchAccount(id: secondAccount.id, restartCodex: false)
+            try await waitForActiveAccount(secondAccount.id, in: store)
+            profileService.releaseFirstRequest()
+            try await waitForAccountSwitch(secondAccount.id, in: model)
+        }
 
         #expect(model.tokenHeatmapAllDevicesTokens["2026-07-26"] == 200)
         #expect(!model.tokenHeatmapAllDevicesTokens.values.contains(100))
@@ -1343,6 +1350,18 @@ private actor MutableAuthProvider {
     func set(_ auth: CodexAuth) {
         self.auth = auth
     }
+}
+
+private final class BackgroundQuotaURLProtocol: URLProtocol {
+    override class func canInit(with _: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(#"{"plan_type":"plus","rate_limit":{"primary_window":{"used_percent":25,"reset_at":4100000000,"limit_window_seconds":18000}}}"#.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }
 
 private actor FailOnceProfileUsageService {

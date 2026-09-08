@@ -9,7 +9,7 @@ import Testing
 @MainActor
 struct NetworkProxyPreviewTests {
     @Test("authenticated proxy fits all seven locales in both appearances")
-    func localizedProxyPreviews() throws {
+    func localizedProxyPreviews() async throws {
         let directory = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent(".build/proxy-previews", isDirectory: true)
@@ -18,6 +18,8 @@ struct NetworkProxyPreviewTests {
         for language in ResolvedLanguage.allCases {
             for appearance in MainPanelMockRender.Appearance.allCases {
                 measurements.append(try render(language: language, appearance: appearance, directory: directory))
+                // Let pending MainActor network callbacks run between complete offscreen renders.
+                await Task.yield()
             }
         }
         try measurements.joined(separator: "\n").appending("\n")
