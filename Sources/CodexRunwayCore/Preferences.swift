@@ -24,6 +24,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case accountsAPIKeyHint
     case accountsCurrent
     case accountsDelete
+    case accountsActions
     case accountsDeleteConfirmMessage
     case accountsDeleteConfirmTitle
     case accountsDeselectAll

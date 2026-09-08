@@ -53,6 +53,7 @@ extension L10n {
         .accountsAPIKeyHint: "OpenAI API キーを貼り付けてください。API アカウントでは ChatGPT のクォータメーターは表示されません。",
         .accountsCurrent: "現在",
         .accountsDelete: "削除",
+        .accountsActions: "アカウント操作",
         .accountsDeleteConfirmMessage: "このアカウントを CodexRunway から削除しますか？現在のアカウントでない限り、公式の Codex ログインは変わりません。",
         .accountsDeleteConfirmTitle: "アカウントを削除しますか？",
         .accountsDeselectAll: "すべて選択解除",

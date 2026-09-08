@@ -53,6 +53,7 @@ extension L10n {
         .accountsAPIKeyHint: "OpenAI API 키를 붙여넣으세요. API 계정은 ChatGPT 할당량 미터를 표시하지 않습니다.",
         .accountsCurrent: "현재",
         .accountsDelete: "제거",
+        .accountsActions: "계정 작업",
         .accountsDeleteConfirmMessage: "이 계정을 CodexRunway에서 제거할까요? 현재 계정이 아니면 공식 Codex 로그인은 바뀌지 않습니다.",
         .accountsDeleteConfirmTitle: "계정을 제거할까요?",
         .accountsDeselectAll: "모두 선택 해제",

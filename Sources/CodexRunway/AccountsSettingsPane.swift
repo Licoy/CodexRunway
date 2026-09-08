@@ -154,8 +154,9 @@ struct AccountsSettingsPane: View {
             Button(l10n.text(.cancel), role: .cancel) {
                 accountPendingDelete = nil
             }
+            .keyboardShortcut(.defaultAction)
         } message: {
-            Text(l10n.text(.accountsDeleteConfirmMessage))
+            Text("\(accountPendingDelete?.resolvedDisplayName ?? "")\n\n\(l10n.text(.accountsDeleteConfirmMessage))")
         }
         .sheet(isPresented: Binding(
             get: { accountPendingSwitch != nil },
