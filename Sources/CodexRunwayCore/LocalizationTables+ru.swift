@@ -53,6 +53,7 @@ extension L10n {
         .accountsAPIKeyHint: "Вставьте ключ OpenAI API. У API-аккаунтов нет индикаторов квоты ChatGPT.",
         .accountsCurrent: "Текущий",
         .accountsDelete: "Удалить",
+        .accountsActions: "Действия с аккаунтом",
         .accountsDeleteConfirmMessage: "Удалить этот аккаунт из CodexRunway? Официальный вход Codex не изменится, если это не текущий аккаунт.",
         .accountsDeleteConfirmTitle: "Удалить аккаунт?",
         .accountsDeselectAll: "Снять выделение",

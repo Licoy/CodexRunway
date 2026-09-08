@@ -53,6 +53,7 @@ extension L10n {
         .accountsAPIKeyHint: "貼上 OpenAI API Key。API 帳號不會顯示 ChatGPT 額度進度條。",
         .accountsCurrent: "目前",
         .accountsDelete: "移除",
+        .accountsActions: "帳號操作",
         .accountsDeleteConfirmMessage: "从 CodexRunway 移除此帳號？除非它是目前帳號，否則不會改動官方 Codex 登入。",
         .accountsDeleteConfirmTitle: "移除帳號？",
         .accountsDeselectAll: "取消全選",
