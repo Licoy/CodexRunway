@@ -1230,21 +1230,23 @@ final class RunwayModel: ObservableObject {
             if case .failure(let error) = quotaResult {
                 remoteError = error
             }
-            if let resetError = await resetErrorTask {
+            if let resetError = await resetErrorTask,
+               remoteError == nil || isAuthenticationFailure(resetError)
+            {
                 remoteError = resetError
             }
         } catch {
             remoteError = error
             statusText = l10n.text(.statusError)
-            // Auth hard-failure: keep a clear login state instead of a raw NSURLError.
-            if isAuthenticationFailure(error) {
-                accountDisplay = CodexAccountDisplay.make(auth: nil, quotaPlan: nil)
-                statusText = l10n.text(.statusLogin)
-            }
         }
         _ = await (sessionReport, recentSessions)
+        if let remoteError { handleAuthenticationFailure(remoteError) }
         exportStatusIfNeeded()
-        lastError = remoteError.map(humanizeAuthError)
+        if let remoteError {
+            lastError = humanizeAuthError(remoteError)
+        } else if latestAuth != nil {
+            lastError = nil
+        }
     }
 
     private func isAuthenticationFailure(_ error: Error) -> Bool {
@@ -1255,6 +1257,18 @@ final class RunwayModel: ObservableObject {
         let ns = error as NSError
         if ns.domain == "CodexRunwayAuth" { return true }
         return ns.domain == NSURLErrorDomain && ns.code == URLError.userAuthenticationRequired.rawValue
+    }
+
+    @discardableResult
+    private func handleAuthenticationFailure(_ error: Error) -> Bool {
+        guard isAuthenticationFailure(error) else { return false }
+        let message = humanizeAuthError(error)
+        clearAccountScopedState(keepingAuth: nil)
+        quotaText = l10n.text(.statusLogin)
+        resetCreditsText = l10n.text(.statusLogin)
+        lastError = message
+        exportStatusIfNeeded()
+        return true
     }
 
     private func humanizeAuthError(_ error: Error) -> String {
@@ -1309,18 +1323,24 @@ final class RunwayModel: ObservableObject {
     }
 
     private func refreshQuotaForFullRefresh(auth: CodexAuth) async -> Result<QuotaSnapshot, Error> {
+        let generation = accountStateGeneration
         var result: Result<QuotaSnapshot, Error> = .failure(CancellationError())
         await withRefresh([.quota]) {
+            guard isCurrentAccount(auth, generation: generation) else { return }
             do {
                 let snapshot = try await services.fetchQuota(auth)
+                guard isCurrentAccount(auth, generation: generation) else { return }
                 latestQuota = snapshot
                 applyQuota(snapshot)
                 deliverAlerts(RunwayAlertDecider.quotaAlerts(snapshot), enabled: settings.preferences.quotaAlertsEnabled)
                 result = .success(snapshot)
             } catch {
-                statusText = l10n.text(.statusError)
-                quotaText = l10n.text(.statusError)
-                quotaLines = [DetailLine(title: l10n.text(.error), value: error.localizedDescription)]
+                guard isCurrentAccount(auth, generation: generation) else { return }
+                if !handleAuthenticationFailure(error) {
+                    statusText = l10n.text(.statusError)
+                    quotaText = l10n.text(.statusError)
+                    quotaLines = [DetailLine(title: l10n.text(.error), value: error.localizedDescription)]
+                }
                 result = .failure(error)
             }
         }
@@ -1328,16 +1348,22 @@ final class RunwayModel: ObservableObject {
     }
 
     private func refreshResetCreditsForFullRefresh(auth: CodexAuth) async -> Error? {
+        let generation = accountStateGeneration
         var refreshError: Error?
         await withRefresh([.resetCredits]) {
+            guard isCurrentAccount(auth, generation: generation) else { return }
             do {
                 let snapshot = try await services.fetchResetCredits(auth)
+                guard isCurrentAccount(auth, generation: generation) else { return }
                 latestResetCredits = snapshot
                 applyResetCredits(snapshot)
                 deliverAlerts(RunwayAlertDecider.resetCreditAlerts(snapshot), enabled: settings.preferences.resetCreditAlertsEnabled)
             } catch {
-                resetCreditsText = l10n.text(.statusError)
-                resetCreditLines = [DetailLine(title: l10n.text(.error), value: error.localizedDescription)]
+                guard isCurrentAccount(auth, generation: generation) else { return }
+                if !handleAuthenticationFailure(error) {
+                    resetCreditsText = l10n.text(.statusError)
+                    resetCreditLines = [DetailLine(title: l10n.text(.error), value: error.localizedDescription)]
+                }
                 refreshError = error
             }
         }
@@ -1346,15 +1372,23 @@ final class RunwayModel: ObservableObject {
 
     private func refreshQuotaNow() async {
         await withRefresh([.quota]) {
+            var expectedAuth: CodexAuth?
+            var generation = accountStateGeneration
             do {
                 let auth = try await loadValidAuth(preferCached: false)
+                expectedAuth = auth
+                generation = accountStateGeneration
                 let quotaSnapshot = try await services.fetchQuota(auth)
+                guard isCurrentAccount(auth, generation: generation) else { return }
                 latestQuota = quotaSnapshot
                 applyQuota(quotaSnapshot)
                 deliverAlerts(RunwayAlertDecider.quotaAlerts(quotaSnapshot), enabled: settings.preferences.quotaAlertsEnabled)
                 lastError = nil
                 exportStatusIfNeeded()
             } catch {
+                guard generation == accountStateGeneration else { return }
+                if let expectedAuth, !isCurrentAccount(expectedAuth, generation: generation) { return }
+                if handleAuthenticationFailure(error) { return }
                 statusText = l10n.text(.statusError)
                 quotaText = l10n.text(.statusError)
                 quotaLines = [DetailLine(title: l10n.text(.error), value: error.localizedDescription)]
@@ -1389,6 +1423,7 @@ final class RunwayModel: ObservableObject {
         } catch {
             guard expectedGeneration == accountStateGeneration else { return }
             if let expectedAuth, !isCurrentAccount(expectedAuth, generation: expectedGeneration) { return }
+            if handleAuthenticationFailure(error) { return }
             quotaEstimateError = error.localizedDescription
         }
     }
@@ -1412,6 +1447,7 @@ final class RunwayModel: ObservableObject {
                 return
             } catch {
                 guard isCurrentAccount(auth, generation: expectedGeneration) else { return }
+                if handleAuthenticationFailure(error) { return }
                 quotaEstimateError = error.localizedDescription
             }
         }
@@ -1438,15 +1474,23 @@ final class RunwayModel: ObservableObject {
 
     private func refreshResetCreditsNow() async {
         await withRefresh([.resetCredits]) {
+            var expectedAuth: CodexAuth?
+            var generation = accountStateGeneration
             do {
                 let auth = try await loadValidAuth(preferCached: true)
+                expectedAuth = auth
+                generation = accountStateGeneration
                 let snapshot = try await services.fetchResetCredits(auth)
+                guard isCurrentAccount(auth, generation: generation) else { return }
                 latestResetCredits = snapshot
                 applyResetCredits(snapshot)
                 deliverAlerts(RunwayAlertDecider.resetCreditAlerts(snapshot), enabled: settings.preferences.resetCreditAlertsEnabled)
                 lastError = nil
                 exportStatusIfNeeded()
             } catch {
+                guard generation == accountStateGeneration else { return }
+                if let expectedAuth, !isCurrentAccount(expectedAuth, generation: generation) { return }
+                if handleAuthenticationFailure(error) { return }
                 resetCreditsText = l10n.text(.statusError)
                 resetCreditLines = [DetailLine(title: l10n.text(.error), value: error.localizedDescription)]
                 lastError = error.localizedDescription
@@ -1853,9 +1897,14 @@ final class RunwayModel: ObservableObject {
     }
 
     private func refreshCostNow(policy: UsageCostRefreshPolicy) async {
+        var expectedAuth: CodexAuth?
+        var generation = accountStateGeneration
         do {
             let auth = try await loadValidAuth(preferCached: true)
+            expectedAuth = auth
+            generation = accountStateGeneration
             let quotaSnapshot = try await services.fetchQuota(auth)
+            guard isCurrentAccount(auth, generation: generation) else { return }
             latestQuota = quotaSnapshot
             applyQuota(quotaSnapshot)
             await scanCostAndHeatmap(
@@ -1867,6 +1916,9 @@ final class RunwayModel: ObservableObject {
             markCostRefreshCompleted(quota: quotaSnapshot)
             lastError = nil
         } catch {
+            guard generation == accountStateGeneration else { return }
+            if let expectedAuth, !isCurrentAccount(expectedAuth, generation: generation) { return }
+            if handleAuthenticationFailure(error) { return }
             if latestDisplayedCost != nil {
                 noteCostScanFailure(error.localizedDescription)
             } else {
@@ -2124,7 +2176,15 @@ final class RunwayModel: ObservableObject {
         defer { endCostProgress() }
         publishCostProgress(.preparing, force: true)
         let auth = try await loadValidAuth(preferCached: true)
-        let quotaSnapshot = try await services.fetchQuota(auth)
+        let generation = accountStateGeneration
+        let quotaSnapshot: QuotaSnapshot
+        do {
+            quotaSnapshot = try await services.fetchQuota(auth)
+        } catch {
+            if isCurrentAccount(auth, generation: generation) { handleAuthenticationFailure(error) }
+            throw error
+        }
+        guard isCurrentAccount(auth, generation: generation) else { throw CancellationError() }
         latestQuota = quotaSnapshot
         applyQuota(quotaSnapshot)
         if let windows = currentCycleWindows(from: quotaSnapshot, now: now) {
@@ -2289,8 +2349,11 @@ final class RunwayModel: ObservableObject {
             }
             return auth
         } catch RunwayModelAuthError.load(let error) {
-            latestAuth = nil
-            accountDisplay = CodexAccountDisplay.make(auth: nil, quotaPlan: nil)
+            clearAccountScopedState(keepingAuth: nil)
+            lastError = humanizeAuthError(error)
+            throw error
+        } catch {
+            handleAuthenticationFailure(error)
             throw error
         }
     }

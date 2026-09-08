@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 public struct AccountSwitchResult: Sendable, Equatable {
     public var account: ManagedAccount
@@ -10,6 +11,11 @@ public struct AccountSwitcher: Sendable {
     public var store: AccountStore
     public var tokenRefresher: TokenRefresher
     public var fetchQuota: @Sendable (CodexAuth) async throws -> QuotaSnapshot
+    var reportPersistenceFailure: @Sendable (Error) -> Void = { error in
+        let failure = error as NSError
+        Logger(subsystem: "com.github.codex-runway", category: "account-switch")
+            .error("reauth_status_persistence_failed domain=\(failure.domain, privacy: .public) code=\(failure.code)")
+    }
 
     public init(
         store: AccountStore = AccountStore(),
@@ -25,6 +31,7 @@ public struct AccountSwitcher: Sendable {
 
     public func switchTo(accountId: String, now: Date = Date()) async throws -> AccountSwitchResult {
         var auth = try store.loadCredential(id: accountId)
+        let isActiveTarget = try store.loadIndex().activeAccountId == accountId
 
         // Allow full OAuth and non-expired access-token-only session credentials.
         // Block only invalid junk or expired session tokens with no refresh.
@@ -39,15 +46,21 @@ public struct AccountSwitcher: Sendable {
 
         // Validate the target before replacing the current login or restarting the app.
         do {
-            auth = try await ensureValid(auth: auth, accountId: accountId, isActiveTarget: false)
+            auth = try await ensureValid(auth: auth, accountId: accountId, isActiveTarget: isActiveTarget)
             if !auth.isAPIKeyAuth {
                 _ = try await fetchQuota(auth)
             }
         } catch {
-            if (error as? URLError)?.code == .userAuthenticationRequired,
-               let account = try? store.loadIndex().account(id: accountId)
-            {
-                try? store.updateMetadata(account.applying(error: error.localizedDescription, requiresReauth: true))
+            if (error as? URLError)?.code == .userAuthenticationRequired {
+                do {
+                    guard let account = try store.loadIndex().account(id: accountId) else {
+                        throw AccountStoreError.accountNotFound(accountId)
+                    }
+                    try store.updateMetadata(account.applying(error: error.localizedDescription, requiresReauth: true))
+                } catch {
+                    // Preserve the authentication error, but make failed persistence observable.
+                    reportPersistenceFailure(error)
+                }
             }
             throw error
         }
