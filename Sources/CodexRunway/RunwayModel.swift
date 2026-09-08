@@ -444,12 +444,13 @@ final class RunwayModel: ObservableObject {
         // Reassign so @Published notifies (in-place Set mutation does not).
         refreshingAccountIds = refreshingAccountIds.union(ids)
         Task {
+            let generation = accountStateGeneration
             defer {
                 isRefreshingAccountQuotas = false
                 refreshingAccountIds = refreshingAccountIds.subtracting(ids)
             }
-            _ = await accountQuotaRefresher.refreshAll()
-            reloadAccountIndex()
+            let results = await accountQuotaRefresher.refreshAll()
+            applyAccountQuotaRefreshResults(results, generation: generation)
         }
     }
 
@@ -457,10 +458,20 @@ final class RunwayModel: ObservableObject {
         guard !refreshingAccountIds.contains(id) else { return }
         refreshingAccountIds = refreshingAccountIds.union([id])
         Task {
+            let generation = accountStateGeneration
             defer { refreshingAccountIds = refreshingAccountIds.subtracting([id]) }
-            _ = await accountQuotaRefresher.refresh(accountId: id)
-            reloadAccountIndex()
+            let result = await accountQuotaRefresher.refresh(accountId: id)
+            applyAccountQuotaRefreshResults([result], generation: generation)
         }
+    }
+
+    private func applyAccountQuotaRefreshResults(_ results: [AccountQuotaRefreshResult], generation: Int) {
+        reloadAccountIndex()
+        guard generation == accountStateGeneration,
+              let activeAccountId,
+              results.contains(where: { $0.accountId == activeAccountId && $0.account?.requiresReauth == true })
+        else { return }
+        handleAuthenticationFailure(URLError(.userAuthenticationRequired))
     }
 
     func importOfficialAccount() {
@@ -1191,9 +1202,11 @@ final class RunwayModel: ObservableObject {
         async let recentSessions: Void = refreshRecentSessionsIfNeeded(shouldRefreshRecent)
         // Multi-account quota polling must not block the primary refresh path (or unit tests).
         Task { await refreshAllAccountQuotasInline() }
+        var generation = accountStateGeneration
         var remoteError: Error?
         do {
             let auth = try await loadValidAuth(preferCached: false)
+            generation = accountStateGeneration
             async let quotaResultTask = refreshQuotaForFullRefresh(auth: auth)
             async let resetErrorTask = refreshResetCreditsForFullRefresh(auth: auth)
             let quotaResult = await quotaResultTask
@@ -1201,6 +1214,7 @@ final class RunwayModel: ObservableObject {
                 if settings.preferences.showsQuotaEstimateSummary {
                     await loadQuotaEstimate(auth: auth, quota: quotaSnapshot)
                 }
+                guard isCurrentAccount(auth, generation: generation) else { return }
                 let needsCost =
                     (settings.preferences.showsCostSummary || widgetRequirements.contains(.cost))
                     && shouldRefreshCost(policy: policy, quota: quotaSnapshot)
@@ -1218,6 +1232,7 @@ final class RunwayModel: ObservableObject {
                             policy: policy,
                             includeCost: needsCost,
                             includeHeatmap: needsHeatmap)
+                        guard isCurrentAccount(auth, generation: generation) else { return }
                         if needsCost {
                             markCostRefreshCompleted(quota: quotaSnapshot)
                         }
@@ -1237,9 +1252,12 @@ final class RunwayModel: ObservableObject {
             }
         } catch {
             remoteError = error
-            statusText = l10n.text(.statusError)
+            if generation == accountStateGeneration {
+                statusText = l10n.text(.statusError)
+            }
         }
         _ = await (sessionReport, recentSessions)
+        guard generation == accountStateGeneration else { return }
         if let remoteError { handleAuthenticationFailure(remoteError) }
         exportStatusIfNeeded()
         if let remoteError {
@@ -1301,6 +1319,7 @@ final class RunwayModel: ObservableObject {
 
     private func refreshAllAccountQuotasInline() async {
         guard !isRefreshingAccountQuotas else { return }
+        let generation = accountStateGeneration
         isRefreshingAccountQuotas = true
         let ids = Set(managedAccounts.map(\.id))
         refreshingAccountIds = refreshingAccountIds.union(ids)
@@ -1308,8 +1327,8 @@ final class RunwayModel: ObservableObject {
             isRefreshingAccountQuotas = false
             refreshingAccountIds = refreshingAccountIds.subtracting(ids)
         }
-        _ = await accountQuotaRefresher.refreshAll()
-        reloadAccountIndex()
+        let results = await accountQuotaRefresher.refreshAll()
+        applyAccountQuotaRefreshResults(results, generation: generation)
     }
 
     private func refreshSessionReportIfNeeded(_ isShown: Bool) async {
@@ -1913,6 +1932,7 @@ final class RunwayModel: ObservableObject {
                 policy: policy,
                 includeCost: true,
                 includeHeatmap: false)
+            guard isCurrentAccount(auth, generation: generation) else { return }
             markCostRefreshCompleted(quota: quotaSnapshot)
             lastError = nil
         } catch {
@@ -2302,8 +2322,10 @@ final class RunwayModel: ObservableObject {
     }
 
     private func loadValidAuth(preferCached: Bool) async throws -> CodexAuth {
+        let generation = accountStateGeneration
         do {
             let auth = try await services.loadValidAuth(preferCached, latestAuth)
+            guard generation == accountStateGeneration else { throw CancellationError() }
             let previousAccountId = accountIdentityKey(for: latestAuth)
             let nextAccountId = accountIdentityKey(for: auth)
             latestAuth = auth
@@ -2349,10 +2371,13 @@ final class RunwayModel: ObservableObject {
             }
             return auth
         } catch RunwayModelAuthError.load(let error) {
+            guard generation == accountStateGeneration else { throw CancellationError() }
             clearAccountScopedState(keepingAuth: nil)
             lastError = humanizeAuthError(error)
+            exportStatusIfNeeded()
             throw error
         } catch {
+            guard generation == accountStateGeneration else { throw CancellationError() }
             handleAuthenticationFailure(error)
             throw error
         }
@@ -2469,6 +2494,7 @@ final class RunwayModel: ObservableObject {
         includeHeatmap: Bool
     ) async {
         let expectedGeneration = accountStateGeneration
+        guard isCurrentAccount(auth, generation: expectedGeneration) else { return }
         let now = Date()
         let range = settings.preferences.apiCostSummaryRange
         let currentWindows = currentCycleWindows(from: quota, now: now)
@@ -2495,12 +2521,14 @@ final class RunwayModel: ObservableObject {
 
         do {
             let local = try await localCostSummaries(queries: queries, now: now, policy: policy)
+            guard isCurrentAccount(auth, generation: expectedGeneration) else { return }
             if includeCost {
                 let current = try await resolveCurrentCost(
                     window: currentWindows?.elapsed,
                     local: local[Self.currentCostQueryID],
                     auth: auth,
                     now: now)
+                guard isCurrentAccount(auth, generation: expectedGeneration) else { return }
                 if let current {
                     applyCurrentCost(current)
                     if let elapsed = currentWindows?.elapsed {
@@ -2515,6 +2543,7 @@ final class RunwayModel: ObservableObject {
                     auth: auth,
                     now: now)
                 try Task.checkCancellation()
+                guard isCurrentAccount(auth, generation: expectedGeneration) else { return }
                 applyDisplayedCost(summary, range: range, now: now)
                 if let selectedRange {
                     storeDetailCostCache(summary, key: Self.detailCacheKey(for: selectedRange))
@@ -2536,6 +2565,7 @@ final class RunwayModel: ObservableObject {
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch {
+                    guard isCurrentAccount(auth, generation: expectedGeneration) else { return }
                     lastError = l10n.text(.tokenUsageHeatmapUnavailable)
                     if tokenHeatmapAllDevicesTokens.isEmpty, tokenHeatmapLocalTokens.isEmpty {
                         tokenHeatmapCalculatedAt = now
@@ -2545,6 +2575,7 @@ final class RunwayModel: ObservableObject {
         } catch is CancellationError {
             return
         } catch {
+            guard isCurrentAccount(auth, generation: expectedGeneration) else { return }
             if includeCost {
                 let text = costQueryErrorText(error)
                 if latestDisplayedCost != nil, latestDisplayedCostRange == range {

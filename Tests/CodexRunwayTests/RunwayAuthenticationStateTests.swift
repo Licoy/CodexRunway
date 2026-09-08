@@ -125,6 +125,25 @@ struct RunwayAuthenticationStateTests {
         try expectLoggedOut(model)
     }
 
+    @Test("late profile failure preserves the reauthorization message from reset credits")
+    func lateProfileFailureKeepsAuthenticationError() async throws {
+        let fixture = StateFixture()
+        defer { fixture.remove() }
+        let model = fixture.model
+        model.refresh()
+        try await wait { !model.isRefreshingAll }
+        model.settings.updateShowsTokenUsageHeatmap(true)
+        await fixture.responses.holdProfileAndRejectCredits()
+        model.refresh()
+        try await wait { !model.accountDisplay.isAuthenticated && model.lastError != nil }
+        let authenticationError = model.lastError
+        await fixture.responses.releaseProfile()
+        try await wait { !model.isRefreshingAll }
+        #expect(model.lastError == authenticationError)
+        #expect(model.tokenHeatmapCalculatedAt == nil)
+        try expectLoggedOut(model)
+    }
+
     private func expectLoggedOut(_ model: RunwayModel) throws {
         #expect(model.quotaMeters.isEmpty)
         #expect(model.quotaLines.isEmpty)
@@ -169,7 +188,7 @@ private struct StateFixture {
             fetchRateLimitResetToday: { throw URLError(.unsupportedURL) },
             scanAPIEquivalent: { _, _, _, _ in throw URLError(.unsupportedURL) },
             fetchDailyWorkspaceUsage: { _, _, _, _, _ in try await responses.analytics() },
-            fetchCodexProfileTokenUsage: { _ in throw URLError(.unsupportedURL) },
+            fetchCodexProfileTokenUsage: { _ in try await responses.profile() },
             dryRunSessions: { throw URLError(.unsupportedURL) },
             scanRecentSessions: { _ in SessionActivitySummary(items: []) })
         model = RunwayModel(
@@ -193,6 +212,8 @@ private actor AuthenticationResponses {
     private var holdsCredits = false
     private var creditsStarted = false
     private var creditsContinuation: CheckedContinuation<Void, Never>?
+    private var holdsProfile = false
+    private var profileContinuation: CheckedContinuation<Void, Never>?
 
     func failQuota(_ code: URLError.Code?) { quotaFailure = code }
     func rejectAuthLoad() { authFailure = true }
@@ -200,6 +221,14 @@ private actor AuthenticationResponses {
     func rejectAnalytics() { analyticsFailure = true }
     func holdCreditsAndRejectQuota() { holdsCredits = true; quotaFailure = .userAuthenticationRequired }
     func releaseCredits() { holdsCredits = false; creditsContinuation?.resume(); creditsContinuation = nil }
+    func holdProfileAndRejectCredits() { holdsProfile = true }
+    func releaseProfile() { profileContinuation?.resume(); profileContinuation = nil }
+
+    func profile() async throws -> CodexProfileTokenUsage {
+        guard holdsProfile else { throw URLError(.unsupportedURL) }
+        await withCheckedContinuation { profileContinuation = $0 }
+        throw URLError(.timedOut)
+    }
 
     func auth() throws -> CodexAuth {
         if authFailure { throw URLError(.userAuthenticationRequired) }
@@ -218,6 +247,10 @@ private actor AuthenticationResponses {
     }
 
     func credits() async throws -> ResetCreditsSnapshot {
+        if holdsProfile {
+            while profileContinuation == nil { await Task.yield() }
+            throw URLError(.userAuthenticationRequired)
+        }
         if creditsFailure { throw URLError(.userAuthenticationRequired) }
         if holdsCredits {
             creditsStarted = true
