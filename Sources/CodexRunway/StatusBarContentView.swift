@@ -55,6 +55,11 @@ final class StatusBarContentView: NSView {
         syncSheenAnimation()
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         nil
     }
@@ -174,7 +179,7 @@ final class StatusBarContentView: NSView {
         let barWidth = min(layout.meterBarWidth, row.width)
         let barRect = NSRect(x: row.minX, y: row.midY - 2.5, width: barWidth, height: 5)
         let background = NSBezierPath(roundedRect: barRect, xRadius: 2.5, yRadius: 2.5)
-        NSColor.separatorColor.withAlphaComponent(0.45).setFill()
+        palette.track.setFill()
         background.fill()
 
         let percent = CGFloat(meter.remainingPercent) / 100
@@ -183,7 +188,7 @@ final class StatusBarContentView: NSView {
             y: barRect.minY,
             width: barRect.width * percent,
             height: barRect.height)
-        NSBezierPath(roundedRect: fillRect, xRadius: 2.5, yRadius: 2.5).fill(with: meterColor(meter), alpha: 0.95)
+        NSBezierPath(roundedRect: fillRect, xRadius: 2.5, yRadius: 2.5).fill(with: meterColor(meter), alpha: 1)
         let textRect = NSRect(
             x: barRect.maxX + layout.meterTextGap,
             y: row.minY,
@@ -212,7 +217,7 @@ final class StatusBarContentView: NSView {
         let track = NSBezierPath()
         track.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
         track.lineWidth = 2.5
-        NSColor.separatorColor.withAlphaComponent(0.35).setStroke()
+        palette.track.setStroke()
         track.stroke()
 
         if let meter {
@@ -380,17 +385,12 @@ final class StatusBarContentView: NSView {
 
     // MARK: - Shared helpers
 
+    private var palette: StatusBarPalette {
+        StatusBarPalette(appearance: effectiveAppearance)
+    }
+
     private func meterColor(_ meter: QuotaMeter?) -> NSColor {
-        switch meter?.health {
-        case .green:
-            return .systemGreen
-        case .yellow:
-            return .systemYellow
-        case .red:
-            return .systemRed
-        case nil:
-            return .tertiaryLabelColor
-        }
+        palette.color(for: meter?.health)
     }
 
     private func drawCentered(_ text: String, font: NSFont, rect: NSRect, color: NSColor) {
@@ -416,6 +416,38 @@ final class StatusBarContentView: NSView {
             .paragraphStyle: paragraph,
         ]
         text.draw(in: rect, withAttributes: attributes)
+    }
+}
+
+/// Saturated ink on light menu bars, brighter colors on dark menu bars.
+struct StatusBarPalette {
+    let isDark: Bool
+
+    init(appearance: NSAppearance) {
+        isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    }
+
+    var track: NSColor {
+        (isDark ? NSColor.white : NSColor.black).withAlphaComponent(isDark ? 0.28 : 0.24)
+    }
+
+    func color(for health: QuotaHealth?) -> NSColor {
+        switch health {
+        case .green:
+            return isDark
+                ? NSColor(srgbRed: 0.20, green: 0.87, blue: 0.40, alpha: 1)
+                : NSColor(srgbRed: 0.06, green: 0.43, blue: 0.18, alpha: 1)
+        case .yellow:
+            return isDark
+                ? NSColor(srgbRed: 1, green: 0.80, blue: 0.20, alpha: 1)
+                : NSColor(srgbRed: 0.65, green: 0.36, blue: 0, alpha: 1)
+        case .red:
+            return isDark
+                ? NSColor(srgbRed: 1, green: 0.35, blue: 0.33, alpha: 1)
+                : NSColor(srgbRed: 0.80, green: 0.11, blue: 0.08, alpha: 1)
+        case nil:
+            return .secondaryLabelColor
+        }
     }
 }
 
