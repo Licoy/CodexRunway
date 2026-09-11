@@ -346,7 +346,7 @@ extension ApiEquivalentTotals {
 
 public enum PricingTable {
     /// Bundled fallback verified against the official OpenAI pricing documentation.
-    public static let version = "openai-builtin-2026-08-13"
+    public static let version = "openai-builtin-2026-09-11"
 
     public struct Price: Codable, Equatable, Sendable {
         var inputPerMillion: Decimal
@@ -380,6 +380,15 @@ public enum PricingTable {
     }
 
     static let builtInPrices: [String: Price] = [
+        "gpt-6-astra": Price(
+            inputPerMillion: 10,
+            cachedInputPerMillion: 1,
+            cacheWritePerMillion: 12.5,
+            outputPerMillion: 50,
+            longContextInputPerMillion: 20,
+            longContextCachedInputPerMillion: 2,
+            longContextCacheWritePerMillion: 25,
+            longContextOutputPerMillion: 75),
         "gpt-5.6": Price(
             inputPerMillion: 5,
             cachedInputPerMillion: 0.5,

@@ -814,8 +814,10 @@ struct CostScannerTests {
         #expect(loaded == summary)
     }
 
-    @Test("cost cache rejects a stale pricing version")
-    func costCacheRejectsStalePricingVersion() throws {
+    @Test("cost cache rejects a stale pricing version", arguments: [
+        "stale-pricing-version", "openai-builtin-2026-08-13",
+    ])
+    func costCacheRejectsStalePricingVersion(pricingVersion: String) throws {
         let root = try TemporaryDirectory()
         let cacheURL = root.url.appending(path: "api-equivalent-cost.json")
         let store = UsageCostCacheStore(cacheURL: cacheURL)
@@ -830,7 +832,7 @@ struct CostScannerTests {
             clientRows: [],
             rawCredits: 0,
             warnings: [],
-            pricingVersion: "stale-pricing-version",
+            pricingVersion: pricingVersion,
             calculatedAt: Date(timeIntervalSince1970: 60))
 
         try store.save(summary)
