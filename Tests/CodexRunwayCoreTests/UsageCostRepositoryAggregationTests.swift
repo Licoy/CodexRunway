@@ -4,6 +4,35 @@ import Testing
 
 @Suite("Usage cost repository — aggregation")
 struct UsageCostRepositoryAggregationTests {
+    @Test("Astra usage is priced in the repository, streaming scanner, and recent sessions", arguments: [
+        "gpt-6-astra", "gpt-6-astra-2026-09-10", " GPT-6-ASTRA ",
+    ])
+    func astraPricingAcrossLocalScanners(model: String) async throws {
+        let fixture = try RepositoryFixture()
+        let contents = """
+        {"timestamp":"2026-06-29T00:00:00Z","type":"session_meta","payload":{"id":"astra-session","cwd":"/tmp/astra-project"}}
+        \(tokenLine(timestamp: "2026-06-29T01:00:00Z", input: 10_000, cached: 2_000, output: 1_000, model: model))
+        """
+        try fixture.write(contents, basename: "rollout-astra.jsonl")
+        let request = fullWindowQuery()
+        let indexed = try #require(try await fixture.repository().summaries(
+            for: [request], calculatedAt: fixedNow, policy: .ifChanged)[request.id])
+        let streamed = try UsageCostScanner(codexHome: fixture.codexHome).scanAPIEquivalent(
+            window: request.window, calculatedAt: fixedNow)
+        let activity = try SessionActivityScanner(codexHome: fixture.codexHome).scan(limit: 1)
+        let recent = try #require(activity.items.first)
+        let expectedCost = Decimal(string: "0.132")!
+
+        for summary in [indexed, streamed] {
+            #expect(summary.estimatedUSD == expectedCost)
+            #expect(summary.modelRows.first?.estimatedUSD == expectedCost)
+            #expect(summary.confidence == .priced)
+            #expect(summary.warnings.isEmpty)
+            #expect(summary.pricingVersion == PricingTable.version)
+        }
+        #expect(recent.estimatedUSD == expectedCost)
+    }
+
     @Test("repository aggregation matches the streaming scanner field by field")
     func repositoryMatchesStreamingScanner() async throws {
         let fixture = try RepositoryFixture()
