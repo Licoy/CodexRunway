@@ -12,15 +12,21 @@ struct SystemLoginItemBackend: LoginItemBackend {
 
     func status() throws -> LoginItemStatus {
         if #available(macOS 13.0, *) {
-            switch SMAppService.mainApp.status {
-            case .enabled: return .enabled
-            case .notRegistered: return .notRegistered
-            case .requiresApproval: return .requiresApproval
-            case .notFound: throw LoginItemError.statusUnavailable
-            @unknown default: throw LoginItemError.statusUnavailable
-            }
+            return try Self.loginItemStatus(for: SMAppService.mainApp.status)
         } else {
             return try SessionLoginItems.status(appURL)
+        }
+    }
+
+    @available(macOS 13.0, *)
+    static func loginItemStatus(for status: SMAppService.Status) throws -> LoginItemStatus {
+        switch status {
+        case .enabled: return .enabled
+        // mainApp can return notFound before its first login-item record exists.
+        // Registration must still run so bundle/signature failures remain explicit.
+        case .notRegistered, .notFound: return .notRegistered
+        case .requiresApproval: return .requiresApproval
+        @unknown default: throw LoginItemError.statusUnavailable
         }
     }
 
@@ -56,7 +62,7 @@ struct SystemLoginItemBackend: LoginItemBackend {
     @available(macOS 13.0, *)
     private static func unregisterMainApp() throws {
         let service = SMAppService.mainApp
-        if service.status == .notRegistered { return }
+        if try loginItemStatus(for: service.status) == .notRegistered { return }
         do {
             try service.unregister()
         } catch {
