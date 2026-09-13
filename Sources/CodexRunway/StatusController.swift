@@ -72,6 +72,7 @@ final class StatusController: NSObject, NSPopoverDelegate, NSWindowDelegate {
             self?.publishWidgetSnapshot(force: true)
         }
         updaterService.applyPreferences()
+        settings.applyStoredLaunchAtLogin()
         applyAppearance()
         // applicationDefined: dismiss is owned by status-item toggle + outside-click monitors.
         // .transient fights makeKey (second status-item click auto-dismisses then re-opens).

@@ -77,6 +77,8 @@ Download the matching DMG from [GitHub Releases](https://github.com/Licoy/codex-
 
 Open the DMG and drag `CodexRunway.app` into `Applications`, or download and unpack the ZIP for the same architecture.
 
+On its first launch, the installed app requests launch at login by default; you can turn it off or on in **Control Panel → General → Launch at login**. If macOS requires approval, use **Open Login Items Settings** to allow it. Later launches respect changes made in System Settings; command-line and development runs do not register login items.
+
 ### macOS Security Blocks
 
 Current releases are ad-hoc signed and not notarized. If macOS says the developer cannot be verified or the app was not checked for malicious software, right-click `CodexRunway.app` and choose Open, or go to System Settings > Privacy & Security and click Open Anyway.

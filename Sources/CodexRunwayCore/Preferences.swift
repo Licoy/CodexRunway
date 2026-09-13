@@ -125,6 +125,12 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case checkForUpdates
     case fiveHourUsage
     case general
+    case launchAtLogin
+    case launchAtLoginDescription
+    case launchAtLoginFailed
+    case launchAtLoginRequiresApproval
+    case launchAtLoginUnavailable
+    case openLoginItemsSettings
     case networkProxy
     case networkProxyMode
     case networkProxySystem

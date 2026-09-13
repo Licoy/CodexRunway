@@ -117,6 +117,8 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     public var tokenUsageChartStyle: TokenUsageChartStyle
     public var rateLimitResetTodayRefreshIntervalSeconds: Int
     public var automaticallyChecksForUpdates: Bool
+    public var launchAtLoginEnabled: Bool
+    public var launchAtLoginInitialized: Bool
     public var quotaAlertsEnabled: Bool
     public var resetCreditAlertsEnabled: Bool
     public var rateLimitResetTodayAlertsEnabled: Bool
@@ -170,6 +172,8 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         tokenUsageChartStyle: TokenUsageChartStyle = .heatmap,
         rateLimitResetTodayRefreshIntervalSeconds: Int = RunwayPreferences.defaultRateLimitResetTodayRefreshIntervalSeconds,
         automaticallyChecksForUpdates: Bool = true,
+        launchAtLoginEnabled: Bool = true,
+        launchAtLoginInitialized: Bool = false,
         quotaAlertsEnabled: Bool = false,
         resetCreditAlertsEnabled: Bool = false,
         rateLimitResetTodayAlertsEnabled: Bool = true,
@@ -203,6 +207,8 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         self.rateLimitResetTodayRefreshIntervalSeconds = Self.clampRateLimitResetTodayRefreshInterval(
             rateLimitResetTodayRefreshIntervalSeconds)
         self.automaticallyChecksForUpdates = automaticallyChecksForUpdates
+        self.launchAtLoginEnabled = launchAtLoginEnabled
+        self.launchAtLoginInitialized = launchAtLoginInitialized
         self.quotaAlertsEnabled = quotaAlertsEnabled
         self.resetCreditAlertsEnabled = resetCreditAlertsEnabled
         self.rateLimitResetTodayAlertsEnabled = rateLimitResetTodayAlertsEnabled
@@ -283,6 +289,8 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         case tokenUsageChartStyle
         case rateLimitResetTodayRefreshIntervalSeconds
         case automaticallyChecksForUpdates
+        case launchAtLoginEnabled
+        case launchAtLoginInitialized
         case quotaAlertsEnabled
         case resetCreditAlertsEnabled
         case rateLimitResetTodayAlertsEnabled
@@ -337,6 +345,8 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
             try container.decodeIfPresent(Int.self, forKey: .rateLimitResetTodayRefreshIntervalSeconds)
                 ?? Self.defaultRateLimitResetTodayRefreshIntervalSeconds)
         automaticallyChecksForUpdates = try container.decodeIfPresent(Bool.self, forKey: .automaticallyChecksForUpdates) ?? true
+        launchAtLoginEnabled = try container.decodeIfPresent(Bool.self, forKey: .launchAtLoginEnabled) ?? true
+        launchAtLoginInitialized = try container.decodeIfPresent(Bool.self, forKey: .launchAtLoginInitialized) ?? false
         quotaAlertsEnabled = try container.decodeIfPresent(Bool.self, forKey: .quotaAlertsEnabled) ?? false
         resetCreditAlertsEnabled = try container.decodeIfPresent(Bool.self, forKey: .resetCreditAlertsEnabled) ?? false
         rateLimitResetTodayAlertsEnabled = try container.decodeIfPresent(Bool.self, forKey: .rateLimitResetTodayAlertsEnabled) ?? true

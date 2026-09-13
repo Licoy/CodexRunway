@@ -6,22 +6,27 @@ final class RunwaySettings: ObservableObject {
     @Published private(set) var preferences: RunwayPreferences
     @Published private(set) var networkProxy = NetworkProxyConfiguration()
     @Published private(set) var proxyError: NetworkProxyError?
+    @Published private(set) var loginItemError: LoginItemError?
+    @Published private(set) var loginItemStatus: LoginItemStatus = .unavailable
 
     var onChange: (() -> Void)?
 
     private let store: PreferencesStore
     private let networkProxyStore: NetworkProxyStore
     private let proxyCredentialStore: ProxyCredentialStore
+    private let loginItemApplier: LoginItemApplier
     private var hasValidProxyConfiguration = false
 
     init(
         store: PreferencesStore = PreferencesStore(),
         networkProxyStore: NetworkProxyStore = NetworkProxyStore(),
-        proxyCredentialStore: ProxyCredentialStore = ProxyCredentialStore())
+        proxyCredentialStore: ProxyCredentialStore = ProxyCredentialStore(),
+        loginItemApplier: LoginItemApplier = .production())
     {
         self.store = store
         self.networkProxyStore = networkProxyStore
         self.proxyCredentialStore = proxyCredentialStore
+        self.loginItemApplier = loginItemApplier
         self.preferences = store.load()
         do {
             networkProxy = try networkProxyStore.load()
@@ -247,6 +252,48 @@ final class RunwaySettings: ObservableObject {
         update { $0.automaticallyChecksForUpdates = isEnabled }
     }
 
+    func applyStoredLaunchAtLogin() {
+        if preferences.launchAtLoginInitialized {
+            refreshLaunchAtLoginStatus()
+        } else {
+            applyLaunchAtLogin(preferences.launchAtLoginEnabled)
+        }
+    }
+
+    func updateLaunchAtLogin(_ isEnabled: Bool) {
+        applyLaunchAtLogin(isEnabled)
+    }
+
+    func refreshLaunchAtLoginStatus() {
+        do {
+            loginItemStatus = try loginItemApplier.status()
+            switch loginItemError {
+            case .statusUnavailable:
+                loginItemError = nil
+            case .registerFailed where loginItemStatus.isRegistered:
+                loginItemError = nil
+            case .unregisterFailed where loginItemStatus == .notRegistered:
+                loginItemError = nil
+            default:
+                break
+            }
+            if preferences.launchAtLoginInitialized, loginItemStatus != .unavailable {
+                update(notify: false) { $0.launchAtLoginEnabled = loginItemStatus.isRegistered }
+            }
+        } catch {
+            loginItemError = .statusUnavailable
+        }
+    }
+
+    var launchAtLoginDescriptionKey: L10nKey {
+        if let loginItemError { return loginItemError.l10nKey }
+        switch loginItemStatus {
+        case .requiresApproval: return .launchAtLoginRequiresApproval
+        case .unavailable: return .launchAtLoginUnavailable
+        case .enabled, .notRegistered: return .launchAtLoginDescription
+        }
+    }
+
     func updateQuotaAlertsEnabled(_ isEnabled: Bool) {
         update { $0.quotaAlertsEnabled = isEnabled }
     }
@@ -261,6 +308,22 @@ final class RunwaySettings: ObservableObject {
 
     func updateExportsStatusJSON(_ isEnabled: Bool) {
         update { $0.exportsStatusJSON = isEnabled }
+    }
+
+    private func applyLaunchAtLogin(_ isEnabled: Bool) {
+        do {
+            loginItemStatus = try loginItemApplier.status()
+            guard loginItemStatus != .unavailable else { return }
+            loginItemStatus = try loginItemApplier.apply(enabled: isEnabled)
+            loginItemError = nil
+            update(notify: false) {
+                $0.launchAtLoginEnabled = isEnabled
+                $0.launchAtLoginInitialized = true
+            }
+        } catch {
+            loginItemError = error as? LoginItemError
+                ?? (isEnabled ? .registerFailed : .unregisterFailed)
+        }
     }
 
     private func update(

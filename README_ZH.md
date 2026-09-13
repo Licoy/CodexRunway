@@ -77,6 +77,8 @@ brew uninstall --cask --zap codex-runway
 
 打开 DMG 后把 `CodexRunway.app` 拖入 `Applications`，也可以下载同架构的 ZIP 后手动解压。
 
+安装版首次启动时默认请求开启开机自启，可在 **控制面板 → 通用 → 开机自启** 中关闭或开启；若 macOS 要求批准，点击 **打开登录项设置** 后允许该应用；后续启动会尊重系统设置中的更改，命令行和开发运行不会注册登录项
+
 ### macOS 安全阻挡
 
 当前 Release 是 ad-hoc signed，未 notarized。首次打开如果提示“无法验证开发者”或“未经安全验证”，请右键点击 `CodexRunway.app`，选择“打开”，或在“系统设置 > 隐私与安全性”中点击“仍要打开”。

@@ -1,5 +1,6 @@
 import AppKit
 import CodexRunwayCore
+import ServiceManagement
 import SwiftUI
 
 enum ControlPanelTab: String, Hashable, CaseIterable {
@@ -104,6 +105,10 @@ struct ControlPanelView: View {
         .padding(.vertical, 16)
         .frame(width: panelWidth, height: Self.panelHeight)
         .background(Color(nsColor: .windowBackgroundColor))
+        .onAppear { settings.refreshLaunchAtLoginStatus() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            settings.refreshLaunchAtLoginStatus()
+        }
         .alert(l10n.text(.repairConfirmTitle), isPresented: $confirmRepair) {
             Button(l10n.text(.repair), role: .destructive) { model.repairSessions() }
             Button(l10n.text(.cancel), role: .cancel) {}
@@ -118,7 +123,7 @@ struct ControlPanelView: View {
     }
 
     private var generalPane: some View {
-        PreferencesPane(remasureToken: "\(l10n.language.rawValue)-\(networkProxyLayoutVersion)") {
+        PreferencesPane(remasureToken: "\(l10n.language.rawValue)-\(networkProxyLayoutVersion)-\(settings.launchAtLoginDescriptionKey.rawValue)") {
             SettingsSection {
                 SectionLabel(l10n.text(.general))
                 PickerRow(
@@ -134,6 +139,18 @@ struct ControlPanelView: View {
                     }
                     .pickerStyle(.menu)
                     .fixedSize(horizontal: true, vertical: false)
+                }
+                PreferenceToggleRow(
+                    title: l10n.text(.launchAtLogin),
+                    subtitle: l10n.text(settings.launchAtLoginDescriptionKey),
+                    binding: launchAtLoginBinding)
+                    .disabled(settings.loginItemStatus == .unavailable)
+                if settings.loginItemStatus == .requiresApproval {
+                    Button(l10n.text(.openLoginItemsSettings)) {
+                        if #available(macOS 13.0, *) {
+                            SMAppService.openSystemSettingsLoginItems()
+                        }
+                    }
                 }
                 PickerRow(title: l10n.text(.refreshInterval), subtitle: l10n.text(.minutes)) {
                     Picker(l10n.text(.refreshInterval), selection: refreshBinding) {
@@ -625,6 +642,12 @@ struct ControlPanelView: View {
                 settings.updateShowsSessionRepairSummary(enabled)
                 if enabled { model.refreshSessionReport() }
             })
+    }
+
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding(
+            get: { settings.loginItemStatus.isRegistered },
+            set: { settings.updateLaunchAtLogin($0) })
     }
 
     private var automaticallyChecksForUpdatesBinding: Binding<Bool> {

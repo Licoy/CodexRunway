@@ -4,6 +4,31 @@ import Testing
 
 @Suite("Runway preferences")
 struct PreferencesTests {
+    @Test("launch at login defaults on, including older preference JSON")
+    func launchAtLoginDefaultsOn() throws {
+        #expect(RunwayPreferences().launchAtLoginEnabled)
+        #expect(!RunwayPreferences().launchAtLoginInitialized)
+
+        let oldData = """
+        {
+          "language": "english",
+          "appearance": "dark",
+          "refreshIntervalSeconds": 300
+        }
+        """.data(using: .utf8)!
+        let oldPreferences = try JSONDecoder().decode(RunwayPreferences.self, from: oldData)
+        #expect(oldPreferences.launchAtLoginEnabled)
+        #expect(!oldPreferences.launchAtLoginInitialized)
+
+        let suiteName = "CodexRunwayLaunchAtLogin-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = PreferencesStore(defaults: defaults)
+        store.save(RunwayPreferences(launchAtLoginEnabled: false, launchAtLoginInitialized: true))
+        #expect(store.load().launchAtLoginEnabled == false)
+        #expect(store.load().launchAtLoginInitialized)
+    }
+
     @Test("desktop widgets default to a 60-second app-driven refresh")
     func widgetRefreshDefaults() throws {
         #expect(RunwayPreferences().widgetRefreshIntervalSeconds == 60)
@@ -76,6 +101,8 @@ struct PreferencesTests {
 
         #expect(english.text(.settings) == "Settings")
         #expect(chinese.text(.settings) == "设置")
+        #expect(english.text(.launchAtLogin) == "Launch at login")
+        #expect(chinese.text(.launchAtLogin) == "开机自启")
         #expect(english.text(.updateReadyToInstall) == "Ready to Install")
         #expect(chinese.text(.updateInstallAndRelaunch) == "安装并重启")
         #expect(english.text(.statusBarMetersDetailBoth) == "Both")
