@@ -65,14 +65,14 @@ struct RunwayProviderTimelineProvider: AppIntentTimelineProvider {
     }
 
     func timeline(for configuration: RunwayProviderSelectionIntent, in context: Context) async -> Timeline<RunwayWidgetEntry> {
-        RunwayWidgetLoader.timeline(provider: configuration.provider.scope, metric: .remainingQuota)
+        RunwayWidgetLoader.timeline(provider: configuration.provider.providerScope, metric: .remainingQuota)
     }
 
     private func entry(for configuration: RunwayProviderSelectionIntent) -> RunwayWidgetEntry {
         RunwayWidgetEntry(
             date: Date(),
             state: RunwayWidgetLoader.load(),
-            provider: configuration.provider.scope,
+            provider: configuration.provider.providerScope,
             metric: .remainingQuota)
     }
 }
@@ -92,14 +92,14 @@ struct RunwayMetricTimelineProvider: AppIntentTimelineProvider {
         RunwayWidgetEntry(
             date: Date(),
             state: RunwayWidgetLoader.load(),
-            provider: configuration.provider.scope,
-            metric: configuration.metric.kind)
+            provider: configuration.provider.providerScope,
+            metric: configuration.metric.metricKind)
     }
 
     func timeline(for configuration: RunwayMetricSelectionIntent, in context: Context) async -> Timeline<RunwayWidgetEntry> {
         RunwayWidgetLoader.timeline(
-            provider: configuration.provider.scope,
-            metric: configuration.metric.kind)
+            provider: configuration.provider.providerScope,
+            metric: configuration.metric.metricKind)
     }
 }
 
@@ -128,24 +128,12 @@ struct RunwayResetTimelineProvider: TimelineProvider {
 }
 
 @available(macOS 14.0, *)
-private extension RunwayProviderChoice {
-    var scope: RunwayWidgetProviderScope {
-        switch self {
-        case .codex: .codex
-        case .grok: .grok
-        case .both: .both
-        }
+private extension String {
+    var providerScope: RunwayWidgetProviderScope {
+        RunwayWidgetProviderScope(rawValue: self) ?? .codex
     }
-}
 
-@available(macOS 14.0, *)
-private extension RunwayMetricChoice {
-    var kind: RunwayWidgetMetricKind {
-        switch self {
-        case .remainingQuota: .remainingQuota
-        case .apiEquivalentCost: .apiEquivalentCost
-        case .tokenCount: .tokenCount
-        case .balance: .balance
-        }
+    var metricKind: RunwayWidgetMetricKind {
+        RunwayWidgetMetricKind(rawValue: self) ?? .remainingQuota
     }
 }

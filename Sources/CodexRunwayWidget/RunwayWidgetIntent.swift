@@ -1,34 +1,38 @@
 import AppIntents
 import Foundation
 
+/// macOS 27 resolves widget `AppEnum` parameters to nil and keeps the
+/// default, so a saved "both" renders as Codex. These ids stay plain
+/// strings, which the system still passes through.
 @available(macOS 14.0, *)
-enum RunwayProviderChoice: String, AppEnum {
-    case codex
-    case grok
-    case both
+struct RunwayProviderOptions: DynamicOptionsProvider, Sendable {
+    func results() async throws -> IntentItemCollection<String> {
+        IntentItemCollection(sections: [
+            IntentItemSection(items: [
+                IntentItem("codex", title: "Codex"),
+                IntentItem("grok", title: "Grok"),
+                IntentItem("both", title: "Both"),
+            ]),
+        ])
+    }
 
-    static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Provider")
-    static let caseDisplayRepresentations: [RunwayProviderChoice: DisplayRepresentation] = [
-        .codex: DisplayRepresentation(title: "Codex"),
-        .grok: DisplayRepresentation(title: "Grok"),
-        .both: DisplayRepresentation(title: "Both"),
-    ]
+    func defaultResult() async -> String? { "codex" }
 }
 
 @available(macOS 14.0, *)
-enum RunwayMetricChoice: String, AppEnum {
-    case remainingQuota
-    case apiEquivalentCost
-    case tokenCount
-    case balance
+struct RunwayMetricOptions: DynamicOptionsProvider, Sendable {
+    func results() async throws -> IntentItemCollection<String> {
+        IntentItemCollection(sections: [
+            IntentItemSection(items: [
+                IntentItem("remainingQuota", title: "Remaining quota"),
+                IntentItem("apiEquivalentCost", title: "API equivalent cost"),
+                IntentItem("tokenCount", title: "Token count"),
+                IntentItem("balance", title: "Balance"),
+            ]),
+        ])
+    }
 
-    static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Metric")
-    static let caseDisplayRepresentations: [RunwayMetricChoice: DisplayRepresentation] = [
-        .remainingQuota: DisplayRepresentation(title: "Remaining quota"),
-        .apiEquivalentCost: DisplayRepresentation(title: "API equivalent cost"),
-        .tokenCount: DisplayRepresentation(title: "Token count"),
-        .balance: DisplayRepresentation(title: "Balance"),
-    ]
+    func defaultResult() async -> String? { "remainingQuota" }
 }
 
 @available(macOS 14.0, *)
@@ -36,12 +40,8 @@ struct RunwayProviderSelectionIntent: AppIntent, WidgetConfigurationIntent {
     static let title: LocalizedStringResource = "Provider"
     static let description = IntentDescription("Choose which provider the widget displays.")
 
-    @Parameter(title: "Provider", default: .codex)
-    var provider: RunwayProviderChoice
-
-    init() {
-        provider = .codex
-    }
+    @Parameter(title: "Provider", optionsProvider: RunwayProviderOptions())
+    var provider: String
 }
 
 @available(macOS 14.0, *)
@@ -49,14 +49,9 @@ struct RunwayMetricSelectionIntent: AppIntent, WidgetConfigurationIntent {
     static let title: LocalizedStringResource = "Key Metric"
     static let description = IntentDescription("Choose a provider and metric.")
 
-    @Parameter(title: "Provider", default: .codex)
-    var provider: RunwayProviderChoice
+    @Parameter(title: "Provider", optionsProvider: RunwayProviderOptions())
+    var provider: String
 
-    @Parameter(title: "Metric", default: .remainingQuota)
-    var metric: RunwayMetricChoice
-
-    init() {
-        provider = .codex
-        metric = .remainingQuota
-    }
+    @Parameter(title: "Metric", optionsProvider: RunwayMetricOptions())
+    var metric: String
 }
