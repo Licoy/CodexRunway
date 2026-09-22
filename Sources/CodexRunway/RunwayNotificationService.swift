@@ -48,7 +48,7 @@ struct RunwayNotificationService {
         }
     }
 
-    func title(for alert: RunwayAlert, l10n: L10n) -> String {
+    func title(for alert: RunwayAlert, l10n: L10n, now: Date = Date()) -> String {
         switch alert.kind {
         case .quota:
             return l10n.text(.quotaAlertTitle)
@@ -62,6 +62,22 @@ struct RunwayNotificationService {
             }
             return l10n.text(.rateLimitResetDetectedAlertTitle)
         case .rateLimitResetUpcoming:
+            if let boundary = notificationBoundary(for: alert), boundary <= now {
+                if let resetType = alert.resetType {
+                    return String(
+                        format: l10n.text(.rateLimitResetSchedulePassedTypedAlertTitle),
+                        resetType.localizedName(l10n: l10n))
+                }
+                return l10n.text(.rateLimitResetSchedulePassedAlertTitle)
+            }
+            if alert.scheduleBasis == .contextualInference {
+                if let resetType = alert.resetType {
+                    return String(
+                        format: l10n.text(.rateLimitResetPreviewTypedAlertTitle),
+                        resetType.localizedName(l10n: l10n))
+                }
+                return l10n.text(.rateLimitResetPreviewAlertTitle)
+            }
             if alert.endDate != nil {
                 if let resetType = alert.resetType {
                     return String(
@@ -82,7 +98,8 @@ struct RunwayNotificationService {
     func body(
         for alert: RunwayAlert,
         l10n: L10n,
-        calendar: Calendar = .autoupdatingCurrent) -> String
+        calendar: Calendar = .autoupdatingCurrent,
+        now: Date = Date()) -> String
     {
         switch alert.kind {
         case .quota:
@@ -102,25 +119,93 @@ struct RunwayNotificationService {
                 l10n.text(.rateLimitResetDetectedAlertBody)
             }
         case .rateLimitResetUpcoming:
-            if let startAt = alert.date, let endAt = alert.endDate {
-                let window = RateLimitResetScheduleWindow(
-                    startAt: startAt,
-                    endAt: endAt,
-                    isRange: true)
-                let range = ResetLabelFormatter.scheduledLabel(
-                    for: window,
-                    language: l10n.language,
-                    calendar: calendar)
-                return String(
-                    format: l10n.text(.rateLimitResetUpcomingRangeAlertBody),
-                    range)
-            }
-            let minutes = alert.threshold ?? 60
-            if minutes <= 30 {
-                return l10n.text(.rateLimitResetUpcomingAlertBody30m)
-            }
-            return l10n.text(.rateLimitResetUpcomingAlertBody1h)
+            return upcomingBody(for: alert, l10n: l10n, calendar: calendar, now: now)
         }
+    }
+
+    private func upcomingBody(
+        for alert: RunwayAlert,
+        l10n: L10n,
+        calendar: Calendar,
+        now: Date) -> String
+    {
+        if let boundary = notificationBoundary(for: alert), boundary <= now {
+            let when = scheduleText(for: alert, l10n: l10n, calendar: calendar) ?? "—"
+            let key: L10nKey = alert.scheduleBasis == .contextualInference
+                ? .rateLimitResetPreviewPassedAlertBody
+                : .rateLimitResetSchedulePassedAlertBody
+            return String(format: l10n.text(key), when)
+        }
+        if alert.endDate != nil {
+            return upcomingRangeBody(for: alert, l10n: l10n, calendar: calendar)
+        }
+        return upcomingPointBody(for: alert, l10n: l10n, calendar: calendar)
+    }
+
+    private func upcomingRangeBody(
+        for alert: RunwayAlert,
+        l10n: L10n,
+        calendar: Calendar) -> String
+    {
+        let range = scheduleText(for: alert, l10n: l10n, calendar: calendar) ?? "—"
+        if let confidence = alert.confidencePercent {
+            let key: L10nKey = alert.scheduleBasis == .contextualInference
+                ? .rateLimitResetPreviewRangeDetailAlertBody
+                : .rateLimitResetUpcomingRangeDetailAlertBody
+            return String(format: l10n.text(key), range, "\(confidence)%")
+        }
+        if alert.scheduleBasis == .contextualInference {
+            return String(format: l10n.text(.rateLimitResetPreviewLegacyAlertBody), range)
+        }
+        return String(format: l10n.text(.rateLimitResetUpcomingRangeAlertBody), range)
+    }
+
+    private func upcomingPointBody(
+        for alert: RunwayAlert,
+        l10n: L10n,
+        calendar: Calendar) -> String
+    {
+        let relative = l10n.text(
+            (alert.threshold ?? 60) <= 30
+                ? .rateLimitResetUpcomingAlertBody30m
+                : .rateLimitResetUpcomingAlertBody1h)
+        guard let when = scheduleText(for: alert, l10n: l10n, calendar: calendar) else {
+            return alert.scheduleBasis == .contextualInference
+                ? l10n.text(.rateLimitResetPreviewAlertBody)
+                : relative
+        }
+        guard let confidence = alert.confidencePercent else {
+            return alert.scheduleBasis == .contextualInference
+                ? String(format: l10n.text(.rateLimitResetPreviewLegacyAlertBody), when)
+                : relative
+        }
+        let key: L10nKey = alert.scheduleBasis == .contextualInference
+            ? .rateLimitResetPreviewDetailAlertBody
+            : .rateLimitResetUpcomingDetailAlertBody
+        if alert.scheduleBasis == .contextualInference {
+            return String(format: l10n.text(key), when, "\(confidence)%")
+        }
+        return String(format: l10n.text(key), when, "\(confidence)%", relative)
+    }
+
+    private func scheduleText(
+        for alert: RunwayAlert,
+        l10n: L10n,
+        calendar: Calendar) -> String?
+    {
+        guard let startAt = alert.date else { return nil }
+        let endAt = alert.endDate ?? startAt
+        return ResetLabelFormatter.scheduledLabel(
+            for: RateLimitResetScheduleWindow(
+                startAt: startAt,
+                endAt: endAt,
+                isRange: alert.endDate != nil),
+            language: l10n.language,
+            calendar: calendar)
+    }
+
+    private func notificationBoundary(for alert: RunwayAlert) -> Date? {
+        alert.endDate?.addingTimeInterval(60) ?? alert.date
     }
 
     private func displayName(for name: String, l10n: L10n) -> String {

@@ -8,7 +8,7 @@ English · [简体中文](./README_ZH.md) · [繁體中文](./README_ZH_HANT.md)
 
 How much longer can your Codex keep running?
 
-CodexRunway is a native macOS menu bar app for checking Codex and Grok quota. It also provides Codex reset-today status, reset credits, API-equivalent cost, and local sessions, with separate multi-account management for each provider.
+CodexRunway is a native macOS menu bar app for checking Codex and Grok quota. It also provides Codex Reset Updates, reset credits, API-equivalent cost, and local sessions, with separate multi-account management for each provider.
 
 ## Highlights
 
@@ -19,7 +19,7 @@ CodexRunway is a native macOS menu bar app for checking Codex and Grok quota. It
 - Manage multiple Grok OAuth / SuperGrok accounts with isolated sign-in, current-login import, paste token/JSON, refresh, aliases, ordering, removal, and explicit switching.
 - View 5-hour, weekly, and additional quota windows.
 - See whether Codex rate limits have reset today (data from [www.codexrunway.com](https://www.codexrunway.com)), with a link to the related public post.
-- Toggle the “reset today?” section in settings and configure its own refresh interval (on by default, every 5 minutes).
+- Toggle the “Codex Reset Updates” section in settings and configure its own refresh interval (on by default, every 5 minutes).
 - Manage multiple Codex accounts: browser sign-in, import local `auth.json`, paste token/JSON (including `/auth/session`), import files, or add an API key.
 - Switch accounts safely after confirmation by atomically writing `~/.codex/auth.json`, with an optional Codex restart so CLI / IDE stay in sync.
 - Show the current account, subscription tier, and expiration.
@@ -32,7 +32,7 @@ CodexRunway is a native macOS menu bar app for checking Codex and Grok quota. It
 - Repair the local session index.
 - Support light, dark, system appearance, and English, 简体中文, 繁體中文, 한국어, 日本語, Русский, Français.
 - Support built-in update checks.
-- Offer macOS 14+ desktop widgets for quota overview, token trend, a key metric, and reset-today status.
+- Offer macOS 14+ desktop widgets for quota overview, token trend, a key metric, and Codex Reset Updates.
 
 ## Screenshots
 
@@ -123,7 +123,7 @@ The self-check reads local state only and makes no network request. It prints re
 
 ## Desktop Widgets
 
-Desktop widgets require macOS 14 or later. Starting with a release that contains this fix, public releases and local development builds both include the Widget extension. Each widget can independently select Codex, Grok, or both in Edit Widget; Reset Today is Codex-only. After upgrading, macOS registers the production widget from the app's `Contents/PlugIns` directory.
+Desktop widgets require macOS 14 or later. Starting with a release that contains this fix, public releases and local development builds both include the Widget extension. Each widget can independently select Codex, Grok, or both in Edit Widget; Codex Reset Updates is Codex-only. After upgrading, macOS registers the production widget from the app's `Contents/PlugIns` directory.
 
 `swift run CodexRunway` uses separate `swift-dev` identifiers and does not replace an existing installation. You can also package a widget-enabled app manually with `.dev` identifiers:
 
@@ -158,13 +158,13 @@ Changes apply only after **Save Proxy Settings**; a running update keeps the con
 - Weekly quota estimates store only derived Credits totals and percents in `~/.codex-runway/quota-estimate-history.json`. No tokens or keys.
 - Online usage supplements API-equivalent cost only when local token data is unavailable. The chart’s “Official stats (all devices)” series comes from current-account profile statistics and may lag or be revised; “Local logs (all sessions)” scans the sessions present on this Mac and historical entries may span accounts. Daily values in this comparison use UTC dates so both sources share the same day boundary. The two series are not a subset relationship and should not be subtracted.
 - Session repair only touches `~/.codex/session_index.jsonl`, creates a backup before writing, and never deletes session files.
-- “Reset today?” only downloads the public status feed. It sends no Codex account, token, or local session content.
+- “Codex Reset Updates” only downloads the public status feed. It sends no Codex account, token, or local session content.
 - Update checks request only version information. Codex account and session data are not uploaded.
 - Widget snapshot storage contains only non-secret derived quota, balance, cost, daily-token, and reset-status data. The main app is the sole writer; widgets are read-only.
 
 ## Data sources
 
-- **Reset today?**: Data comes from [https://www.codexrunway.com/api/status.json](https://www.codexrunway.com/api/status.json). Unofficial and advisory only; may be delayed or temporarily unavailable.
+- **Codex Reset Updates**: Data comes from [https://www.codexrunway.com/api/status.json](https://www.codexrunway.com/api/status.json). Unofficial and advisory only; may be delayed or temporarily unavailable.
 - **Quota / reset credits / quota estimate / official token usage / some online usage**: When signed in, requests use your local credentials against official ChatGPT / Codex backend APIs. Official token usage belongs to the current account and shows the backend statistics date. Quota estimate is unofficial: weekly allowance is extrapolated from weekly used percent and daily Credits (1000 Credits ≈ $40, version `credits-usd-2026-08-26`).
 - **Grok quota**: Returned only by the official CLI chat-proxy `/v1/billing?format=credits` endpoint using a local OAuth / SuperGrok login. There is no secondary data source, and API billing or local-session statistics are not mixed into this quota.
 - **Grok API-equivalent cost / local sessions**: Computed from local `~/.grok/sessions` `turn_completed` usage using official xAI Text API prices (input / cached / output; prompts ≥ 200k use long-context rates; price book `xai-builtin-2026-08-13`). Unknown models are not invented as exact costs. CLI `costUsdTicks` is subscription-credit accounting and is not used as API-equivalent cost.

@@ -68,6 +68,27 @@ struct RateLimitResetTodayRefreshModelTests {
         #expect(!model.isRefreshing(.rateLimitResetToday))
     }
 
+    @Test("first fetch failure uses unavailable wording and keeps the error detail")
+    func firstFetchFailureUsesUnavailablePresentation() async throws {
+        let settings = RunwaySettings(store: PreferencesStore(defaults: scopedDefaults()))
+        settings.updateLanguage(.simplifiedChinese)
+        settings.updateShowsRateLimitResetToday(true)
+        let model = makeModel(
+            settings: settings,
+            fetch: { throw URLError(.cannotConnectToHost) })
+
+        model.refreshRateLimitResetToday(force: true)
+        try await waitUntil { model.rateLimitResetTodayText == "暂不可用" }
+
+        #expect(model.rateLimitResetToday == nil)
+        #expect(model.rateLimitResetTodayText == "暂不可用")
+        #expect(model.rateLimitResetTodayLines.first?.title == "Codex 重置状态如何？")
+        #expect(model.rateLimitResetTodayLines.first?.value == "暂不可用")
+        #expect(model.rateLimitResetTodayLines.contains {
+            $0.title == "错误" && !$0.value.isEmpty
+        })
+    }
+
     private func makeModel(
         settings: RunwaySettings,
         fetch: @escaping @Sendable () async throws -> RateLimitResetTodaySnapshot) -> RunwayModel

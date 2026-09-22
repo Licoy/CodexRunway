@@ -52,17 +52,17 @@ if let dumpIndex = CommandLine.arguments.firstIndex(of: "--dump-locale-metrics")
 //   swift run CodexRunway -- --dev-tier-badges
 
 // Dev helper: render the rate-limit-reset card with mock data to a PNG.
-// Example: CodexRunway --render-reset-today-mock=scheduled /tmp/reset-scheduled.png
+// Example: CodexRunway --render-reset-today-mock=explicit-scheduled /tmp/reset-scheduled.png
 if let renderIndex = CommandLine.arguments.firstIndex(where: { $0.hasPrefix("--render-reset-today-mock=") }) {
     let renderFlag = CommandLine.arguments[renderIndex]
     let value = String(renderFlag.dropFirst("--render-reset-today-mock=".count))
     guard let kind = RateLimitResetTodaySnapshot.DevMockKind.parse(value) else {
-        fputs("usage: --render-reset-today-mock=yes|no|scheduled|unknown <output.png>\n", stderr)
+        fputs("usage: --render-reset-today-mock=completed|explicit-scheduled|inferred-scheduled|grace|expired|unavailable|no <output.png>\n", stderr)
         exit(2)
     }
     let pathIndex = CommandLine.arguments.index(after: renderIndex)
     guard pathIndex < CommandLine.arguments.endIndex else {
-        fputs("usage: --render-reset-today-mock=yes|no|scheduled|unknown <output.png>\n", stderr)
+        fputs("usage: --render-reset-today-mock=completed|explicit-scheduled|inferred-scheduled|grace|expired|unavailable|no <output.png>\n", stderr)
         exit(2)
     }
     let path = CommandLine.arguments[pathIndex]
@@ -70,6 +70,19 @@ if let renderIndex = CommandLine.arguments.firstIndex(where: { $0.hasPrefix("--r
     app.setActivationPolicy(.accessory)
     do {
         try RateLimitResetTodayMockRender.write(kind: kind, to: path)
+        exit(0)
+    } catch {
+        fputs("render failed: \(error.localizedDescription)\n", stderr)
+        exit(1)
+    }
+}
+
+if let argument = CommandLine.arguments.first(where: { $0.hasPrefix("--render-reset-today-qa=") }) {
+    let directory = String(argument.dropFirst("--render-reset-today-qa=".count))
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    do {
+        try RateLimitResetTodayMockRender.writeQAMatrix(to: directory)
         exit(0)
     } catch {
         fputs("render failed: \(error.localizedDescription)\n", stderr)

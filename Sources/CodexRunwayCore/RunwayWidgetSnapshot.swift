@@ -126,6 +126,9 @@ public struct RunwayWidgetResetTodaySnapshot: Codable, Equatable, Sendable {
     public var fetchedAt: Date
     public var confidencePercent: Int?
     public var confidenceBand: RateLimitResetTodayConfidenceBand?
+    /// App-precomputed presentations at each lifecycle boundary.
+    /// Missing on legacy schema-1 snapshots; the reset widget then asks the app to refresh.
+    public var timeline: [RunwayWidgetResetTodayTimelineEntry]?
 
     public init(
         state: State,
@@ -135,7 +138,8 @@ public struct RunwayWidgetResetTodaySnapshot: Codable, Equatable, Sendable {
         lastSuccessfulCheckAt: Date?,
         fetchedAt: Date,
         confidencePercent: Int? = nil,
-        confidenceBand: RateLimitResetTodayConfidenceBand? = nil)
+        confidenceBand: RateLimitResetTodayConfidenceBand? = nil,
+        timeline: [RunwayWidgetResetTodayTimelineEntry]? = nil)
     {
         self.state = state
         self.resetType = resetType
@@ -145,6 +149,139 @@ public struct RunwayWidgetResetTodaySnapshot: Codable, Equatable, Sendable {
         self.fetchedAt = fetchedAt
         self.confidencePercent = confidencePercent
         self.confidenceBand = confidenceBand
+        self.timeline = timeline
+    }
+
+    public func presentation(at date: Date) -> RunwayWidgetResetTodayTimelineEntry? {
+        guard let timeline, !timeline.isEmpty else { return nil }
+        return timeline.last(where: { $0.effectiveAt <= date }) ?? timeline.first
+    }
+
+    public func transitionDates(after date: Date) -> [Date] {
+        guard let timeline else { return [] }
+        return timeline.map(\.effectiveAt).filter { $0 > date }
+    }
+}
+
+public struct RunwayWidgetResetTodayTimelineEntry: Codable, Equatable, Sendable {
+    public var effectiveAt: Date
+    public var reason: RateLimitResetTodayVerdictReason
+    public var state: RunwayWidgetResetTodaySnapshot.State
+    public var resetType: RateLimitResetType?
+    public var nextScheduledAt: Date?
+    public var nextScheduledResetType: RateLimitResetType?
+    public var scheduleBasis: RateLimitResetScheduleBasis?
+    public var confidencePercent: Int?
+    public var confidenceBand: RateLimitResetTodayConfidenceBand?
+
+    public init(
+        effectiveAt: Date,
+        reason: RateLimitResetTodayVerdictReason,
+        state: RunwayWidgetResetTodaySnapshot.State,
+        resetType: RateLimitResetType?,
+        nextScheduledAt: Date?,
+        nextScheduledResetType: RateLimitResetType?,
+        scheduleBasis: RateLimitResetScheduleBasis? = nil,
+        confidencePercent: Int?,
+        confidenceBand: RateLimitResetTodayConfidenceBand?)
+    {
+        self.effectiveAt = effectiveAt
+        self.reason = reason
+        self.state = state
+        self.resetType = resetType
+        self.nextScheduledAt = nextScheduledAt
+        self.nextScheduledResetType = nextScheduledResetType
+        self.scheduleBasis = scheduleBasis
+        self.confidencePercent = confidencePercent
+        self.confidenceBand = confidenceBand
+    }
+}
+
+extension RateLimitResetTodaySnapshot {
+    public func makeWidgetResetTodaySnapshot(
+        now: Date = Date(),
+        calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar)
+        -> RunwayWidgetResetTodaySnapshot
+    {
+        let anchor = min(fetchedAt, now)
+        let current = widgetTimelineEntry(
+            effectiveAt: anchor,
+            evaluatedAt: now,
+            calendar: calendar)
+        var timeline = [current]
+        for rawDate in nextVerdictTransitionDates(now: now, calendar: calendar) {
+            let date = Self.widgetSecondBoundary(rawDate)
+            let entry = widgetTimelineEntry(
+                effectiveAt: date,
+                evaluatedAt: date,
+                calendar: calendar)
+            if timeline.last.map({ $0.samePresentation(as: entry) }) != true {
+                timeline.append(entry)
+            }
+        }
+        return RunwayWidgetResetTodaySnapshot(
+            state: current.state,
+            resetType: current.resetType,
+            nextScheduledAt: current.nextScheduledAt,
+            nextScheduledResetType: current.nextScheduledResetType,
+            lastSuccessfulCheckAt: lastSuccessfulCheckAt,
+            fetchedAt: fetchedAt,
+            confidencePercent: current.confidencePercent,
+            confidenceBand: current.confidenceBand,
+            timeline: timeline)
+    }
+
+    /// Widget snapshots use ISO-8601 second precision, so lifecycle entries must
+    /// never serialize earlier than the source boundary they represent.
+    private static func widgetSecondBoundary(_ date: Date) -> Date {
+        Date(timeIntervalSince1970: ceil(date.timeIntervalSince1970))
+    }
+
+    private func widgetTimelineEntry(
+        effectiveAt: Date,
+        evaluatedAt date: Date,
+        calendar: Calendar) -> RunwayWidgetResetTodayTimelineEntry
+    {
+        let presentation = verdictPresentation(now: date, calendar: calendar)
+        let state: RunwayWidgetResetTodaySnapshot.State = switch presentation.reason {
+        case .unavailable: .unknown
+        default: presentation.showsYes ? .yes : .no
+        }
+        let next = presentation.reason == .unavailable
+            ? nil
+            : nextScheduledResetSummary(now: date)
+        let timerTarget: Date?
+        if let next {
+            let window = next.window
+            timerTarget = window.startAt > date ? window.startAt : window.pendingUntil
+        } else {
+            timerTarget = nil
+        }
+        return RunwayWidgetResetTodayTimelineEntry(
+            effectiveAt: effectiveAt,
+            reason: presentation.reason,
+            state: state,
+            resetType: presentation.resetType,
+            nextScheduledAt: timerTarget,
+            nextScheduledResetType: timerTarget == nil ? nil : next?.resetType,
+            scheduleBasis: presentation.isScheduled
+                ? presentation.scheduleBasis
+                : next?.scheduleBasis,
+            confidencePercent: presentation.percent,
+            confidenceBand: presentation.band)
+    }
+}
+
+private extension RunwayWidgetResetTodayTimelineEntry {
+    func samePresentation(as other: Self) -> Bool {
+        reason == other.reason
+            && state == other.state
+            && resetType == other.resetType
+            && nextScheduledAt == other.nextScheduledAt
+            && nextScheduledResetType == other.nextScheduledResetType
+            && scheduleBasis == other.scheduleBasis
+            && confidencePercent == other.confidencePercent
+            && confidenceBand == other.confidenceBand
     }
 }
 

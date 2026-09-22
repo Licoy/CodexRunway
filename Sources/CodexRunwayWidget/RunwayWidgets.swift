@@ -3,7 +3,9 @@ import CodexRunwayCore
 import SwiftUI
 import WidgetKit
 
+#if !SWIFT_PACKAGE
 @main
+#endif
 @available(macOS 14.0, *)
 struct CodexRunwayWidgetBundle: WidgetBundle {
     var body: some Widget {
@@ -71,8 +73,8 @@ struct RunwayResetTodayWidget: Widget {
         { entry in
             RunwayResetTodayWidgetView(entry: entry)
         }
-        .configurationDisplayName("Reset Today")
-        .description("Today’s Codex reset status and next scheduled reset.")
+        .configurationDisplayName("Codex Reset Updates")
+        .description("Shows the Codex reset status and next expected reset.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }

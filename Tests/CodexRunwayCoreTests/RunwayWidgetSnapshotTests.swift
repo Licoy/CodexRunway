@@ -25,6 +25,7 @@ struct RunwayWidgetSnapshotTests {
         #expect(text.contains("\"nextScheduledResetType\":\"banked\""))
         #expect(text.contains("\"confidencePercent\":92"))
         #expect(text.contains("\"confidenceBand\":\"ok\""))
+        #expect(text.contains("\"scheduleBasis\":\"explicit\""))
     }
 
     @Test("legacy snapshots decode without reset type fields")
@@ -38,6 +39,7 @@ struct RunwayWidgetSnapshotTests {
         resetToday.removeValue(forKey: "nextScheduledResetType")
         resetToday.removeValue(forKey: "confidencePercent")
         resetToday.removeValue(forKey: "confidenceBand")
+        resetToday.removeValue(forKey: "timeline")
         object["resetToday"] = resetToday
 
         let legacyData = try JSONSerialization.data(withJSONObject: object)
@@ -50,6 +52,171 @@ struct RunwayWidgetSnapshotTests {
         #expect(decoded.resetToday?.nextScheduledResetType == nil)
         #expect(decoded.resetToday?.confidencePercent == nil)
         #expect(decoded.resetToday?.confidenceBand == nil)
+        #expect(decoded.resetToday?.timeline == nil)
+        #expect(decoded.resetToday?.presentation(at: Date()) == nil)
+    }
+
+    @Test("reset timeline selects the last precomputed presentation at entry date")
+    func resetTimelineSelection() throws {
+        let reset = try #require(fixture().resetToday)
+        let first = try #require(reset.timeline?.first)
+        let second = try #require(reset.timeline?.last)
+
+        #expect(reset.presentation(at: first.effectiveAt) == first)
+        #expect(reset.presentation(at: second.effectiveAt.addingTimeInterval(1)) == second)
+        #expect(reset.transitionDates(after: first.effectiveAt) == [second.effectiveAt])
+    }
+
+    @Test("app precomputes upcoming grace and expired widget states")
+    func resetTimelineBuilderUsesCoreVerdictTransitions() throws {
+        let now = try resetStatusDate("2026-07-28T12:00:00Z")
+        let scheduledAt = try resetStatusDate("2026-07-28T13:00:00Z")
+        let snapshot = try ResetStatusFeedFixture(
+            event: ResetStatusEventFixture(
+                kind: "reset_scheduled",
+                announcedAt: "2026-07-28T11:00:00Z",
+                effectiveAt: "2026-07-28T13:00:00Z",
+                schedulePrecision: "datetime",
+                scheduleBasis: "explicit"),
+            now: now)
+            .decode()
+
+        let widget = snapshot.makeWidgetResetTodaySnapshot(
+            now: now,
+            calendar: resetStatusUTCCalendar)
+        let timeline = try #require(widget.timeline)
+        let upcoming = try #require(timeline.first)
+        let grace = try #require(timeline.first(where: { $0.reason == .grace }))
+        let expired = try #require(timeline.first(where: { $0.reason == .expiredUnconfirmed }))
+
+        #expect(upcoming.reason == .upcoming)
+        #expect(upcoming.scheduleBasis == .explicit)
+        #expect(upcoming.nextScheduledAt == scheduledAt)
+        #expect(grace.effectiveAt == scheduledAt)
+        #expect(grace.nextScheduledAt == nil)
+        #expect(expired.effectiveAt == scheduledAt.addingTimeInterval(3 * 3_600))
+        #expect(expired.confidencePercent == nil)
+        #expect(expired.state == .no)
+    }
+
+    @Test("widget snapshot stays stable within the same verdict phase")
+    func resetTimelineBuilderUsesStableAnchor() throws {
+        let now = try resetStatusDate("2026-07-28T12:00:00Z")
+        let snapshot = try ResetStatusFeedFixture(
+            event: ResetStatusEventFixture(
+                kind: "reset_scheduled",
+                announcedAt: "2026-07-28T11:00:00Z",
+                effectiveAt: "2026-07-28T13:00:00Z",
+                schedulePrecision: "datetime"),
+            now: now)
+            .decode()
+
+        let first = snapshot.makeWidgetResetTodaySnapshot(
+            now: now,
+            calendar: resetStatusUTCCalendar)
+        let second = snapshot.makeWidgetResetTodaySnapshot(
+            now: now.addingTimeInterval(10 * 60),
+            calendar: resetStatusUTCCalendar)
+
+        #expect(first == second)
+    }
+
+    @Test("completed verdict keeps a separate future schedule timer")
+    func completedVerdictKeepsFutureTimer() throws {
+        let now = try resetStatusDate("2026-07-28T12:00:00Z")
+        let future = try resetStatusDate("2026-07-29T13:00:00Z")
+        let completed = ResetStatusEventFixture(
+            kind: "reset_completed",
+            announcedAt: "2026-07-28T11:00:00Z",
+            effectiveAt: "2026-07-28T11:00:00Z",
+            postID: "100")
+        let scheduled = ResetStatusEventFixture(
+            kind: "reset_scheduled",
+            announcedAt: "2026-07-28T11:30:00Z",
+            effectiveAt: "2026-07-29T13:00:00Z",
+            schedulePrecision: "datetime",
+            postID: "200")
+        let snapshot = try ResetStatusFeedFixture(
+            eventsJSON: completed.json + "," + scheduled.json,
+            now: now)
+            .decode()
+
+        let current = try #require(snapshot.makeWidgetResetTodaySnapshot(
+            now: now,
+            calendar: resetStatusUTCCalendar).timeline?.first)
+
+        #expect(current.reason == .completed)
+        #expect(current.nextScheduledAt == future)
+        #expect(current.nextScheduledResetType == .global)
+    }
+
+    @Test("widget next schedule merges same-time global and banked types")
+    func widgetNextScheduleUsesMergedSummary() throws {
+        let now = try resetStatusDate("2026-07-28T12:00:00Z")
+        let global = ResetStatusEventFixture(
+            kind: "reset_scheduled",
+            resetType: "global",
+            announcedAt: "2026-07-28T11:00:00Z",
+            effectiveAt: "2026-07-29T13:00:00Z",
+            schedulePrecision: "datetime",
+            scheduleBasis: "explicit",
+            postID: "200")
+        let banked = ResetStatusEventFixture(
+            kind: "reset_scheduled",
+            resetType: "banked",
+            announcedAt: "2026-07-28T11:01:00Z",
+            effectiveAt: "2026-07-29T13:00:00Z",
+            schedulePrecision: "datetime",
+            scheduleBasis: "contextual_inference",
+            postID: "201")
+        var snapshot = try ResetStatusFeedFixture(
+            eventsJSON: global.json + "," + banked.json,
+            now: now)
+            .decode()
+        snapshot.events[0].confidence = 0.91
+        snapshot.events[1].confidence = 0.72
+
+        let current = try #require(snapshot.makeWidgetResetTodaySnapshot(
+            now: now,
+            calendar: resetStatusUTCCalendar).timeline?.first)
+
+        #expect(current.nextScheduledResetType == .globalAndBanked)
+        #expect(current.confidencePercent == 72)
+        #expect(current.scheduleBasis == .explicit)
+    }
+
+    @Test("fractional lifecycle boundary rounds up through ISO second encoding")
+    func fractionalBoundaryDoesNotTransitionEarly() throws {
+        let now = try resetStatusDate("2026-07-28T12:00:00Z")
+        let snapshot = try ResetStatusFeedFixture(
+            event: ResetStatusEventFixture(
+                kind: "reset_scheduled",
+                announcedAt: "2026-07-28T11:00:00Z",
+                effectiveAt: "2026-07-28T13:00:00.123Z",
+                schedulePrecision: "datetime"),
+            now: now)
+            .decode()
+        let reset = snapshot.makeWidgetResetTodaySnapshot(
+            now: now,
+            calendar: resetStatusUTCCalendar)
+        let container = RunwayWidgetSnapshot(
+            generatedAt: now,
+            language: .english,
+            providers: [],
+            resetToday: reset)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(
+            RunwayWidgetSnapshot.self,
+            from: encoder.encode(container))
+        let decodedReset = try #require(decoded.resetToday)
+        let boundary = try resetStatusDate("2026-07-28T13:00:01Z")
+
+        #expect(decodedReset.presentation(at: boundary.addingTimeInterval(-0.001))?.reason == .upcoming)
+        #expect(decodedReset.presentation(at: boundary)?.reason == .grace)
+        #expect(decodedReset.timeline?.first(where: { $0.reason == .grace })?.effectiveAt == boundary)
     }
 
     @Test("store writes atomically with owner-only permissions")
@@ -219,7 +386,29 @@ struct RunwayWidgetSnapshotTests {
                 lastSuccessfulCheckAt: nil,
                 fetchedAt: date,
                 confidencePercent: 92,
-                confidenceBand: .ok))
+                confidenceBand: .ok,
+                timeline: [
+                    RunwayWidgetResetTodayTimelineEntry(
+                        effectiveAt: date,
+                        reason: .upcoming,
+                        state: .yes,
+                        resetType: .banked,
+                        nextScheduledAt: date.addingTimeInterval(3_600),
+                        nextScheduledResetType: .banked,
+                        scheduleBasis: .explicit,
+                        confidencePercent: 92,
+                        confidenceBand: .ok),
+                    RunwayWidgetResetTodayTimelineEntry(
+                        effectiveAt: date.addingTimeInterval(3_600),
+                        reason: .grace,
+                        state: .yes,
+                        resetType: .banked,
+                        nextScheduledAt: nil,
+                        nextScheduledResetType: nil,
+                        scheduleBasis: .explicit,
+                        confidencePercent: 92,
+                        confidenceBand: .ok),
+                ]))
     }
 
     private func quota(

@@ -16,15 +16,17 @@ enum RunwayCLIHelp {
           Show every subscription-tier capsule in the popover.
           Env: CODEX_RUNWAY_DEV_TIER_BADGES=1
 
-      --mock-reset-today=yes|no|scheduled|unknown
-          Use a local Reset Today fixture instead of the network.
+      --mock-reset-today=completed|explicit-scheduled|inferred-scheduled|grace|expired|unavailable|no
+          Use a local Codex Reset Updates fixture instead of the network.
           Env: CODEX_RUNWAY_MOCK_RESET_TODAY=...
 
       --dump-locale-metrics <output-directory>
           Write language-picker and panel layout metrics, then exit.
 
-      --render-reset-today-mock=yes|no|scheduled|unknown <output.png>
-          Render the Reset Today card to a PNG, then exit.
+      --render-reset-today-mock=completed|explicit-scheduled|inferred-scheduled|grace|expired|unavailable|no <output.png>
+          Render the Codex Reset Updates card to a PNG, then exit.
+      --render-reset-today-qa=<directory>
+          Render the seven-language reset-update QA matrix, then exit.
 
       --render-main-panel-mock=all|<page>-<light|dark> <output>
           Render the main popover or a detail page, then exit.

@@ -1165,23 +1165,7 @@ final class RunwayModel: ObservableObject {
 
     private func makeWidgetResetToday(now: Date) -> RunwayWidgetResetTodaySnapshot? {
         guard let snapshot = rateLimitResetToday else { return nil }
-        let state: RunwayWidgetResetTodaySnapshot.State
-        switch snapshot.resolvedState(now: now) {
-        case .yes: state = .yes
-        case .no: state = .no
-        case .unknown: state = .unknown
-        }
-        let nextScheduledReset = snapshot.nextScheduledReset(now: now)
-        let presentation = snapshot.verdictPresentation(now: now)
-        return RunwayWidgetResetTodaySnapshot(
-            state: state,
-            resetType: snapshot.displayResetType(now: now),
-            nextScheduledAt: nextScheduledReset?.effectiveAt,
-            nextScheduledResetType: nextScheduledReset?.event.resetType,
-            lastSuccessfulCheckAt: snapshot.lastSuccessfulCheckAt,
-            fetchedAt: snapshot.fetchedAt,
-            confidencePercent: presentation.percent,
-            confidenceBand: presentation.band)
+        return snapshot.makeWidgetResetTodaySnapshot(now: now)
     }
 
     private func withRefresh(_ sections: Set<RunwayRefreshSection>, operation: () async -> Void) async {
@@ -1542,38 +1526,20 @@ final class RunwayModel: ObservableObject {
                 now: now,
                 calendar: calendar),
             enabled: settings.preferences.rateLimitResetTodayAlertsEnabled)
-        let state = snapshot.resolvedState(now: now, calendar: calendar)
-        let stateText = rateLimitResetTodaySummaryText(snapshot, state: state, now: now)
-        if rateLimitResetTodayText != stateText {
-            rateLimitResetTodayText = stateText
+        let nextText = rateLimitResetTodaySummaryText(snapshot, now: now)
+        if rateLimitResetTodayText != nextText {
+            rateLimitResetTodayText = nextText
         }
-        let hintText = rateLimitResetTodayHintText(snapshot, now: now)
-        guard let statusIndex = rateLimitResetTodayLines.firstIndex(where: {
-            $0.title == l10n.text(.status)
-        }), rateLimitResetTodayLines[statusIndex].value != hintText
-        else {
-            return
+        let nextLines = makeRateLimitResetTodayLines(snapshot, now: now, calendar: calendar)
+        if !detailLinesEqual(rateLimitResetTodayLines, nextLines) {
+            rateLimitResetTodayLines = nextLines
         }
-        var lines = rateLimitResetTodayLines
-        lines[statusIndex] = DetailLine(title: l10n.text(.status), value: hintText)
-        // Rebuild next-schedule line when local midnight changes the answer context.
-        if let next = snapshot.nextScheduledReset(now: now) {
-            let nextValue = rateLimitResetScheduleText(next, calendar: calendar)
-            if let nextIndex = lines.firstIndex(where: { $0.title == l10n.text(.rateLimitResetTodayNextScheduled) }) {
-                lines[nextIndex] = DetailLine(
-                    title: l10n.text(.rateLimitResetTodayNextScheduled),
-                    value: nextValue)
-            } else {
-                lines.insert(
-                    DetailLine(
-                        title: l10n.text(.rateLimitResetTodayNextScheduled),
-                        value: nextValue),
-                    at: min(1, lines.count))
-            }
-        } else {
-            lines.removeAll { $0.title == l10n.text(.rateLimitResetTodayNextScheduled) }
+    }
+
+    private func detailLinesEqual(_ lhs: [DetailLine], _ rhs: [DetailLine]) -> Bool {
+        lhs.count == rhs.count && zip(lhs, rhs).allSatisfy {
+            $0.title == $1.title && $0.value == $1.value
         }
-        rateLimitResetTodayLines = lines
     }
 
     private func refreshRateLimitResetTodayNow(force: Bool) async {
@@ -1593,8 +1559,11 @@ final class RunwayModel: ObservableObject {
                 lastRateLimitResetTodayFetch = Date()
                 // Keep the last good snapshot; only mark error text when nothing is loaded yet.
                 if rateLimitResetToday == nil {
-                    rateLimitResetTodayText = l10n.text(.statusError)
+                    rateLimitResetTodayText = l10n.text(.rateLimitResetUnavailable)
                     rateLimitResetTodayLines = [
+                        DetailLine(
+                            title: l10n.text(.rateLimitResetQuestionUnavailable),
+                            value: l10n.text(.rateLimitResetUnavailable)),
                         DetailLine(title: l10n.text(.error), value: error.localizedDescription),
                     ]
                 }
@@ -1734,8 +1703,7 @@ final class RunwayModel: ObservableObject {
         rateLimitResetToday = snapshot
         let now = Date()
         let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-        let state = snapshot.resolvedState(now: now, calendar: calendar)
-        rateLimitResetTodayText = rateLimitResetTodaySummaryText(snapshot, state: state, now: now)
+        rateLimitResetTodayText = rateLimitResetTodaySummaryText(snapshot, now: now)
         deliverAlerts(
             RunwayAlertDecider.rateLimitResetTodayAlerts(
                 previous: previous,
@@ -1743,20 +1711,42 @@ final class RunwayModel: ObservableObject {
                 now: now,
                 calendar: calendar),
             enabled: settings.preferences.rateLimitResetTodayAlertsEnabled)
-        var lines: [DetailLine] = [
-            DetailLine(title: l10n.text(.status), value: rateLimitResetTodayHintText(snapshot, now: now)),
+        rateLimitResetTodayLines = makeRateLimitResetTodayLines(snapshot, now: now, calendar: calendar)
+    }
+
+    private func makeRateLimitResetTodayLines(
+        _ snapshot: RateLimitResetTodaySnapshot,
+        now: Date,
+        calendar: Calendar
+    ) -> [DetailLine] {
+        let presentation = snapshot.verdictPresentation(now: now, calendar: calendar)
+        var lines = [
+            DetailLine(
+                title: presentation.questionText(l10n: l10n),
+                value: presentation.titleText(l10n: l10n)),
         ]
-        if let next = snapshot.nextScheduledReset(now: now) {
+        if let detail = snapshot.verdictDetail(l10n: l10n, now: now, calendar: calendar) {
+            lines.append(DetailLine(title: l10n.text(.status), value: detail.plainText))
+        }
+        if presentation.reason != .unavailable,
+           let next = snapshot.nextScheduledResetSummary(now: now)
+        {
             lines.append(
                 DetailLine(
                     title: l10n.text(.rateLimitResetTodayNextScheduled),
-                    value: rateLimitResetScheduleText(next, calendar: calendar)))
+                    value: rateLimitResetScheduleText(
+                        window: next.window,
+                        resetType: next.resetType,
+                        calendar: calendar)))
         }
         if let checkedAt = snapshot.lastSuccessfulCheckAt {
             lines.append(
                 DetailLine(
                     title: l10n.text(.rateLimitResetTodayLastCheck),
-                    value: DurationFormatter.relativePast(since: checkedAt, language: l10n.language)))
+                    value: DurationFormatter.relativePast(
+                        since: checkedAt,
+                        now: now,
+                        language: l10n.language)))
         }
         if let evidence = snapshot.evidenceLine(l10n: l10n, now: now, calendar: calendar) {
             lines.append(
@@ -1764,7 +1754,7 @@ final class RunwayModel: ObservableObject {
                     title: l10n.text(.rateLimitResetTodayLatestEvidence),
                     value: evidence))
         }
-        if let event = snapshot.primaryEvidenceEvent(now: now, calendar: calendar),
+        if let event = presentation.evidenceEvent,
            let scope = snapshot.scopeSummary(for: event, l10n: l10n)
         {
             lines.append(
@@ -1772,11 +1762,11 @@ final class RunwayModel: ObservableObject {
                     title: l10n.text(.rateLimitResetTodayPlans),
                     value: scope))
         }
-        if let event = snapshot.primaryEvidenceEvent(now: now, calendar: calendar) {
+        if let confidence = presentation.confidence {
             lines.append(
                 DetailLine(
                     title: l10n.text(.rateLimitResetTodayConfidence),
-                    value: "\(Int((event.confidence * 100).rounded()))%"))
+                    value: "\(Int((confidence * 100).rounded()))%"))
         }
         if let latestReset = snapshot.latestReset(now: now) {
             let when = ResetLabelFormatter.shortLabel(
@@ -1792,131 +1782,35 @@ final class RunwayModel: ObservableObject {
         lines.append(
             DetailLine(
                 title: l10n.text(.rateLimitResetTodayLastFetched),
-                value: DurationFormatter.relativePast(since: snapshot.fetchedAt, language: l10n.language)))
-        rateLimitResetTodayLines = lines
-    }
-
-    private func rateLimitResetTodayStateText(_ state: RateLimitResetTodayState) -> String {
-        switch state {
-        case .yes:
-            return l10n.text(.rateLimitResetTodayYes)
-        case .no:
-            return l10n.text(.rateLimitResetTodayNo)
-        case .unknown:
-            return l10n.text(.rateLimitResetTodayUnknown)
-        }
+                value: DurationFormatter.relativePast(
+                    since: snapshot.fetchedAt,
+                    now: now,
+                    language: l10n.language)))
+        return lines
     }
 
     private func rateLimitResetTodaySummaryText(
         _ snapshot: RateLimitResetTodaySnapshot,
-        state: RateLimitResetTodayState,
         now: Date) -> String
     {
-        if state == .unknown {
-            return rateLimitResetTodayStateText(state)
-        }
         let presentation = snapshot.verdictPresentation(now: now)
         let title = presentation.titleText(l10n: l10n)
-        guard let resetType = presentation.resetType ?? snapshot.displayResetType(now: now) else {
+        guard let resetType = presentation.resetType else {
             return title
         }
         return "\(title) · \(resetType.localizedName(l10n: l10n))"
     }
 
     private func rateLimitResetScheduleText(
-        _ next: (
-            effectiveAt: Date,
-            effectiveUntil: Date,
-            isRange: Bool,
-            event: RateLimitResetTodayEvent),
+        window: RateLimitResetScheduleWindow,
+        resetType: RateLimitResetType,
         calendar: Calendar) -> String
     {
         let when = ResetLabelFormatter.scheduledLabel(
-            for: RateLimitResetScheduleWindow(
-                startAt: next.effectiveAt,
-                endAt: next.effectiveUntil,
-                isRange: next.isRange),
+            for: window,
             language: l10n.language,
             calendar: calendar)
-        return "\(next.event.resetType.localizedName(l10n: l10n)) · \(when)"
-    }
-
-    private func rateLimitResetTodayHintText(
-        _ snapshot: RateLimitResetTodaySnapshot,
-        now: Date) -> String
-    {
-        if let detail = snapshot.verdictDetail(l10n: l10n, now: now) {
-            return detail.plainText
-        }
-        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-        switch snapshot.resolvedState(now: now, calendar: calendar) {
-        case .yes:
-            if snapshot.prefersSameDayScheduleExplanation(now: now, calendar: calendar),
-               let next = snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar)
-            {
-                let when = ResetLabelFormatter.scheduledLabel(
-                    for: RateLimitResetScheduleWindow(
-                        startAt: next.effectiveAt,
-                        endAt: next.effectiveUntil,
-                        isRange: next.isRange),
-                    language: l10n.language,
-                    calendar: calendar)
-                let hint = switch next.event.resetType {
-                case .global:
-                    String(format: l10n.text(.rateLimitResetTodayYesHintScheduledWithTime), when)
-                case .banked:
-                    "\(l10n.text(.rateLimitResetTodayBankedScheduledHint)) · \(when)"
-                case .globalAndBanked:
-                    "\(l10n.text(.rateLimitResetTodayGlobalAndBankedScheduledHint)) · \(when)"
-                }
-                return hint
-            }
-            if let latestReset = snapshot.latestReset(now: now) {
-                let when = ResetLabelFormatter.shortLabel(
-                    for: latestReset.at,
-                    now: now,
-                    language: l10n.language,
-                    calendar: calendar)
-                let displayType = snapshot.displayResetType(now: now, calendar: calendar)
-                    ?? latestReset.resetType
-                return switch displayType {
-                case .global:
-                    String(format: l10n.text(.rateLimitResetTodayYesHintWithTime), when)
-                case .banked:
-                    "\(l10n.text(.rateLimitResetTodayBankedCompletedHint)) · \(when)"
-                case .globalAndBanked:
-                    "\(l10n.text(.rateLimitResetTodayGlobalAndBankedCompletedHint)) · \(when)"
-                }
-            }
-            return l10n.text(.rateLimitResetTodayYesHint)
-        case .no:
-            if let next = snapshot.nextScheduledReset(now: now) {
-                let when = ResetLabelFormatter.scheduledLabel(
-                    for: RateLimitResetScheduleWindow(
-                        startAt: next.effectiveAt,
-                        endAt: next.effectiveUntil,
-                        isRange: next.isRange),
-                    language: l10n.language,
-                    calendar: calendar)
-                return String(format: l10n.text(.rateLimitResetTodayNoHintWithNext), when)
-            }
-            if snapshot.hasUncertainNoSignalToday(now: now, calendar: calendar) {
-                return l10n.text(.rateLimitResetTodayNoHintUncertain)
-            }
-            if let unconfirmed = snapshot.unconfirmedScheduleHint(
-                l10n: l10n,
-                now: now,
-                calendar: calendar)
-            {
-                return unconfirmed.text
-            }
-            if let last = snapshot.noneHintLastReset(l10n: l10n, now: now) {
-                return last.text
-            }
-            return l10n.text(.rateLimitResetTodayNoHint)
-        case .unknown:
-            return l10n.text(.rateLimitResetTodayUnknownHint)
-        }
+        return "\(resetType.localizedName(l10n: l10n)) · \(when)"
     }
 
     private func refreshCostNow(policy: UsageCostRefreshPolicy) async {

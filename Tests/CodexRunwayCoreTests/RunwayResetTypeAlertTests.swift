@@ -291,6 +291,131 @@ struct RunwayResetTypeAlertTests {
         #expect(globalAlert.id == "rate-limit-reset:upcoming:500:30:\(Int(effectiveAt.timeIntervalSince1970))")
         #expect(globalAlert.resetType == .global)
         #expect(bankedAlert.resetType == .banked)
+        #expect(globalAlert.scheduleBasis == nil)
+        #expect(globalAlert.confidencePercent == 100)
+    }
+
+    @Test("upcoming alert carries explicit or inferred schedule semantics")
+    func upcomingAlertCarriesScheduleSemantics() throws {
+        let now = try alertDate("2026-08-23T12:00:00Z")
+        let effectiveAt = try alertDate("2026-08-23T12:25:00Z")
+        let event = alertEvent(
+            postID: "preview",
+            kind: .resetScheduled,
+            resetType: .global,
+            announcedAt: try alertDate("2026-08-23T10:00:00Z"),
+            effectiveAt: effectiveAt,
+            scheduleBasis: .contextualInference,
+            confidence: 0.876)
+        let snapshot = alertSnapshot(now: now, events: [event])
+
+        let alert = try #require(RunwayAlertDecider.rateLimitResetTodayAlerts(
+            previous: snapshot,
+            current: snapshot,
+            now: now,
+            calendar: alertCalendar).first)
+
+        #expect(alert.scheduleBasis == .contextualInference)
+        #expect(alert.confidencePercent == 88)
+    }
+
+    @Test("same-time upcoming alert merges type and minimum confidence")
+    func sameTimeUpcomingAlertUsesMergedSummary() throws {
+        let now = try alertDate("2026-08-23T12:00:00Z")
+        let effectiveAt = try alertDate("2026-08-23T12:25:00Z")
+        let global = alertEvent(
+            postID: "500",
+            kind: .resetScheduled,
+            resetType: .global,
+            announcedAt: now,
+            effectiveAt: effectiveAt,
+            scheduleBasis: .explicit,
+            confidence: 0.91)
+        let banked = alertEvent(
+            postID: "501",
+            kind: .resetScheduled,
+            resetType: .banked,
+            announcedAt: now,
+            effectiveAt: effectiveAt,
+            scheduleBasis: .contextualInference,
+            confidence: 0.72)
+        let snapshot = alertSnapshot(now: now, events: [global, banked])
+
+        let alert = try #require(RunwayAlertDecider.rateLimitResetTodayAlerts(
+            previous: snapshot,
+            current: snapshot,
+            now: now,
+            calendar: alertCalendar).first)
+
+        #expect(alert.id.contains(":500:30:"))
+        #expect(alert.resetType == .globalAndBanked)
+        #expect(alert.confidencePercent == 72)
+        #expect(alert.scheduleBasis == .explicit)
+    }
+
+    @Test("degraded feed does not produce completion or upcoming alerts")
+    func degradedFeedStaysSilent() throws {
+        let now = try alertDate("2026-08-23T12:00:00Z")
+        let completed = alertEvent(
+            postID: "completed",
+            resetType: .global,
+            announcedAt: now)
+        let scheduled = alertEvent(
+            postID: "scheduled",
+            kind: .resetScheduled,
+            resetType: .global,
+            announcedAt: now,
+            effectiveAt: now.addingTimeInterval(1_800))
+        let previous = alertSnapshot(now: now)
+        let current = alertSnapshot(
+            now: now,
+            monitorStatus: .degraded,
+            events: [completed, scheduled])
+
+        #expect(RunwayAlertDecider.rateLimitResetTodayAlerts(
+            previous: previous,
+            current: current,
+            now: now,
+            calendar: alertCalendar).isEmpty)
+    }
+
+    @Test("stale feed does not produce completion or upcoming alerts")
+    func staleFeedStaysSilent() throws {
+        let now = try alertDate("2026-08-23T12:00:00Z")
+        var current = alertSnapshot(
+            now: now,
+            events: [alertEvent(
+                postID: "scheduled",
+                kind: .resetScheduled,
+                resetType: .global,
+                announcedAt: now.addingTimeInterval(-31 * 3_600),
+                effectiveAt: now.addingTimeInterval(1_800))])
+        current.generatedAt = now.addingTimeInterval(-31 * 3_600)
+        current.lastSuccessfulCheckAt = now.addingTimeInterval(-31 * 3_600)
+
+        #expect(RunwayAlertDecider.rateLimitResetTodayAlerts(
+            previous: alertSnapshot(now: now),
+            current: current,
+            now: now,
+            calendar: alertCalendar).isEmpty)
+    }
+
+    @Test("expired schedules never produce future-tense reminders")
+    func expiredScheduleStaysSilent() throws {
+        let now = try alertDate("2026-08-23T12:00:00Z")
+        let event = alertEvent(
+            postID: "expired",
+            kind: .resetScheduled,
+            resetType: .global,
+            announcedAt: try alertDate("2026-08-23T10:00:00Z"),
+            effectiveAt: try alertDate("2026-08-23T11:00:00Z"))
+        let snapshot = alertSnapshot(now: now, events: [event])
+
+        #expect(RunwayAlertDecider.rateLimitResetTodayAlerts(
+            previous: snapshot,
+            current: snapshot,
+            now: now,
+            calendar: alertCalendar).isEmpty)
     }
 
     @Test("alerts encoded before reset types remain decodable")
@@ -299,6 +424,8 @@ struct RunwayResetTypeAlertTests {
         let alert = try JSONDecoder().decode(RunwayAlert.self, from: data)
 
         #expect(alert.resetType == nil)
+        #expect(alert.scheduleBasis == nil)
+        #expect(alert.confidencePercent == nil)
     }
 }
 
@@ -330,7 +457,9 @@ private func alertEvent(
     kind: RateLimitResetTodayEventKind = .resetCompleted,
     resetType: RateLimitResetType,
     announcedAt: Date,
-    effectiveAt: Date? = nil) -> RateLimitResetTodayEvent
+    effectiveAt: Date? = nil,
+    scheduleBasis: RateLimitResetScheduleBasis? = nil,
+    confidence: Double = 1) -> RateLimitResetTodayEvent
 {
     RateLimitResetTodayEvent(
         kind: kind,
@@ -338,18 +467,20 @@ private func alertEvent(
         announcedAt: announcedAt,
         effectiveAt: effectiveAt,
         schedulePrecision: kind == .resetScheduled ? .datetime : nil,
+        scheduleBasis: scheduleBasis,
         scope: RateLimitResetTodayScope(plans: ["all"], windows: ["weekly"]),
         source: RateLimitResetTodaySource(
             handle: "thsottiaux",
             postID: postID,
             url: URL(string: "https://x.com/thsottiaux/status/\(postID)")!),
-        confidence: 1,
+        confidence: confidence,
         rationale: "alert fixture",
         text: "alert fixture")
 }
 
 private func alertSnapshot(
     now: Date,
+    monitorStatus: RateLimitResetTodayMonitorStatus = .ok,
     events: [RateLimitResetTodayEvent] = [],
     timeline: RateLimitResetTimeline? = nil) -> RateLimitResetTodaySnapshot
 {
@@ -358,7 +489,7 @@ private func alertSnapshot(
             schemaVersion: 1,
             generatedAt: now,
             lastSuccessfulCheckAt: now,
-            monitor: RateLimitResetTodayMonitor(status: .ok),
+            monitor: RateLimitResetTodayMonitor(status: monitorStatus),
             events: events,
             resetTimeline: timeline),
         now: now,

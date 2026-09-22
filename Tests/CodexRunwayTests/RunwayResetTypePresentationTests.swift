@@ -28,6 +28,9 @@ struct RunwayResetTypePresentationTests {
         }
 
         #expect(model.rateLimitResetTodayText == "是 · 全局重置")
+        let verdictLine = try #require(model.rateLimitResetTodayLines.first)
+        #expect(verdictLine.title == "今天有新的 Codex 重置吗？")
+        #expect(verdictLine.value == "是")
         let nextLine = try #require(model.rateLimitResetTodayLines.first {
             $0.title == "预计下次重置"
         })
@@ -77,6 +80,8 @@ struct RunwayResetTypePresentationTests {
         }
 
         #expect(model.rateLimitResetTodayText == "否")
+        #expect(model.rateLimitResetTodayLines.first?.title == "今天有新的 Codex 重置吗？")
+        #expect(model.rateLimitResetTodayLines.first?.value == "否")
         let statusLine = try #require(model.rateLimitResetTodayLines.first { $0.title == "状态" })
         #expect(statusLine.value == "今日暂无已完成或已排期的重置，上次发生全局重置为\(ago)之前")
     }
@@ -120,11 +125,81 @@ struct RunwayResetTypePresentationTests {
         }
 
         #expect(model.rateLimitResetTodayText == "≥60%是 · 全局重置")
+        #expect(model.rateLimitResetTodayLines.first?.title == "接下来会有 Codex 重置吗？")
+        #expect(model.rateLimitResetTodayLines.first?.value == "≥60%是")
         let statusLine = try #require(model.rateLimitResetTodayLines.first { $0.title == "状态" })
         #expect(statusLine.value.contains("约≥60%的可能性会进行全局重置"))
         let widget = try #require(model.makeWidgetSnapshot(now: now).resetToday)
         #expect(widget.confidencePercent == 60)
         #expect(widget.confidenceBand == .warn)
+    }
+
+    @Test("same-time schedules merge their reset type in secondary details")
+    func sameTimeSchedulesMergeSecondaryType() async throws {
+        let now = Date()
+        let effectiveAt = now.addingTimeInterval(3_600)
+        var global = scheduledBankedReset(at: effectiveAt)
+        global.resetType = .global
+        global.source.postID = "2090000000000000101"
+        var banked = scheduledBankedReset(at: effectiveAt)
+        banked.source.postID = "2090000000000000102"
+        var snapshot = RateLimitResetTodaySnapshot.devMock(kind: .no, now: now)
+        snapshot.events = [global, banked]
+        snapshot.resetTimeline = RateLimitResetTimeline(nextSchedule: global)
+
+        let defaults = UserDefaults(suiteName: "codex-runway-reset-combined-next-\(UUID().uuidString)")!
+        let settings = RunwaySettings(store: PreferencesStore(defaults: defaults))
+        settings.updateLanguage(.simplifiedChinese)
+        settings.updateShowsRateLimitResetToday(true)
+        settings.updateRateLimitResetTodayAlertsEnabled(false)
+        let model = RunwayModel(
+            settings: settings,
+            services: services(snapshot: snapshot),
+            accountStore: isolatedAccountStore())
+
+        model.refreshRateLimitResetToday()
+        for _ in 0..<100 where model.rateLimitResetToday == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let nextLine = try #require(model.rateLimitResetTodayLines.first {
+            $0.title == "预计下次重置"
+        })
+        #expect(nextLine.value.contains("全局重置 + 重置卡 · "))
+    }
+
+    @Test("tick rebuilds all menu details after schedule grace expires")
+    func tickRebuildsExpiredScheduleDetails() async throws {
+        let now = Date()
+        let effectiveAt = now.addingTimeInterval(60)
+        var snapshot = RateLimitResetTodaySnapshot.devMock(kind: .no, now: now)
+        snapshot.events = [scheduledBankedReset(at: effectiveAt)]
+        snapshot.resetTimeline = RateLimitResetTimeline(nextSchedule: snapshot.events[0])
+
+        let defaults = UserDefaults(suiteName: "codex-runway-reset-expired-\(UUID().uuidString)")!
+        let settings = RunwaySettings(store: PreferencesStore(defaults: defaults))
+        settings.updateLanguage(.simplifiedChinese)
+        settings.updateShowsRateLimitResetToday(true)
+        settings.updateRateLimitResetTodayAlertsEnabled(false)
+        let model = RunwayModel(
+            settings: settings,
+            services: services(snapshot: snapshot),
+            accountStore: isolatedAccountStore())
+
+        model.refreshRateLimitResetToday()
+        for _ in 0..<100 where model.rateLimitResetToday == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(model.rateLimitResetTodayLines.contains { $0.title == "置信度" })
+        #expect(model.rateLimitResetTodayLines.contains { $0.title == "预计下次重置" })
+
+        model.tick(now: effectiveAt.addingTimeInterval(RateLimitResetTodaySnapshot.scheduleGrace + 1))
+
+        #expect(model.rateLimitResetTodayText == "否")
+        #expect(model.rateLimitResetTodayLines.first?.title == "今天有新的 Codex 重置吗？")
+        #expect(!model.rateLimitResetTodayLines.contains { $0.title == "置信度" })
+        #expect(!model.rateLimitResetTodayLines.contains { $0.title == "预计下次重置" })
+        #expect(!model.rateLimitResetTodayLines.contains { $0.title == "最近依据" })
     }
 
     private func scheduledBankedReset(at effectiveAt: Date) -> RateLimitResetTodayEvent {

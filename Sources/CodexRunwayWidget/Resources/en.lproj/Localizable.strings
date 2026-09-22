@@ -8,11 +8,11 @@
 "Choose which provider the widget displays." = "Choose which provider the widget displays.";
 "Key Metric" = "Key Metric";
 "Choose a provider and metric." = "Choose a provider and metric.";
-"Reset Today" = "Reset Today";
-"Shows the Codex reset status for today." = "Shows the Codex reset status for today.";
+"Codex Reset Updates" = "Codex Reset Updates";
+"Shows the Codex reset status and next expected reset." = "Shows the Codex reset status and next expected reset.";
 "Quota Overview" = "Quota Overview";
 "Codex and Grok quota, cost, tokens, and balances." = "Codex and Grok quota, cost, tokens, and balances.";
 "Token Trend" = "Token Trend";
 "Recent Codex and Grok token activity." = "Recent Codex and Grok token activity.";
 "One focused quota, cost, token, or balance metric." = "One focused quota, cost, token, or balance metric.";
-"Today’s Codex reset status and next scheduled reset." = "Today’s Codex reset status and next scheduled reset.";
+"Codex reset status and next expected reset." = "Codex reset status and next expected reset.";

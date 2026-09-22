@@ -8,11 +8,11 @@
 "Choose which provider the widget displays." = "Choisissez le fournisseur affiché par le widget.";
 "Key Metric" = "Indicateur clé";
 "Choose a provider and metric." = "Choisissez un fournisseur et un indicateur.";
-"Reset Today" = "Réinit. du jour";
-"Shows the Codex reset status for today." = "Affiche l’état de réinitialisation Codex d’aujourd’hui.";
+"Codex Reset Updates" = "Actualités des réinitialisations Codex";
+"Shows the Codex reset status and next expected reset." = "Affiche l’état des réinitialisations Codex et la prochaine réinitialisation attendue.";
 "Quota Overview" = "Aperçu des quotas";
 "Codex and Grok quota, cost, tokens, and balances." = "Quota, coût, jetons et soldes Codex et Grok.";
 "Token Trend" = "Tendance des jetons";
 "Recent Codex and Grok token activity." = "Usage récent des jetons Codex et Grok.";
 "One focused quota, cost, token, or balance metric." = "Un indicateur ciblé de quota, coût, jetons ou solde.";
-"Today’s Codex reset status and next scheduled reset." = "État Codex du jour et prochaine réinitialisation prévue.";
+"Codex reset status and next expected reset." = "État des réinitialisations Codex et prochaine réinitialisation attendue.";

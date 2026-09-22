@@ -242,6 +242,63 @@ struct RateLimitResetTypeTests {
         #expect(suppressed.displayResetType(now: now, calendar: resetStatusUTCCalendar) == .global)
     }
 
+    @Test("upcoming summary merges same-time types without changing evidence identity")
+    func upcomingSummaryMergesTypes() throws {
+        let now = try resetStatusDate("2026-07-28T12:00:00Z")
+        let global = ResetStatusEventFixture(
+            kind: "reset_scheduled",
+            resetType: "global",
+            announcedAt: "2026-07-28T10:00:00Z",
+            effectiveAt: "2026-07-28T16:00:00Z",
+            scheduleBasis: "explicit",
+            postID: "100")
+        let banked = ResetStatusEventFixture(
+            kind: "reset_scheduled",
+            resetType: "banked",
+            announcedAt: "2026-07-28T11:00:00Z",
+            effectiveAt: "2026-07-28T16:00:00Z",
+            scheduleBasis: "contextual_inference",
+            postID: "200")
+        var snapshot = try ResetStatusFeedFixture(
+            eventsJSON: "\(global.json),\n\(banked.json)",
+            now: now)
+            .decode()
+        snapshot.events[0].confidence = 0.92
+        snapshot.events[1].confidence = 0.76
+
+        let summary = try #require(snapshot.nextScheduledResetSummary(now: now))
+        #expect(summary.resetType == .globalAndBanked)
+        #expect(summary.confidence == 0.76)
+        #expect(summary.scheduleBasis == .explicit)
+        #expect(summary.event.source.postID == "100")
+        #expect(summary.event.resetType == .global)
+    }
+
+    @Test("timeline banked scan includes a mixed schedule")
+    func timelineIncludesMixedBankedSchedule() throws {
+        let now = try resetStatusDate("2026-07-28T12:00:00Z")
+        let global = ResetStatusEventFixture(
+            kind: "reset_scheduled",
+            resetType: "global",
+            announcedAt: "2026-07-28T10:00:00Z",
+            effectiveAt: "2026-07-28T16:00:00Z",
+            postID: "100")
+        let mixed = ResetStatusEventFixture(
+            kind: "reset_scheduled",
+            resetType: "global_and_banked",
+            announcedAt: "2026-07-28T11:00:00Z",
+            effectiveAt: "2026-07-28T14:00:00Z",
+            postID: "200")
+        let snapshot = try ResetStatusFeedFixture(
+            eventsJSON: "\(global.json),\n\(mixed.json)",
+            now: now)
+            .withTimeline(resetStatusEmptyTimelineJSON(nextScheduleJSON: global.json))
+            .decode()
+
+        #expect(snapshot.nextScheduledReset(now: now)?.event.source.postID == "200")
+        #expect(snapshot.nextScheduledResetSummary(now: now)?.resetType == .banked)
+    }
+
     @Test("manual completion merges the types of its schedules")
     func manualCompletionMergesScheduleTypes() throws {
         let now = try resetStatusDate("2026-07-28T12:00:00Z")

@@ -217,7 +217,7 @@ struct RateLimitResetTodayTests {
         #expect(currentLosAngelesDay.state == .yes)
     }
 
-    @Test("exact scheduled reset counts as yes only while it is still pending")
+    @Test("expired exact schedule keeps compatibility state and enters grace presentation")
     func scheduledResetUsesLocalDay() throws {
         let now = try resetStatusDate("2026-07-28T12:00:00Z")
         let pending = try ResetStatusFeedFixture(
@@ -243,7 +243,8 @@ struct RateLimitResetTodayTests {
         #expect(effective.state == .no)
         #expect(effective.hasAlreadyEffectiveResetToday(now: now) == false)
         #expect(effective.nextScheduledReset(now: now) == nil)
-        #expect(effective.primaryEvidenceEvent(now: now) == nil)
+        #expect(effective.verdictPresentation(now: now).reason == .grace)
+        #expect(effective.primaryEvidenceEvent(now: now)?.kind == .resetScheduled)
     }
 
     @Test("date-only Tibo schedule expands to a local full-day window")
@@ -323,8 +324,8 @@ struct RateLimitResetTodayTests {
                 == "现在~4小时58分钟40秒")
     }
 
-    @Test("next same-day schedule outranks already-effective reset for primary evidence")
-    func nextSameDayScheduleOutranksPastReset() throws {
+    @Test("completed reset outranks an open same-day schedule for primary evidence")
+    func completedResetOutranksSameDaySchedule() throws {
         let now = try resetStatusDate("2026-07-28T12:00:00Z")
         let calendar = resetStatusUTCCalendar
         let snapshot = try ResetStatusFeedFixture(
@@ -364,7 +365,8 @@ struct RateLimitResetTodayTests {
 
         #expect(snapshot.resolvedState(now: now, calendar: calendar) == .yes)
         #expect(snapshot.hasAlreadyEffectiveResetToday(now: now, calendar: calendar) == true)
-        #expect(snapshot.primaryEvidenceEvent(now: now, calendar: calendar)?.source.postID == "200")
+        #expect(snapshot.verdictPresentation(now: now, calendar: calendar).reason == .completed)
+        #expect(snapshot.primaryEvidenceEvent(now: now, calendar: calendar)?.source.postID == "100")
         #expect(snapshot.nextScheduledReset(now: now)?.event.source.postID == "200")
     }
 
@@ -445,7 +447,7 @@ struct RateLimitResetTodayTests {
         #expect(confirmedWithUncertain.state == .yes)
     }
 
-    @Test("healthy uncertain feed resolves to no with clear-signal copy")
+    @Test("healthy uncertain feed resolves to no without stale verdict evidence")
     func healthyUncertainFeedResolvesToNo() throws {
         let now = try resetStatusDate("2026-08-02T08:10:25Z")
         let snapshot = try ResetStatusFeedFixture(
@@ -471,14 +473,10 @@ struct RateLimitResetTodayTests {
 
         #expect(snapshot.state == .no)
         #expect(snapshot.hasUncertainNoSignalToday(now: now) == true)
-        #expect(snapshot.primaryEvidenceEvent(now: now)?.kind == .uncertain)
+        #expect(snapshot.primaryEvidenceEvent(now: now) == nil)
         #expect(snapshot.scopeSummary(for: snapshot.events[0], l10n: L10n(language: .english)) == nil)
-        #expect(
-            snapshot.evidenceLine(l10n: L10n(language: .english), now: now)
-                == "Not a clear reset signal.")
-        #expect(
-            snapshot.evidenceLine(l10n: L10n(language: .simplifiedChinese), now: now)
-                == "不是明确的重置信号。")
+        #expect(snapshot.evidenceLine(l10n: L10n(language: .english), now: now) == nil)
+        #expect(snapshot.evidenceLine(l10n: L10n(language: .simplifiedChinese), now: now) == nil)
     }
 
     @Test("degraded or stale monitor forces unknown")
@@ -491,6 +489,7 @@ struct RateLimitResetTodayTests {
             .monitor(status: "degraded", errorCode: "request_failed")
             .decode()
         let stale = try ResetStatusFeedFixture(event: event, now: now)
+            .generated(at: "2026-07-27T05:59:59Z")
             .checked(at: "2026-07-27T05:59:59Z")
             .decode()
         let missingSuccess = try ResetStatusFeedFixture(event: event, now: now)
@@ -500,7 +499,8 @@ struct RateLimitResetTodayTests {
         #expect(degraded.state == .unknown)
         #expect(degraded.monitor.errorCode == "request_failed")
         #expect(stale.state == .unknown)
-        #expect(missingSuccess.state == .unknown)
+        // A fresh generatedAt remains authoritative when the optional last check is absent.
+        #expect(missingSuccess.state == .yes)
     }
 
     @Test("exactly thirty hours old remains fresh")
@@ -511,6 +511,7 @@ struct RateLimitResetTodayTests {
                 kind: "reset_completed",
                 announcedAt: "2026-07-28T11:00:00Z"),
             now: now)
+            .generated(at: "2026-07-27T06:00:00Z")
             .checked(at: "2026-07-27T06:00:00Z")
             .decode()
         #expect(snapshot.state == .yes)

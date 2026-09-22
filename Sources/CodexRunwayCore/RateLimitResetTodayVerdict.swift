@@ -15,6 +15,12 @@ public struct RateLimitResetTodayVerdictPresentation: Sendable, Equatable {
     public var isScheduled: Bool
     public var isCompleted: Bool
     public var resetType: RateLimitResetType?
+    public var reason: RateLimitResetTodayVerdictReason
+    public var evidenceEvent: RateLimitResetTodayEvent?
+    public var scheduleWindow: RateLimitResetScheduleWindow?
+    public var scheduleBasis: RateLimitResetScheduleBasis?
+    public var confidence: Double?
+    public var completedAt: Date?
 
     public init(
         showsYes: Bool,
@@ -22,7 +28,13 @@ public struct RateLimitResetTodayVerdictPresentation: Sendable, Equatable {
         band: RateLimitResetTodayConfidenceBand?,
         isScheduled: Bool,
         isCompleted: Bool,
-        resetType: RateLimitResetType?)
+        resetType: RateLimitResetType?,
+        reason: RateLimitResetTodayVerdictReason,
+        evidenceEvent: RateLimitResetTodayEvent?,
+        scheduleWindow: RateLimitResetScheduleWindow?,
+        scheduleBasis: RateLimitResetScheduleBasis?,
+        confidence: Double?,
+        completedAt: Date?)
     {
         self.showsYes = showsYes
         self.percent = percent
@@ -30,6 +42,12 @@ public struct RateLimitResetTodayVerdictPresentation: Sendable, Equatable {
         self.isScheduled = isScheduled
         self.isCompleted = isCompleted
         self.resetType = resetType
+        self.reason = reason
+        self.evidenceEvent = evidenceEvent
+        self.scheduleWindow = scheduleWindow
+        self.scheduleBasis = scheduleBasis
+        self.confidence = confidence
+        self.completedAt = completedAt
     }
 
     public static func displayedPercent(_ confidence: Double) -> Int {
@@ -49,7 +67,12 @@ public struct RateLimitResetTodayVerdictPresentation: Sendable, Equatable {
     }
 
     public func answerText(l10n: L10n) -> String {
-        l10n.text(showsYes ? .rateLimitResetTodayYes : .rateLimitResetTodayNo)
+        if reason == .unavailable { return l10n.text(.rateLimitResetUnavailable) }
+        return l10n.text(showsYes ? .rateLimitResetTodayYes : .rateLimitResetTodayNo)
+    }
+
+    public func questionText(l10n: L10n) -> String {
+        reason.questionText(l10n: l10n)
     }
 
     public func titleText(l10n: L10n) -> String {
@@ -97,41 +120,26 @@ extension RateLimitResetTodaySnapshot {
         calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar)
         -> RateLimitResetTodayVerdictPresentation
     {
-        if resolvedState(now: now, calendar: calendar) == .unknown {
-            return RateLimitResetTodayVerdictPresentation(
-                showsYes: false,
-                percent: nil,
-                band: nil,
-                isScheduled: false,
-                isCompleted: false,
-                resetType: nil)
-        }
-        if hasAlreadyEffectiveResetToday(now: now, calendar: calendar) {
-            return RateLimitResetTodayVerdictPresentation(
-                showsYes: true,
-                percent: nil,
-                band: nil,
-                isScheduled: false,
-                isCompleted: true,
-                resetType: displayResetType(now: now, calendar: calendar))
-        }
-        if let next = nextScheduledReset(now: now) {
-            let percent = RateLimitResetTodayVerdictPresentation.displayedPercent(next.event.confidence)
-            return RateLimitResetTodayVerdictPresentation(
-                showsYes: true,
-                percent: percent,
-                band: RateLimitResetTodayVerdictPresentation.band(for: percent),
-                isScheduled: true,
-                isCompleted: false,
-                resetType: next.event.resetType)
-        }
+        let combined = combinedVerdictCandidate(now: now, calendar: calendar)
+        let candidate = combined.candidate
+        let scheduled = candidate.reason == .upcoming || candidate.reason == .grace
+        let confidence = candidate.reason == .expiredUnconfirmed ? nil : candidate.confidence
+        let percent = scheduled ? confidence.map(RateLimitResetTodayVerdictPresentation.displayedPercent) : nil
         return RateLimitResetTodayVerdictPresentation(
-            showsYes: false,
-            percent: nil,
-            band: nil,
-            isScheduled: false,
-            isCompleted: false,
-            resetType: nil)
+            showsYes: candidate.reason == .completed || scheduled,
+            percent: percent,
+            band: percent.map(RateLimitResetTodayVerdictPresentation.band),
+            isScheduled: scheduled,
+            isCompleted: candidate.reason == .completed,
+            resetType: candidate.reason == .expiredUnconfirmed ? nil : combined.resetType,
+            reason: candidate.reason,
+            evidenceEvent: candidate.reason == .expiredUnconfirmed ? nil : candidate.event,
+            scheduleWindow: candidate.reason == .expiredUnconfirmed ? nil : candidate.window,
+            scheduleBasis: candidate.reason == .expiredUnconfirmed
+                ? nil
+                : (candidate.scheduleBasis ?? candidate.event?.scheduleBasis),
+            confidence: confidence,
+            completedAt: candidate.completedAt)
     }
 
     public func verdictDetail(
@@ -144,17 +152,18 @@ extension RateLimitResetTodaySnapshot {
         if presentation.isCompleted {
             return confirmedDetail(l10n: l10n, now: now, calendar: calendar, presentation: presentation)
         }
-        guard presentation.isScheduled,
-              let next = nextScheduledReset(now: now),
-              next.event.scheduleBasis != .contextualInference
-        else {
+        switch presentation.reason {
+        case .upcoming:
+            return scheduledDetail(l10n: l10n, calendar: calendar, presentation: presentation)
+        case .grace:
+            return graceDetail(l10n: l10n, now: now, calendar: calendar, presentation: presentation)
+        case .expiredUnconfirmed, .none:
+            return noneDetail(l10n: l10n, now: now)
+        case .unavailable:
+            return unavailableDetail(l10n: l10n, now: now)
+        case .completed:
             return nil
         }
-        return scheduledChanceDetail(
-            next,
-            l10n: l10n,
-            calendar: calendar,
-            presentation: presentation)
     }
 
     public func scheduleConfidenceBand(for event: RateLimitResetTodayEvent)
@@ -176,8 +185,10 @@ enum RateLimitResetTodayCopy {
         let marks: [(needle: String, token: RateLimitResetTodayDetailToken)] = [
             ("{type}", .resetType),
             ("{percent}", .percent),
+            ("{probability}", .percent),
             ("{when}", .time),
             ("{date}", .time),
+            ("{ago}", .time),
         ]
         var segments: [RateLimitResetTodayDetailToken] = []
         var start = template.startIndex
@@ -213,7 +224,7 @@ private extension RateLimitResetTodaySnapshot {
         presentation: RateLimitResetTodayVerdictPresentation)
         -> RateLimitResetTodayDetailPresentation?
     {
-        guard let resetAt = latestResetAt(now: now),
+        guard let resetAt = presentation.completedAt,
               let ago = DurationFormatter.relativePastSingleUnit(
                   since: resetAt,
                   now: now,
@@ -229,7 +240,7 @@ private extension RateLimitResetTodaySnapshot {
             language: l10n.language,
             calendar: calendar)
         let when = String(format: l10n.text(.rateLimitResetTodayConfirmedWhen), time, ago)
-        let confidence = primaryEvidenceEvent(now: now, calendar: calendar)?.confidence
+        let confidence = presentation.confidence
         let percentText: String?
         if let confidence {
             percentText = "\(RateLimitResetTodayVerdictPresentation.displayedPercent(confidence))%"
@@ -257,32 +268,35 @@ private extension RateLimitResetTodaySnapshot {
             plainText: RateLimitResetTodayCopy.replace(l10n.text(key), values))
     }
 
-    func scheduledChanceDetail(
-        _ next: (effectiveAt: Date, effectiveUntil: Date, isRange: Bool, event: RateLimitResetTodayEvent),
+    func scheduledDetail(
         l10n: L10n,
         calendar: Calendar,
         presentation: RateLimitResetTodayVerdictPresentation)
         -> RateLimitResetTodayDetailPresentation?
     {
-        guard let percentText = presentation.percentText(l10n: l10n) else { return nil }
-        let resetType = next.event.resetType
+        guard let window = presentation.scheduleWindow,
+              let resetType = presentation.resetType
+        else { return nil }
         let typeLabel = resetType.localizedName(l10n: l10n)
         let zone = l10n.text(.rateLimitResetTodayClockLocal)
         let date = ResetLabelFormatter.scheduledLabel(
-            for: RateLimitResetScheduleWindow(
-                startAt: next.effectiveAt,
-                endAt: next.effectiveUntil,
-                isRange: next.isRange),
+            for: window,
             language: l10n.language,
             calendar: calendar)
-        let values = [
-            "percent": percentText,
+        let percentText = presentation.percentText(l10n: l10n)
+        let key: L10nKey = presentation.scheduleBasis == .contextualInference
+            ? .rateLimitResetTodayScheduledContextualHint
+            : .rateLimitResetTodayScheduledChanceHint
+        var values = [
             "type": typeLabel,
             "zone": zone,
             "date": date,
         ]
-        let raw = l10n.text(.rateLimitResetTodayScheduledChanceHint)
-        let template = RateLimitResetTodayCopy.replace(raw, ["zone": zone, "percent": percentText])
+        if let percentText { values["percent"] = percentText }
+        let raw = l10n.text(key)
+        let template = RateLimitResetTodayCopy.replace(
+            raw,
+            ["zone": zone, "percent": percentText ?? ""])
         return RateLimitResetTodayDetailPresentation(
             tokens: RateLimitResetTodayCopy.tokens(template),
             resetType: resetType,
@@ -290,5 +304,86 @@ private extension RateLimitResetTodaySnapshot {
             percentText: percentText,
             timeText: date,
             plainText: RateLimitResetTodayCopy.replace(raw, values))
+    }
+
+    func graceDetail(
+        l10n: L10n,
+        now: Date,
+        calendar: Calendar,
+        presentation: RateLimitResetTodayVerdictPresentation)
+        -> RateLimitResetTodayDetailPresentation?
+    {
+        guard let window = presentation.scheduleWindow,
+              let resetType = presentation.resetType
+        else { return nil }
+        let typeLabel = resetType.localizedName(l10n: l10n)
+        let zone = l10n.text(.rateLimitResetTodayClockLocal)
+        let date = ResetLabelFormatter.scheduledLabel(
+            for: RateLimitResetScheduleWindow(
+                startAt: window.pendingUntil,
+                endAt: window.pendingUntil,
+                isRange: false),
+            language: l10n.language,
+            calendar: calendar)
+        let ago = DurationFormatter.relativePastSingleUnit(
+            since: window.pendingUntil,
+            now: now,
+            language: l10n.language) ?? ""
+        let when = String(format: l10n.text(.rateLimitResetTodayConfirmedWhen), date, ago)
+        let percentText = presentation.percentText(l10n: l10n)
+        let key: L10nKey = presentation.scheduleBasis == .contextualInference
+            ? .rateLimitResetTodayScheduledGraceContextualHint
+            : .rateLimitResetTodayScheduledGraceHint
+        var values = ["type": typeLabel, "zone": zone, "when": when]
+        if let percentText { values["probability"] = percentText }
+        let raw = l10n.text(key)
+        let template = RateLimitResetTodayCopy.replace(
+            raw,
+            ["zone": zone, "probability": percentText ?? ""])
+        return RateLimitResetTodayDetailPresentation(
+            tokens: RateLimitResetTodayCopy.tokens(template),
+            resetType: resetType,
+            typeLabel: typeLabel,
+            percentText: percentText,
+            timeText: when,
+            plainText: RateLimitResetTodayCopy.replace(raw, values))
+    }
+
+    func noneDetail(l10n: L10n, now: Date) -> RateLimitResetTodayDetailPresentation {
+        guard let latest = noneHintLastReset(l10n: l10n, now: now) else {
+            return plainDetail(l10n.text(.rateLimitResetTodayNoHint))
+        }
+        let raw = l10n.text(.rateLimitResetTodayNoHintWithLast)
+        return RateLimitResetTodayDetailPresentation(
+            tokens: RateLimitResetTodayCopy.tokens(raw),
+            resetType: latest.resetType,
+            typeLabel: latest.resetType.localizedName(l10n: l10n),
+            percentText: nil,
+            timeText: latest.ago,
+            plainText: latest.text)
+    }
+
+    func plainDetail(_ text: String) -> RateLimitResetTodayDetailPresentation {
+        RateLimitResetTodayDetailPresentation(
+            tokens: [.text(text)],
+            resetType: nil,
+            typeLabel: "",
+            percentText: nil,
+            timeText: nil,
+            plainText: text)
+    }
+
+    func unavailableDetail(l10n: L10n, now: Date) -> RateLimitResetTodayDetailPresentation {
+        let key: L10nKey
+        if monitor.status != .ok {
+            key = .rateLimitResetTodayUnavailableMonitorHint
+        } else if let freshnessAt {
+            key = now.timeIntervalSince(freshnessAt) > Self.staleAfter
+                ? .rateLimitResetTodayUnavailableStaleHint
+                : .rateLimitResetTodayUnavailableHint
+        } else {
+            key = .rateLimitResetTodayUnavailableStaleHint
+        }
+        return plainDetail(l10n.text(key))
     }
 }

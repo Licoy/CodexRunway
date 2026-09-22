@@ -2,6 +2,11 @@ import AppKit
 import CodexRunwayCore
 import SwiftUI
 
+private struct ResetHeroAvailableWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
 struct QuotaMetersView: View {
     var title: String
     var meters: [QuotaMeter]
@@ -279,18 +284,20 @@ struct RateLimitResetTodayView: View {
     var reactionDelta: RateLimitResetTodayReactionDelta = .none
     var onReactionClick: () -> Void = {}
     var onReactionPollingEnabledChange: (Bool) -> Void = { _ in }
+    var usesLegacyHeroLayoutForTesting = false
+    var legacyHeroAvailableWidthForTesting: CGFloat? = nil
 
     @Environment(\.runwayPanelVisible) private var panelVisible
+    @State private var heroAvailableWidth: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TimelineView(.periodic(from: .now, by: 30)) { context in
+            TimelineView(.periodic(from: .now, by: Self.countdownRefreshInterval)) { context in
                 RefreshableSectionHeader(
-                    title: l10n.text(.rateLimitResetToday),
+                    title: sectionTitle(now: context.date),
                     l10n: l10n,
                     isRefreshing: isRefreshing,
                     onRefresh: onRefresh,
-                    trailingCaption: lastFetchedCaption(now: context.date),
                     infoHelp: l10n.text(.rateLimitResetTodaySourceTitle),
                     infoAccessibilityIdentifier: "rate-limit-reset-today-info",
                     infoContent: {
@@ -316,7 +323,7 @@ struct RateLimitResetTodayView: View {
                             Text(footerText)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
@@ -354,55 +361,150 @@ struct RateLimitResetTodayView: View {
         .padding(.top, 8)
     }
 
-    /// Verdict + reaction on the first row; hint copy wraps on the line below.
+    /// Keep the verdict and reaction inline whenever their natural widths fit.
     private func hero(now: Date) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .center, spacing: 10) {
-                heroTitleView(now: now)
-                    .layoutPriority(1)
-
-                if let reaction, reaction.isVisible {
-                    RateLimitResetTodayReactionButton(
-                        snapshot: reaction,
-                        l10n: l10n,
-                        isBusy: isReactionBusy,
-                        isLoading: isReactionAwaitingCount,
-                        delta: reactionDelta,
-                        onClick: onReactionClick)
-                        .fixedSize()
-                } else if isReactionAwaitingCount {
-                    ProgressView()
-                        .controlSize(.mini)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(RunwaySurface.raised, in: Capsule())
-                        .overlay(
-                            Capsule()
-                                .strokeBorder(RunwaySurface.hairline, lineWidth: 1))
-                }
-
-                Spacer(minLength: 0)
-            }
+            adaptiveHeroControls(now: now)
 
             heroSubtitleView(now: now)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(key: ResetHeroAvailableWidthKey.self, value: proxy.size.width)
+            })
+        .onPreferenceChange(ResetHeroAvailableWidthKey.self) { heroAvailableWidth = $0 }
+    }
+
+    @ViewBuilder
+    private func adaptiveHeroControls(now: Date) -> some View {
+        if #available(macOS 13.0, *), !usesLegacyHeroLayoutForTesting {
+            ViewThatFits(in: .horizontal) {
+                inlineHeroControls(now: now)
+                stackedHeroControls(now: now)
+            }
+        } else if stacksHeroTrailing(now: now) {
+            stackedHeroControls(now: now)
+        } else {
+            inlineHeroControls(now: now)
+        }
+    }
+
+    private func inlineHeroControls(now: Date) -> some View {
+        HStack(alignment: .center, spacing: 0) {
+            measuredHeroTitle(now: now)
+                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(1)
+            Spacer(minLength: 10)
+            measuredHeroTrailing
+        }
+    }
+
+    private func stackedHeroControls(now: Date) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            measuredHeroTitle(now: now)
+            HStack {
+                Spacer(minLength: 0)
+                measuredHeroTrailing
+            }
+        }
+    }
+
+    private func stacksHeroTrailing(now: Date) -> Bool {
+        let availableWidth = legacyHeroAvailableWidthForTesting ?? heroAvailableWidth
+        let trailingWidth = heroTrailingNaturalWidth
+        return availableWidth > 0
+            && trailingWidth > 0
+            && heroTitleNaturalWidth(now: now) + trailingWidth + 10 > availableWidth
+    }
+
+    private func measuredHeroTitle(now: Date) -> some View {
+        heroTitleView(now: now)
+    }
+
+    private func heroTitleNaturalWidth(now: Date) -> CGFloat {
+        let presentation = snapshot?.verdictPresentation(now: now)
+        let answer = presentation?.answerText(l10n: l10n)
+            ?? (isRefreshing ? "…" : l10n.text(.rateLimitResetUnavailable))
+        let answerWidth = measuredTextWidth(
+            answer,
+            font: roundedSystemFont(size: 28, weight: .semibold))
+        guard let percent = presentation?.percentText(l10n: l10n) else { return answerWidth }
+        return measuredTextWidth(
+            percent,
+            font: roundedSystemFont(size: 22, weight: .semibold)) + 4 + answerWidth
+    }
+
+    private func roundedSystemFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
+        let base = NSFont.systemFont(ofSize: size, weight: weight)
+        guard let descriptor = base.fontDescriptor.withDesign(.rounded),
+              let rounded = NSFont(descriptor: descriptor, size: size)
+        else { return base }
+        return rounded
+    }
+
+    private func measuredTextWidth(_ text: String, font: NSFont) -> CGFloat {
+        ceil((text as NSString).size(withAttributes: [.font: font]).width)
+    }
+
+    private var heroTrailingNaturalWidth: CGFloat {
+        let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold)
+        if let reaction, reaction.isVisible {
+            let label = l10n.text(reaction.polarity == .yes
+                ? .rateLimitResetTodayReactionThank
+                : .rateLimitResetTodayReactionPlease)
+            let count = RateLimitResetTodayReaction.formatCount(
+                reaction.count ?? 0,
+                language: l10n.language)
+            let iconWidth = NSFont.smallSystemFontSize + 1
+            return iconWidth
+                + measuredTextWidth(label, font: font)
+                + measuredTextWidth(count, font: NSFont.monospacedDigitSystemFont(
+                    ofSize: NSFont.smallSystemFontSize,
+                    weight: .semibold))
+                + 24
+        }
+        return isReactionAwaitingCount ? NSFont.smallSystemFontSize + 16 : 0
+    }
+
+    @ViewBuilder
+    private var measuredHeroTrailing: some View {
+        if let reaction, reaction.isVisible {
+            RateLimitResetTodayReactionButton(
+                snapshot: reaction,
+                l10n: l10n,
+                isBusy: isReactionBusy,
+                isLoading: isReactionAwaitingCount,
+                delta: reactionDelta,
+                onClick: onReactionClick)
+                .fixedSize()
+        } else if isReactionAwaitingCount {
+            ProgressView()
+                .controlSize(.mini)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(RunwaySurface.raised, in: Capsule())
+                .overlay(
+                    Capsule()
+                        .strokeBorder(RunwaySurface.hairline, lineWidth: 1))
+                .fixedSize()
+        }
     }
 
     @ViewBuilder
     private func heroSubtitleView(now: Date) -> some View {
-        if let detail = snapshot?.verdictDetail(l10n: l10n, now: now) {
+        if snapshot == nil {
+            Text(l10n.text(isRefreshing ? .calculating : .rateLimitResetTodayUnavailableHint))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if let detail = snapshot?.verdictDetail(l10n: l10n, now: now) {
             verdictDetailText(detail, now: now)
                 .fixedSize(horizontal: false, vertical: true)
-        } else if let unconfirmed = heroUnconfirmedScheduleDetail(now: now) {
-            unconfirmedScheduleHintText(type: unconfirmed)
-                .fixedSize(horizontal: false, vertical: true)
-        } else if let last = heroNoneLastDetail(now: now) {
-            noneLastHintText(type: last.resetType, ago: last.ago)
-                .fixedSize(horizontal: false, vertical: true)
         } else {
-            Text(heroSubtitle(now: now))
+            Text(l10n.text(.rateLimitResetTodayUnavailableHint))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.leading)
@@ -439,12 +541,13 @@ struct RateLimitResetTodayView: View {
 
     @ViewBuilder
     private func nextScheduledSection(now: Date) -> some View {
-        if let next = snapshot?.nextScheduledReset(now: now) {
+        if let snapshot,
+           snapshot.verdictPresentation(now: now).reason != .unavailable,
+           let next = snapshot.nextScheduledResetSummary(now: now)
+        {
             let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-            let window = RateLimitResetScheduleWindow(
-                startAt: next.effectiveAt,
-                endAt: next.effectiveUntil,
-                isRange: next.isRange)
+            let window = next.window
+            let resetType = next.resetType
             let absolute = ResetLabelFormatter.scheduledLabel(
                 for: window,
                 language: l10n.language,
@@ -466,11 +569,11 @@ struct RateLimitResetTodayView: View {
                     (
                         Text("\(l10n.text(.rateLimitResetTodayNextScheduled))\(separator)")
                             .foregroundColor(Color(nsColor: .secondaryLabelColor))
-                        + Text("\(next.event.resetType.localizedName(l10n: l10n)) · ")
-                            .foregroundColor(resetTypeColor(next.event.resetType))
+                        + Text("\(resetType.localizedName(l10n: l10n)) · ")
+                            .foregroundColor(resetTypeColor(resetType))
                             .fontWeight(.semibold)
                         + Text(absolute)
-                            .foregroundColor(scheduleTimeColor(for: next.event))
+                            .foregroundColor(scheduleTimeColor(confidence: next.confidence))
                             .fontWeight(.bold)
                         + Text("\(openParen)\(countdown)\(closeParen)")
                             .foregroundColor(Color(nsColor: .secondaryLabelColor))
@@ -529,28 +632,16 @@ struct RateLimitResetTodayView: View {
     }
 
     private func scopeSummaryText(now: Date) -> String? {
-        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
         guard let snapshot,
-              let event = snapshot.primaryEvidenceEvent(now: now, calendar: calendar)
+              let event = snapshot.verdictPresentation(now: now).evidenceEvent
         else { return nil }
         return snapshot.scopeSummary(for: event, l10n: l10n)
     }
 
-    private func lastFetchedCaption(now: Date) -> String? {
-        guard let snapshot else { return nil }
-        let relative = DurationFormatter.relativePast(
-            since: snapshot.fetchedAt,
-            now: now,
-            language: l10n.language)
-        return "\(l10n.text(.rateLimitResetTodayLastFetched)) \(relative)"
-    }
-
-    /// Site-side meta only (last local refresh lives in the section header).
     private func footerMetaText(now: Date) -> String? {
         guard let snapshot else {
-            return l10n.text(isRefreshing ? .calculating : .notLoaded)
+            return l10n.text(isRefreshing ? .calculating : .rateLimitResetTodayUnavailableHint)
         }
-        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
         var parts: [String] = []
         if let checkedAt = snapshot.lastSuccessfulCheckAt {
             parts.append(
@@ -563,15 +654,16 @@ struct RateLimitResetTodayView: View {
                 language: l10n.language)
             parts.append(
                 "\(l10n.text(.lastReset)) \(latest.resetType.localizedName(l10n: l10n)) · \(relative)")
-        } else if snapshot.resolvedState(now: now, calendar: calendar) == .no,
-                  snapshot.nextScheduledReset(now: now) == nil
-        {
-            parts.append(l10n.text(.rateLimitResetTodayAwaiting))
         }
-        if let confidence = snapshot.primaryEvidenceEvent(now: now, calendar: calendar)?.confidence {
+        if let confidence = snapshot.verdictPresentation(now: now).confidence {
             parts.append(
                 "\(l10n.text(.rateLimitResetTodayConfidence)) \(Int((confidence * 100).rounded()))%")
         }
+        let relative = DurationFormatter.relativePast(
+            since: snapshot.fetchedAt,
+            now: now,
+            language: l10n.language)
+        parts.append("\(l10n.text(.rateLimitResetTodayLastFetched)) \(relative)")
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
@@ -596,19 +688,14 @@ struct RateLimitResetTodayView: View {
         let color = heroColor(now: now)
         return HStack(alignment: .firstTextBaseline, spacing: 4) {
             if let snapshot {
-                let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-                if snapshot.resolvedState(now: now, calendar: calendar) == .unknown {
-                    Text(l10n.text(.rateLimitResetTodayUnknown))
-                } else {
-                    let presentation = snapshot.verdictPresentation(now: now, calendar: calendar)
-                    if let percent = presentation.percentText(l10n: l10n) {
-                        Text(percent)
-                            .font(.system(size: 22, weight: .semibold, design: .rounded))
-                    }
-                    Text(presentation.answerText(l10n: l10n))
+                let presentation = snapshot.verdictPresentation(now: now)
+                if let percent = presentation.percentText(l10n: l10n) {
+                    Text(percent)
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
                 }
+                Text(presentation.answerText(l10n: l10n))
             } else {
-                Text(isRefreshing ? "…" : "—")
+                Text(isRefreshing ? "…" : l10n.text(.rateLimitResetUnavailable))
             }
         }
         .font(.system(size: 28, weight: .semibold, design: .rounded))
@@ -620,75 +707,25 @@ struct RateLimitResetTodayView: View {
     }
 
     private func heroAccessibilityTitle(now: Date) -> String {
-        guard let snapshot else { return isRefreshing ? "…" : "—" }
-        if snapshot.resolvedState(now: now) == .unknown {
-            return l10n.text(.rateLimitResetTodayUnknown)
+        guard let snapshot else {
+            return isRefreshing ? "…" : l10n.text(.rateLimitResetUnavailable)
         }
         return snapshot.verdictPresentation(now: now).titleText(l10n: l10n)
     }
 
-    private func heroSubtitle(now: Date) -> String {
-        if snapshot == nil {
-            return l10n.text(isRefreshing ? .calculating : .notLoaded)
+    private func sectionTitle(now: Date) -> String {
+        if let snapshot {
+            return snapshot.verdictPresentation(now: now).questionText(l10n: l10n)
         }
-        guard let snapshot else {
-            return l10n.text(.rateLimitResetTodayUnknownHint)
-        }
-        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-        switch snapshot.resolvedState(now: now, calendar: calendar) {
-        case .yes:
-            if snapshot.prefersSameDayScheduleExplanation(now: now, calendar: calendar),
-               let next = snapshot.nextScheduledReset(onLocalDayOf: now, calendar: calendar)
-            {
-                return scheduledHint(for: next.event.resetType)
-            }
-            return completedHint(for: snapshot.displayResetType(now: now, calendar: calendar) ?? .global)
-        case .no:
-            if let next = snapshot.nextScheduledReset(now: now) {
-                let window = RateLimitResetScheduleWindow(
-                    startAt: next.effectiveAt,
-                    endAt: next.effectiveUntil,
-                    isRange: next.isRange)
-                let when = ResetLabelFormatter.scheduledLabel(
-                    for: window,
-                    language: l10n.language,
-                    calendar: calendar)
-                let remaining = ResetLabelFormatter.scheduledCountdown(
-                    for: window,
-                    now: now,
-                    language: l10n.language)
-                let countdown = String(format: l10n.text(.rateLimitResetTodayUntilReset), remaining)
-                let openParen = l10n.language.openParen
-                let closeParen = l10n.language.closeParen
-                return "\(String(format: l10n.text(.rateLimitResetTodayNoHintWithNext), when))\(openParen)\(countdown)\(closeParen)"
-            }
-            if snapshot.hasUncertainNoSignalToday(now: now, calendar: calendar) {
-                return l10n.text(.rateLimitResetTodayNoHintUncertain)
-            }
-            if let unconfirmed = snapshot.unconfirmedScheduleHint(
-                l10n: l10n,
-                now: now,
-                calendar: calendar)
-            {
-                return unconfirmed.text
-            }
-            if let last = snapshot.noneHintLastReset(l10n: l10n, now: now) {
-                return last.text
-            }
-            return l10n.text(.rateLimitResetTodayNoHint)
-        case .unknown:
-            return l10n.text(.rateLimitResetTodayUnknownHint)
-        }
+        return l10n.text(isRefreshing ? .rateLimitResetToday : .rateLimitResetQuestionUnavailable)
     }
 
     private func heroColor(now: Date) -> Color {
         guard let snapshot else { return Color(nsColor: .secondaryLabelColor) }
-        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-        let state = snapshot.resolvedState(now: now, calendar: calendar)
-        if state == .unknown {
+        let presentation = snapshot.verdictPresentation(now: now)
+        if presentation.reason == .unavailable {
             return Color(nsColor: .secondaryLabelColor)
         }
-        let presentation = snapshot.verdictPresentation(now: now, calendar: calendar)
         if let band = presentation.band {
             return Color(nsColor: confidenceBandNSColor(band))
         }
@@ -708,8 +745,10 @@ struct RateLimitResetTodayView: View {
         }
     }
 
-    private func scheduleTimeColor(for event: RateLimitResetTodayEvent) -> Color {
-        Color(nsColor: confidenceBandNSColor(snapshot?.scheduleConfidenceBand(for: event) ?? .ok))
+    private func scheduleTimeColor(confidence: Double) -> Color {
+        let percent = RateLimitResetTodayVerdictPresentation.displayedPercent(confidence)
+        return Color(nsColor: confidenceBandNSColor(
+            RateLimitResetTodayVerdictPresentation.band(for: percent)))
     }
 
     private func verdictDetailText(
@@ -775,103 +814,6 @@ struct RateLimitResetTodayView: View {
             }
         }
         return Color(nsColor: .systemGreen)
-    }
-
-    private func completedHint(for resetType: RateLimitResetType) -> String {
-        switch resetType {
-        case .global:
-            l10n.text(.rateLimitResetTodayYesHint)
-        case .banked:
-            l10n.text(.rateLimitResetTodayBankedCompletedHint)
-        case .globalAndBanked:
-            l10n.text(.rateLimitResetTodayGlobalAndBankedCompletedHint)
-        }
-    }
-
-    private func scheduledHint(for resetType: RateLimitResetType) -> String {
-        switch resetType {
-        case .global:
-            l10n.text(.rateLimitResetTodayYesHintScheduled)
-        case .banked:
-            l10n.text(.rateLimitResetTodayBankedScheduledHint)
-        case .globalAndBanked:
-            l10n.text(.rateLimitResetTodayGlobalAndBankedScheduledHint)
-        }
-    }
-
-    private func heroNoneLastDetail(now: Date) -> (resetType: RateLimitResetType, ago: String)? {
-        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-        guard let snapshot,
-              snapshot.resolvedState(now: now, calendar: calendar) == .no,
-              snapshot.nextScheduledReset(now: now) == nil,
-              !snapshot.hasUncertainNoSignalToday(now: now, calendar: calendar),
-              snapshot.unconfirmedExpiredSchedule(now: now, calendar: calendar) == nil,
-              let last = snapshot.noneHintLastReset(l10n: l10n, now: now)
-        else {
-            return nil
-        }
-        return (last.resetType, last.ago)
-    }
-
-    private func heroUnconfirmedScheduleDetail(now: Date) -> RateLimitResetType? {
-        let calendar = RateLimitResetTodaySnapshot.localDayCalendar
-        guard let snapshot,
-              snapshot.resolvedState(now: now, calendar: calendar) == .no,
-              snapshot.nextScheduledReset(now: now) == nil,
-              !snapshot.hasUncertainNoSignalToday(now: now, calendar: calendar),
-              let event = snapshot.unconfirmedExpiredSchedule(now: now, calendar: calendar)
-        else {
-            return nil
-        }
-        return event.resetType
-    }
-
-    private func unconfirmedScheduleHintText(type: RateLimitResetType) -> some View {
-        let template = l10n.text(.rateLimitResetTodayNoHintUnconfirmedSchedule)
-        let typeLabel = type.localizedName(l10n: l10n)
-        let typeColor = resetTypeColor(type)
-        let secondary = Color(nsColor: .secondaryLabelColor)
-        var result = Text("")
-        for segment in RateLimitResetNoneHint.segments(template) {
-            switch segment {
-            case .text(let value):
-                result = result + Text(value).foregroundColor(secondary)
-            case .resetType:
-                result = result + Text(typeLabel)
-                    .foregroundColor(typeColor)
-                    .fontWeight(.semibold)
-            case .ago:
-                continue
-            }
-        }
-        return result
-            .font(.caption2)
-            .multilineTextAlignment(.leading)
-    }
-
-    private func noneLastHintText(type: RateLimitResetType, ago: String) -> some View {
-        let template = l10n.text(.rateLimitResetTodayNoHintWithLast)
-        let typeLabel = type.localizedName(l10n: l10n)
-        let typeColor = resetTypeColor(type)
-        let secondary = Color(nsColor: .secondaryLabelColor)
-        var result = Text("")
-        for segment in RateLimitResetNoneHint.segments(template) {
-            switch segment {
-            case .text(let value):
-                result = result + Text(value).foregroundColor(secondary)
-            case .resetType:
-                result = result + Text(typeLabel)
-                    .foregroundColor(typeColor)
-                    .fontWeight(.semibold)
-            case .ago:
-                result = result + Text(ago)
-                    .foregroundColor(Color(nsColor: .labelColor))
-                    .fontWeight(.semibold)
-            }
-        }
-        return result
-            .font(.caption2)
-            .multilineTextAlignment(.leading)
     }
 
     private func resetTypeColor(_ resetType: RateLimitResetType) -> Color {

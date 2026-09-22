@@ -8,7 +8,7 @@
 
 你的 Codex 还可以跑多久？
 
-CodexRunway 是一个原生 macOS 状态栏应用，帮你在菜单栏查看 Codex 与 Grok 额度，并提供 Codex 的今日是否重置、reset credits、API 等价成本与本机会话能力，以及两个供应商各自独立的多账号管理。
+CodexRunway 是一个原生 macOS 状态栏应用，帮你在菜单栏查看 Codex 与 Grok 额度，并提供 Codex 重置动态、reset credits、API 等价成本与本机会话能力，以及两个供应商各自独立的多账号管理。
 
 ## 亮点
 
@@ -19,7 +19,7 @@ CodexRunway 是一个原生 macOS 状态栏应用，帮你在菜单栏查看 Cod
 - 管理多个 Grok OAuth / SuperGrok 账号：隔离登录、导入当前登录、粘贴 Token / JSON、刷新、别名、排序、删除和显式切号。
 - 查看 5 小时、每周和附加额度窗口。
 - 查看今日速率限制是否已重置（数据来自 [www.codexrunway.com](https://www.codexrunway.com)），并可跳转到相关公开动态。
-- 设置中可开关「今日是否重置」栏目，并单独配置其刷新间隔（默认开启、每 5 分钟）。
+- 设置中可开关「Codex 重置动态」栏目，并单独配置其刷新间隔（默认开启、每 5 分钟）。
 - 管理多个 Codex 账号：浏览器登录、导入本机 `auth.json`、粘贴 token / JSON（含 `/auth/session`）、导入文件或 API Key。
 - 确认后安全切号，原子写回 `~/.codex/auth.json`，可选立即重启 Codex，使 CLI / IDE 同步。
 - 显示当前账号、订阅类型与到期信息。
@@ -32,7 +32,7 @@ CodexRunway 是一个原生 macOS 状态栏应用，帮你在菜单栏查看 Cod
 - 修复本机会话索引。
 - 支持浅色、深色、跟随系统，以及 English、简体中文、繁體中文、한국어、日本語、Русский、Français 界面。
 - 支持内置更新检测。
-- 提供 macOS 14+ 桌面组件：额度总览、Token 趋势、关键指标和今日重置。
+- 提供 macOS 14+ 桌面组件：额度总览、Token 趋势、关键指标和 Codex 重置动态。
 
 ## 截图
 
@@ -123,7 +123,7 @@ swift run CodexRunway --self-check
 
 ## 桌面组件
 
-桌面组件要求 macOS 14+。从包含此修复的版本起，正式 Release 和本地开发构建都会包含 Widget 扩展。每个组件可在系统的“编辑组件”中独立选择 Codex、Grok 或两者；“今日重置”仅支持 Codex。升级后，macOS 会从应用包的 `Contents/PlugIns` 注册正式版组件。
+桌面组件要求 macOS 14+。从包含此修复的版本起，正式 Release 和本地开发构建都会包含 Widget 扩展。每个组件可在系统的“编辑组件”中独立选择 Codex、Grok 或两者；“Codex 重置动态”仅支持 Codex。升级后，macOS 会从应用包的 `Contents/PlugIns` 注册正式版组件。
 
 `swift run CodexRunway` 使用独立的 `swift-dev` 标识，不会覆盖现有安装。也可使用 `.dev` 标识手动生成带组件的应用：
 
@@ -158,13 +158,13 @@ bash Scripts/package-app.sh
 - 订阅额度推算只把派生的 Credits 合计与占用率写入 `~/.codex-runway/quota-estimate-history.json`，不含 token 或密钥。
 - API 等价成本的在线用量只在本地没有可用 token 数据时作为补全。Token 图表的“官方统计（多端）”来自当前账号的官方资料统计，可能延迟或后续修订；“本机日志（全部本机会话）”扫描本机现有会话，历史记录可能跨账号。按日数据使用 UTC 日期，以便两边使用同一日界。两者口径不同，不能视为包含关系或直接相减。
 - 会话修复只处理 `~/.codex/session_index.jsonl`，写入前会创建备份，不删除会话文件。
-- 「今日是否重置」只下载公开状态源，不附带 Codex 账号、token 或本机会话内容。
+- 「Codex 重置动态」只下载公开状态源，不附带 Codex 账号、token 或本机会话内容。
 - 更新检测只访问版本信息，不上传 Codex 账号或会话数据。
 - 桌面组件快照存储仅保存额度、余额、派生成本、Token 日序列和重置状态等非密钥数据；主应用是唯一写入者，组件只读。
 
 ## 数据来源
 
-- **今日是否重置**：数据来源于 [https://www.codexrunway.com/api/status.json](https://www.codexrunway.com/api/status.json)，非官方且仅供参考，可能延迟或暂时不可用。
+- **Codex 重置动态**：数据来源于 [https://www.codexrunway.com/api/status.json](https://www.codexrunway.com/api/status.json)，非官方且仅供参考，可能延迟或暂时不可用。
 - **配额 / reset credits / 订阅额度推算 / Token 用量官方统计 / 部分在线用量**：在你已登录的前提下，通过本机凭据访问官方 ChatGPT / Codex 后端接口；官方 Token 统计仅对应当前账号，并显示服务端统计截至日期。订阅额度推算非正式：用周占用率和每日 Credits 外推本周额度（1000 Credits ≈ $40，版本 `credits-usd-2026-08-26`）。
 - **Grok 额度**：仅由官方 CLI chat-proxy 的 `/v1/billing?format=credits` 返回（使用本机 OAuth / SuperGrok 登录凭据）。应用不提供第二数据源，也不会把 API 账单或本机会话统计混入该额度。
 - **Grok API 等价成本 / 本机会话**：根据本机 `~/.grok/sessions` 的 `turn_completed` 用量，按官方 xAI Text API 价目（input / cached / output；prompt ≥ 200k 走长上下文价，价格版本 `xai-builtin-2026-08-13`）逐 turn 估算。未知模型不计精确费用。CLI 的 `costUsdTicks` 是订阅额度口径，不用作 API 等价。

@@ -15,6 +15,8 @@ public struct RunwayAlert: Codable, Sendable, Equatable, Identifiable {
     public var date: Date?
     public var endDate: Date?
     public var resetType: RateLimitResetType?
+    public var scheduleBasis: RateLimitResetScheduleBasis?
+    public var confidencePercent: Int?
 
     public init(
         id: String,
@@ -23,7 +25,9 @@ public struct RunwayAlert: Codable, Sendable, Equatable, Identifiable {
         threshold: Int?,
         date: Date?,
         endDate: Date? = nil,
-        resetType: RateLimitResetType? = nil)
+        resetType: RateLimitResetType? = nil,
+        scheduleBasis: RateLimitResetScheduleBasis? = nil,
+        confidencePercent: Int? = nil)
     {
         self.id = id
         self.kind = kind
@@ -32,6 +36,8 @@ public struct RunwayAlert: Codable, Sendable, Equatable, Identifiable {
         self.date = date
         self.endDate = endDate
         self.resetType = resetType
+        self.scheduleBasis = scheduleBasis
+        self.confidencePercent = confidencePercent
     }
 }
 
@@ -80,6 +86,9 @@ public enum RunwayAlertDecider {
         now: Date = Date(),
         calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> [RunwayAlert]
     {
+        guard current.verdictPresentation(now: now, calendar: calendar).reason != .unavailable else {
+            return []
+        }
         var alerts: [RunwayAlert] = []
 
         // Skip the first successful load so app launch does not spam for existing resets.
@@ -102,7 +111,7 @@ public enum RunwayAlertDecider {
             }
         }
 
-        if let next = current.nextScheduledReset(now: now) {
+        if let next = current.nextScheduledResetSummary(now: now) {
             let remaining = next.effectiveAt.timeIntervalSince(now)
             guard remaining > 0 else { return alerts }
             // Prefer the tighter threshold so a late refresh only fires once.
@@ -125,7 +134,10 @@ public enum RunwayAlertDecider {
                     threshold: threshold,
                     date: next.effectiveAt,
                     endDate: next.isRange ? next.effectiveUntil : nil,
-                    resetType: next.event.resetType))
+                    resetType: next.resetType,
+                    scheduleBasis: next.scheduleBasis,
+                    confidencePercent: RateLimitResetTodayVerdictPresentation.displayedPercent(
+                        next.confidence)))
             }
         }
 

@@ -8,7 +8,7 @@
 
 Codex가 얼마나 더 달릴 수 있을까요?
 
-CodexRunway는 Codex와 Grok 할당량을 확인하는 네이티브 macOS 메뉴 막대 앱입니다. Codex의 오늘 리셋 여부, reset credits, API 환산 비용, 로컬 세션과 공급자별 다중 계정 관리를 제공합니다.
+CodexRunway는 Codex와 Grok 할당량을 확인하는 네이티브 macOS 메뉴 막대 앱입니다. Codex 초기화 업데이트, reset credits, API 환산 비용, 로컬 세션과 공급자별 다중 계정 관리를 제공합니다.
 
 ## 주요 기능
 
@@ -19,7 +19,7 @@ CodexRunway는 Codex와 Grok 할당량을 확인하는 네이티브 macOS 메뉴
 - 여러 Grok OAuth / SuperGrok 계정을 격리 로그인, 현재 로그인 가져오기, 토큰/JSON 붙여넣기, 새로고침, 별칭, 정렬, 제거, 명시적 전환으로 관리합니다.
 - 5시간, 주간 및 추가 할당량 창을 봅니다.
 - 오늘 Codex 속도 제한이 리셋되었는지 확인합니다([www.codexrunway.com](https://www.codexrunway.com) 데이터, 관련 공개 게시물 링크 포함).
-- 설정에서 「오늘 리셋되었나요?」 섹션을 켜고 자체 새로고침 간격을 구성합니다(기본값: 켜짐, 5분).
+- 설정에서 「Codex 초기화 업데이트」 섹션을 켜고 자체 새로고침 간격을 구성합니다(기본값: 켜짐, 5분).
 - 여러 Codex 계정을 관리합니다: 브라우저 로그인, 로컬 `auth.json` 가져오기, 토큰/JSON 붙여넣기(`/auth/session` 포함), 파일 가져오기, API 키 추가.
 - 확인 후 `~/.codex/auth.json`을 원자적으로 써서 안전하게 전환하고, CLI / IDE 동기화를 위해 Codex를 바로 재시작할 수 있습니다.
 - 현재 계정, 구독 등급, 만료를 표시합니다.
@@ -32,7 +32,7 @@ CodexRunway는 Codex와 Grok 할당량을 확인하는 네이티브 macOS 메뉴
 - 로컬 세션 인덱스를 복구합니다.
 - 라이트, 다크, 시스템 모양과 English, 简体中文, 繁體中文, 한국어, 日本語, Русский, Français를 지원합니다.
 - 내장 업데이트 확인을 지원합니다.
-- macOS 14+ 데스크톱 위젯으로 할당량 개요, 토큰 추세, 핵심 지표, 오늘 리셋 상태를 제공합니다.
+- macOS 14+ 데스크톱 위젯으로 할당량 개요, 토큰 추세, 핵심 지표, Codex 초기화 업데이트를 제공합니다.
 
 ## 스크린샷
 
@@ -121,7 +121,7 @@ swift run CodexRunway --self-check
 
 ## 데스크톱 위젯
 
-데스크톱 위젯은 macOS 14 이상이 필요합니다. 이 수정이 포함된 버전부터 공개 릴리스와 로컬 개발 빌드 모두 Widget 확장을 포함합니다. 각 위젯은 위젯 편집에서 Codex, Grok 또는 둘 다를 독립적으로 고를 수 있습니다. 오늘 리셋은 Codex 전용입니다. 업그레이드 후 macOS는 앱의 `Contents/PlugIns`에서 프로덕션 위젯을 등록합니다.
+데스크톱 위젯은 macOS 14 이상이 필요합니다. 이 수정이 포함된 버전부터 공개 릴리스와 로컬 개발 빌드 모두 Widget 확장을 포함합니다. 각 위젯은 위젯 편집에서 Codex, Grok 또는 둘 다를 독립적으로 고를 수 있습니다. Codex 초기화 업데이트는 Codex 전용입니다. 업그레이드 후 macOS는 앱의 `Contents/PlugIns`에서 프로덕션 위젯을 등록합니다.
 
 `swift run CodexRunway`는 별도의 `swift-dev` 식별자를 쓰며 기존 설치를 바꾸지 않습니다. `.dev` 식별자로 위젯이 포함된 앱을 직접 패키징할 수도 있습니다:
 
@@ -156,13 +156,13 @@ bash Scripts/package-app.sh
 - 구독 한도 추정은 파생 Credits 합계와 사용률만 `~/.codex-runway/quota-estimate-history.json`에 저장합니다. 토큰이나 키는 넣지 않습니다.
 - 온라인 사용량은 로컬 토큰 데이터가 없을 때만 API 환산 비용을 보완합니다. 차트의 「공식 통계(모든 기기)」는 현재 계정 프로필 통계이며 지연되거나 수정될 수 있습니다. 「로컬 로그(모든 세션)」는 이 Mac의 세션을 스캔하며 기록이 여러 계정에 걸칠 수 있습니다. 일별 데이터에는 UTC 날짜를 써서 두 출처가 같은 날짜 경계를 공유합니다. 두 계열은 부분집합 관계가 아니므로 빼면 안 됩니다.
 - 세션 복구는 `~/.codex/session_index.jsonl`만 다루고, 쓰기 전에 백업을 만들며 세션 파일은 삭제하지 않습니다.
-- 「오늘 리셋되었나요?」는 공개 상태 피드만 다운로드합니다. Codex 계정, 토큰, 로컬 세션 내용은 보내지 않습니다.
+- 「Codex 초기화 업데이트」는 공개 상태 피드만 다운로드합니다. Codex 계정, 토큰, 로컬 세션 내용은 보내지 않습니다.
 - 업데이트 확인은 버전 정보만 요청합니다. Codex 계정과 세션 데이터는 업로드하지 않습니다.
 - 위젯 스냅샷에는 비밀이 아닌 파생 할당량, 잔액, 비용, 일별 토큰, 리셋 상태만 있습니다. 주 앱만 쓰고 위젯은 읽기 전용입니다.
 
 ## 데이터 출처
 
-- **오늘 리셋되었나요?**: 데이터는 [https://www.codexrunway.com/api/status.json](https://www.codexrunway.com/api/status.json)에서 옵니다. 비공식이며 참고용이고, 지연되거나 일시적으로 없을 수 있습니다.
+- **Codex 초기화 업데이트**: 데이터는 [https://www.codexrunway.com/api/status.json](https://www.codexrunway.com/api/status.json)에서 옵니다. 비공식이며 참고용이고, 지연되거나 일시적으로 없을 수 있습니다.
 - **할당량 / reset credits / 구독 한도 추정 / 공식 토큰 사용량 / 일부 온라인 사용량**: 로그인한 상태에서 로컬 자격 증명으로 공식 ChatGPT / Codex 백엔드 API를 요청합니다. 공식 토큰 사용량은 현재 계정에 속하며 백엔드 통계 날짜를 보여 줍니다. 구독 한도 추정은 비공식으로, 주간 사용률과 일별 Credits로 외삽합니다(1000 Credits ≈ $40, 버전 `credits-usd-2026-08-26`).
 - **Grok 할당량**: 로컬 OAuth / SuperGrok 로그인으로 공식 CLI chat-proxy `/v1/billing?format=credits`만 반환합니다. 보조 출처는 없으며 API 결제나 로컬 세션 통계를 이 할당량에 섞지 않습니다.
 - **Grok API 환산 비용 / 로컬 세션**: 로컬 `~/.grok/sessions`의 `turn_completed` 사용량을 공식 xAI Text API 가격(input / cached / output, prompt ≥ 200k는 긴 컨텍스트 요금, 가격표 `xai-builtin-2026-08-13`)으로 turn마다 계산합니다. 알 수 없는 모델은 정확한 비용으로 만들지 않습니다. CLI `costUsdTicks`는 구독 크레딧 회계이며 API 환산 비용으로 쓰지 않습니다.

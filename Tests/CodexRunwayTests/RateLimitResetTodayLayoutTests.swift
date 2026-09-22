@@ -80,6 +80,146 @@ struct RateLimitResetTodayLayoutTests {
         #expect(narrowImage.size.height > wideImage.size.height)
     }
 
+    @Test("all reset update states render across languages, widths, and appearances")
+    @MainActor
+    func resetUpdateQAMatrixRenders() {
+        #expect(Set(RateLimitResetTodayMockRender.qaCases.map(\.language)) == Set(ResolvedLanguage.allCases))
+        #expect(Set(RateLimitResetTodayMockRender.qaCases.map(\.width)) == Set([280, 358, 400]))
+        #expect(Set(RateLimitResetTodayMockRender.qaCases.map(\.colorScheme)) == Set([.light, .dark]))
+        let kinds = RateLimitResetTodayMockRender.qaCases.map(\.kind)
+        for kind in [
+            RateLimitResetTodaySnapshot.DevMockKind.explicitScheduled,
+            .inferredScheduled,
+            .grace,
+            .expired,
+            .unavailable,
+        ] {
+            #expect(kinds.contains(kind))
+        }
+
+        for item in RateLimitResetTodayMockRender.qaCases {
+            let size = RateLimitResetTodayMockRender.logicalSize(
+                kind: item.kind,
+                language: item.language,
+                width: item.width,
+                resetType: .global,
+                colorScheme: item.colorScheme)
+            #expect(size.width == item.width)
+            #expect(size.height > 80)
+        }
+    }
+
+    @Test("hero keeps six-digit reactions inline when they fit and wraps only when needed")
+    @MainActor
+    func heroAdaptsToNaturalContentWidth() {
+        let normalWithoutReaction = RateLimitResetTodayMockRender.logicalSize(
+            kind: .explicitScheduled,
+            language: .simplifiedChinese,
+            width: 358,
+            resetType: .global,
+            colorScheme: .dark,
+            showsReaction: false,
+            confidence: 0.88,
+            reactionCount: 107_516)
+        let normalWithReaction = RateLimitResetTodayMockRender.logicalSize(
+            kind: .explicitScheduled,
+            language: .simplifiedChinese,
+            width: 358,
+            resetType: .global,
+            colorScheme: .dark,
+            showsReaction: true,
+            confidence: 0.88,
+            reactionCount: 107_516)
+        let narrowWithoutReaction = RateLimitResetTodayMockRender.logicalSize(
+            kind: .grace,
+            language: .japanese,
+            width: 280,
+            resetType: .global,
+            colorScheme: .dark,
+            showsReaction: false,
+            confidence: 0.92,
+            reactionCount: 107_516)
+        let narrowWithReaction = RateLimitResetTodayMockRender.logicalSize(
+            kind: .grace,
+            language: .japanese,
+            width: 280,
+            resetType: .global,
+            colorScheme: .dark,
+            showsReaction: true,
+            confidence: 0.92,
+            reactionCount: 107_516)
+
+        #expect(normalWithReaction.width == 358)
+        #expect(abs(normalWithReaction.height - normalWithoutReaction.height) <= 1)
+        #expect(narrowWithReaction.width == 280)
+        #expect(narrowWithReaction.height > narrowWithoutReaction.height)
+    }
+
+    @Test("legacy hero layout uses the same natural-width contract")
+    @MainActor
+    func legacyHeroAdaptsToNaturalContentWidth() {
+        let normalWithoutReaction = RateLimitResetTodayMockRender.logicalSize(
+            kind: .explicitScheduled,
+            language: .simplifiedChinese,
+            width: 358,
+            resetType: .global,
+            colorScheme: .dark,
+            showsReaction: false,
+            confidence: 0.88,
+            reactionCount: 107_516,
+            usesLegacyHeroLayout: true)
+        let normalWithReaction = RateLimitResetTodayMockRender.logicalSize(
+            kind: .explicitScheduled,
+            language: .simplifiedChinese,
+            width: 358,
+            resetType: .global,
+            colorScheme: .dark,
+            showsReaction: true,
+            confidence: 0.88,
+            reactionCount: 107_516,
+            usesLegacyHeroLayout: true)
+        let narrowWithoutReaction = RateLimitResetTodayMockRender.logicalSize(
+            kind: .grace,
+            language: .japanese,
+            width: 280,
+            resetType: .global,
+            colorScheme: .dark,
+            showsReaction: false,
+            confidence: 0.92,
+            reactionCount: 107_516,
+            usesLegacyHeroLayout: true)
+        let narrowWithReaction = RateLimitResetTodayMockRender.logicalSize(
+            kind: .grace,
+            language: .japanese,
+            width: 280,
+            resetType: .global,
+            colorScheme: .dark,
+            showsReaction: true,
+            confidence: 0.92,
+            reactionCount: 107_516,
+            usesLegacyHeroLayout: true)
+        let unavailableWithoutReaction = RateLimitResetTodayMockRender.logicalSize(
+            kind: .unavailable,
+            language: .french,
+            width: 280,
+            resetType: .global,
+            colorScheme: .light,
+            showsReaction: false,
+            usesLegacyHeroLayout: true)
+        let unavailableWithReaction = RateLimitResetTodayMockRender.logicalSize(
+            kind: .unavailable,
+            language: .french,
+            width: 280,
+            resetType: .global,
+            colorScheme: .light,
+            showsReaction: true,
+            usesLegacyHeroLayout: true)
+
+        #expect(abs(normalWithReaction.height - normalWithoutReaction.height) <= 1)
+        #expect(narrowWithReaction.height > narrowWithoutReaction.height)
+        #expect(unavailableWithReaction.height > unavailableWithoutReaction.height)
+    }
+
     @Test("website link copy is localized for every language")
     func websiteLinkCopyIsLocalized() {
         for language in ResolvedLanguage.allCases {

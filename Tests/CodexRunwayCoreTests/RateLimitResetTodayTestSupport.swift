@@ -116,6 +116,7 @@ struct ResetStatusEventFixture {
 struct ResetStatusFeedFixture {
     var eventsJSON: String
     var resetTimelineJSON: String?
+    var generatedAt = "2026-07-28T12:00:00Z"
     var lastSuccessfulCheckAt: String? = "2026-07-28T12:00:00Z"
     var monitorStatus = "ok"
     var errorCode: String?
@@ -137,6 +138,12 @@ struct ResetStatusFeedFixture {
     func checked(at value: String?) -> ResetStatusFeedFixture {
         var copy = self
         copy.lastSuccessfulCheckAt = value
+        return copy
+    }
+
+    func generated(at value: String) -> ResetStatusFeedFixture {
+        var copy = self
+        copy.generatedAt = value
         return copy
     }
 
@@ -166,7 +173,7 @@ struct ResetStatusFeedFixture {
         let data = """
         {
           "schemaVersion": 1,
-          "generatedAt": "2026-07-28T12:00:00Z",
+          "generatedAt": "\(generatedAt)",
           "lastSuccessfulCheckAt": \(lastSuccessValue),
           "monitor": {"status": "\(monitorStatus)", "errorCode": \(errorValue)},
           "events": [\(eventsJSON)]\(timelineField)

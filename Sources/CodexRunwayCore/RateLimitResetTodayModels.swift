@@ -56,7 +56,7 @@ public enum RateLimitResetSchedulePrecision: String, Decodable, Sendable, Equata
     case datetime
 }
 
-public enum RateLimitResetScheduleBasis: String, Decodable, Sendable, Equatable {
+public enum RateLimitResetScheduleBasis: String, Codable, Sendable, Equatable {
     case explicit
     case contextualInference = "contextual_inference"
 }
@@ -403,6 +403,7 @@ extension RateLimitResetTimeline: Decodable {
 
 public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
     public static let staleAfter: TimeInterval = 30 * 3_600
+    public static let scheduleGrace: TimeInterval = 3 * 3_600
 
     /// Gregorian local-day calendar using the device timezone.
     ///
@@ -428,6 +429,11 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
 
     /// Official schemaVersion 1 feeds may omit `resetTimeline`; when present it is authoritative.
     public var hasResetTimeline: Bool { resetTimeline != nil }
+
+    /// Newest producer timestamp used to decide whether the public feed is stale.
+    public var freshnessAt: Date? {
+        [generatedAt, lastSuccessfulCheckAt].compactMap { $0 }.max()
+    }
 
     /// Compatibility initializer used by app-level service fixtures.
     public init(state: RateLimitResetTodayState, fetchedAt: Date = Date()) {
@@ -478,8 +484,8 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         // A healthy feed with only uncertain (or empty) events means "no" —
         // matching the hosted status page: 是 / 否, never "unavailable" for clear
         // "not a reset signal" commentary.
-        guard monitor.status == .ok, let lastSuccessfulCheckAt,
-              now.timeIntervalSince(lastSuccessfulCheckAt) <= Self.staleAfter
+        guard monitor.status == .ok, let freshnessAt,
+              now.timeIntervalSince(freshnessAt) <= Self.staleAfter
         else {
             return .unknown
         }
@@ -548,45 +554,7 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         now: Date = Date(),
         calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> RateLimitResetTodayEvent?
     {
-        switch resolvedState(now: now, calendar: calendar) {
-        case .yes:
-            if prefersSameDayScheduleExplanation(now: now, calendar: calendar),
-               let nextSameDay = nextScheduledReset(onLocalDayOf: now, calendar: calendar)
-            {
-                return nextSameDay.event
-            }
-            if let completed = completedResetEventsToday(now: now, calendar: calendar)
-                .max(by: { $0.announcedAt < $1.announcedAt })
-            {
-                return completed
-            }
-            if let manual = visibleManualCompletion(onLocalDayOf: now, calendar: calendar) {
-                return manual.representativeEvent ?? latestEvent
-            }
-            return latestEvent
-        case .no:
-            // Same-day non-reset commentary explains today's "no".
-            // A still-pending future schedule is also useful.
-            // Do not fall back to latestEvent: past-day reset_completed
-            // announcements are history, not evidence for today.
-            if let sameDayCommentary = events
-                .filter({
-                    calendar.isDate($0.announcedAt, inSameDayAs: now)
-                        && ($0.kind == .uncertain
-                            || $0.kind == .bankedReset
-                            || $0.kind == .limitIncrease)
-                })
-                .max(by: { $0.announcedAt < $1.announcedAt })
-            {
-                return sameDayCommentary
-            }
-            if let next = nextScheduledReset(now: now)?.event {
-                return next
-            }
-            return unconfirmedExpiredSchedule(now: now, calendar: calendar)
-        case .unknown:
-            return latestEvent
-        }
+        verdictPresentation(now: now, calendar: calendar).evidenceEvent
     }
 
     public func evidenceURL(
@@ -611,14 +579,12 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         now: Date = Date(),
         calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> String?
     {
-        if resolvedState(now: now, calendar: calendar) == .yes,
-           !prefersSameDayScheduleExplanation(now: now, calendar: calendar),
-           !hasCompletedResetEventToday(now: now, calendar: calendar),
-           visibleManualCompletion(onLocalDayOf: now, calendar: calendar) != nil
-        {
+        let presentation = verdictPresentation(now: now, calendar: calendar)
+        if presentation.reason == .completed,
+           presentation.evidenceEvent?.kind != .resetCompleted {
             return l10n.text(.rateLimitResetTodayEvidenceManualCompletion)
         }
-        guard let event = primaryEvidenceEvent(now: now, calendar: calendar) else { return nil }
+        guard let event = presentation.evidenceEvent else { return nil }
         let key: L10nKey = switch event.kind {
         case .resetCompleted:
             if event.source.isOperator {
@@ -842,7 +808,7 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
             pendingSchedule($0, after: now, matchingLocalDayOf: day, calendar: calendar)
         }
         let suppressedPostIDs = Set(timeline.suppressedPostIds)
-        for event in events where event.kind == .resetScheduled && event.resetType == .banked {
+        for event in events where event.kind == .resetScheduled && event.resetType.includes(.banked) {
             guard !suppressedPostIDs.contains(event.source.postID),
                   let candidate = pendingSchedule(
                       event,
@@ -960,6 +926,12 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         case no
         case scheduled
         case unknown
+        case completed
+        case explicitScheduled
+        case inferredScheduled
+        case grace
+        case expired
+        case unavailable
 
         public static func parse(_ raw: String) -> DevMockKind? {
             switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
@@ -971,6 +943,18 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
                 return .scheduled
             case "unknown":
                 return .unknown
+            case "completed":
+                return .completed
+            case "explicit-scheduled", "explicit_scheduled":
+                return .explicitScheduled
+            case "inferred-scheduled", "inferred_scheduled", "inferred":
+                return .inferredScheduled
+            case "grace":
+                return .grace
+            case "expired":
+                return .expired
+            case "unavailable":
+                return .unavailable
             default:
                 return nil
             }
@@ -993,11 +977,12 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         kind: DevMockKind,
         now: Date = Date()) -> RateLimitResetTodaySnapshot
     {
+        let unavailable = kind == .unknown || kind == .unavailable
         let monitor = RateLimitResetTodayMonitor(
-            status: kind == .unknown ? .degraded : .ok,
-            errorCode: kind == .unknown ? "request_failed" : nil)
+            status: unavailable ? .degraded : .ok,
+            errorCode: unavailable ? "request_failed" : nil)
         let events: [RateLimitResetTodayEvent]
-        if kind == .yes {
+        if kind == .yes || kind == .completed {
             events = [
                 RateLimitResetTodayEvent(
                     kind: .resetCompleted,
@@ -1011,16 +996,23 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
                     rationale: "Explicit Codex quota reset announcement.",
                     text: "I have reset usage limits for Codex."),
             ]
-        } else if kind == .scheduled {
+        } else if [.scheduled, .explicitScheduled, .inferredScheduled, .grace, .expired].contains(kind) {
             var sourceCalendar = Calendar(identifier: .gregorian)
             sourceCalendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
             let today = sourceCalendar.startOfDay(for: now)
-            let effectiveAt = sourceCalendar.date(byAdding: .day, value: 1, to: today)!
+            let effectiveAt: Date = switch kind {
+            case .grace: now.addingTimeInterval(-3_600)
+            case .expired: now.addingTimeInterval(-4 * 3_600)
+            default: sourceCalendar.date(byAdding: .day, value: 1, to: today)!
+            }
+            let announcedAt = min(now, effectiveAt.addingTimeInterval(-3_600))
             events = [
                 RateLimitResetTodayEvent(
                     kind: .resetScheduled,
-                    announcedAt: now,
+                    announcedAt: announcedAt,
                     effectiveAt: effectiveAt,
+                    schedulePrecision: kind == .scheduled ? .date : .datetime,
+                    scheduleBasis: kind == .inferredScheduled ? .contextualInference : .explicit,
                     scope: RateLimitResetTodayScope(plans: ["all"], windows: ["weekly"]),
                     source: RateLimitResetTodaySource(
                         handle: "thsottiaux",
@@ -1036,7 +1028,7 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         let response = RateLimitResetTodayResponse(
             schemaVersion: 1,
             generatedAt: now,
-            lastSuccessfulCheckAt: kind == .unknown ? nil : now,
+            lastSuccessfulCheckAt: unavailable ? nil : now,
             monitor: monitor,
             events: events)
         return RateLimitResetTodaySnapshot(

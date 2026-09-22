@@ -216,15 +216,21 @@ struct RateLimitResetTodayOperatorTests {
 
         #expect(snapshot.resolvedState(now: now, calendar: resetStatusUTCCalendar) == .no)
         #expect(snapshot.nextScheduledReset(now: now) == nil)
-        #expect(
-            snapshot.primaryEvidenceEvent(now: now, calendar: resetStatusUTCCalendar)?.source.postID
-                == scheduledID)
-        #expect(
-            snapshot.evidenceLine(
-                l10n: l10n,
-                now: now,
-                calendar: resetStatusUTCCalendar)
-                == "运营确认已排期重置，Tibo 未发 X。")
+        let presentation = snapshot.verdictPresentation(
+            now: now,
+            calendar: resetStatusUTCCalendar)
+        // The producer cleared nextSchedule, while this LA date window has not
+        // reached pendingUntil yet; pinned classification therefore falls back
+        // to none rather than fabricating an expired lifecycle.
+        #expect(presentation.reason == .none)
+        #expect(presentation.evidenceEvent == nil)
+        #expect(presentation.confidence == nil)
+        #expect(presentation.scheduleWindow == nil)
+        #expect(snapshot.primaryEvidenceEvent(now: now, calendar: resetStatusUTCCalendar) == nil)
+        #expect(snapshot.evidenceLine(
+            l10n: l10n,
+            now: now,
+            calendar: resetStatusUTCCalendar) == nil)
         #expect(hint.resetType == .global)
         #expect(hint.text == "已排期的全局重置时间已过，但未得到确认")
         #expect(

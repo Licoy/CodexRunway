@@ -36,15 +36,22 @@ private enum RunwayWidgetLoader {
         }
     }
 
-    static func timeline(provider: RunwayWidgetProviderScope, metric: RunwayWidgetMetricKind) -> Timeline<RunwayWidgetEntry> {
+    static func timeline(
+        provider: RunwayWidgetProviderScope,
+        metric: RunwayWidgetMetricKind,
+        includesResetTransitions: Bool = false) -> Timeline<RunwayWidgetEntry>
+    {
         let now = Date()
-        let entry = RunwayWidgetEntry(
-            date: now,
-            state: load(now: now),
-            provider: provider,
-            metric: metric)
+        let state = load(now: now)
+        var dates = [now]
+        if includesResetTransitions, case .ready(let snapshot) = state {
+            dates += snapshot.resetToday?.transitionDates(after: now) ?? []
+        }
+        let entries = Array(Set(dates)).sorted().map {
+            RunwayWidgetEntry(date: $0, state: state, provider: provider, metric: metric)
+        }
         return Timeline(
-            entries: [entry],
+            entries: entries,
             policy: .after(now.addingTimeInterval(RunwayWidgetLayoutPolicy.refreshInterval)))
     }
 }
@@ -123,7 +130,10 @@ struct RunwayResetTimelineProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<RunwayWidgetEntry>) -> Void) {
-        completion(RunwayWidgetLoader.timeline(provider: .codex, metric: .remainingQuota))
+        completion(RunwayWidgetLoader.timeline(
+            provider: .codex,
+            metric: .remainingQuota,
+            includesResetTransitions: true))
     }
 }
 

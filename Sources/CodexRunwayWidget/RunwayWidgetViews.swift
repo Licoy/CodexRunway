@@ -224,6 +224,9 @@ struct RunwayMetricWidgetView: View {
 struct RunwayResetTodayWidgetView: View {
     @Environment(\.widgetFamily) private var family
     var entry: RunwayWidgetEntry
+    var familyOverride: WidgetFamily? = nil
+
+    private var displayFamily: WidgetFamily { familyOverride ?? family }
 
     var body: some View {
         Group {
@@ -239,42 +242,78 @@ struct RunwayResetTodayWidgetView: View {
 
     private func content(_ snapshot: RunwayWidgetSnapshot) -> some View {
         let l10n = L10n(language: snapshot.language)
-        return VStack(alignment: .leading, spacing: 8) {
-            RunwayWidgetHeader(title: l10n.text(.widgetResetTodayTitle), trailing: "Codex")
+        return VStack(alignment: .leading, spacing: displayFamily == .systemSmall ? 5 : 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "gauge.with.dots.needle.bottom.50percent")
+                    .foregroundStyle(RunwayWidgetPalette.token)
+                Text(l10n.text(.widgetResetTodayTitle))
+                    .font(.headline)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.72)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
             if let reset = snapshot.resetToday {
-                Text(stateText(reset, l10n: l10n))
-                    .font(.system(size: family == .systemSmall ? 34 : 42, weight: .bold, design: .rounded))
-                    .foregroundStyle(stateColor(reset))
-                if let resetType = reset.resetType {
-                    Text(resetType.localizedName(l10n: l10n))
+                if let presentation = reset.presentation(at: entry.date) {
+                    Text(presentation.reason.questionText(l10n: l10n))
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(resetTypeColor(resetType))
+                        .foregroundStyle(.secondary)
                         .lineLimit(2)
                         .minimumScaleFactor(0.75)
-                }
-                if let next = reset.nextScheduledAt {
-                    HStack(spacing: 5) {
-                        if let resetType = reset.nextScheduledResetType {
-                            Image(systemName: "clock.arrow.circlepath")
-                                .foregroundStyle(.secondary)
-                            Text(resetType.localizedName(l10n: l10n))
-                                .fontWeight(.semibold)
-                                .foregroundStyle(resetTypeColor(resetType))
-                        } else {
-                            Text(l10n.text(.rateLimitResetTodayNextScheduled))
-                        }
-                        Spacer(minLength: 4)
-                        Text(next, style: .timer).monospacedDigit()
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(stateText(presentation, l10n: l10n))
+                        .font(.system(
+                            size: displayFamily == .systemSmall ? 34 : 42,
+                            weight: .bold,
+                            design: .rounded))
+                        .foregroundStyle(stateColor(presentation))
+                    if let resetType = presentation.resetType {
+                        Text(resetType.localizedName(l10n: l10n))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(resetTypeColor(resetType))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.75)
                     }
-                    .font(.caption)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.75)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(
-                        Text(nextScheduleAccessibilityLabel(reset.nextScheduledResetType, l10n: l10n)))
-                    .accessibilityValue(Text(next, style: .timer))
+                    if let hint = semanticHint(presentation, l10n: l10n) {
+                        Text(hint)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.75)
+                            .accessibilityLabel(
+                                Text(semanticAccessibility(presentation, l10n: l10n)))
+                    }
+                    if let next = presentation.nextScheduledAt {
+                        HStack(spacing: 5) {
+                            if let resetType = presentation.nextScheduledResetType {
+                                Image(systemName: "clock.arrow.circlepath")
+                                    .foregroundStyle(.secondary)
+                                Text(resetType.localizedName(l10n: l10n))
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(resetTypeColor(resetType))
+                            } else {
+                                Text(l10n.text(.rateLimitResetTodayNextScheduled))
+                            }
+                            Spacer(minLength: 4)
+                            Text(next, style: .timer).monospacedDigit()
+                        }
+                        .font(.caption)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.75)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(
+                            Text(nextScheduleAccessibilityLabel(
+                                presentation.nextScheduledResetType,
+                                l10n: l10n)))
+                        .accessibilityValue(Text(next, style: .timer))
+                    }
+                } else {
+                    Text(l10n.text(.widgetResetTodayRefreshRequired))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                if family == .systemMedium, let checked = reset.lastSuccessfulCheckAt {
+                if displayFamily == .systemMedium, let checked = reset.lastSuccessfulCheckAt {
                     HStack(spacing: 4) {
                         Text(l10n.text(.rateLimitResetTodayLastCheck))
                         Text(checked, style: .relative)
@@ -296,34 +335,75 @@ struct RunwayResetTodayWidgetView: View {
                 RunwayWidgetFreshness(snapshot: snapshot, now: entry.date, l10n: l10n)
             }
         }
+        .environment(\.locale, snapshot.language.locale)
     }
 
-    private func stateText(_ reset: RunwayWidgetResetTodaySnapshot, l10n: L10n) -> String {
-        if let percent = reset.confidencePercent {
+    private func stateText(
+        _ presentation: RunwayWidgetResetTodayTimelineEntry,
+        l10n: L10n) -> String
+    {
+        if presentation.reason == .unavailable {
+            return l10n.text(.rateLimitResetUnavailable)
+        }
+        if let percent = presentation.confidencePercent {
             let key: L10nKey = percent == 100
                 ? .rateLimitResetTodayPercentExact
                 : .rateLimitResetTodayPercentPrefix
             return String(format: l10n.text(key), "\(percent)") + l10n.text(.rateLimitResetTodayYes)
         }
-        switch reset.state {
+        switch presentation.state {
         case .yes: return l10n.text(.rateLimitResetTodayYes)
         case .no: return l10n.text(.rateLimitResetTodayNo)
-        case .unknown: return l10n.text(.rateLimitResetTodayUnknown)
+        case .unknown: return l10n.text(.rateLimitResetUnavailable)
         }
     }
 
-    private func stateColor(_ reset: RunwayWidgetResetTodaySnapshot) -> Color {
-        if let band = reset.confidenceBand {
+    private func stateColor(_ presentation: RunwayWidgetResetTodayTimelineEntry) -> Color {
+        if let band = presentation.confidenceBand {
             return band == .ok ? Color(nsColor: .systemPurple) : Color(nsColor: .systemYellow)
         }
-        switch reset.state {
+        switch presentation.state {
         case .yes:
-            return reset.resetType == .banked ? Color(nsColor: .systemBlue) : .green
+            return presentation.resetType == .banked ? Color(nsColor: .systemBlue) : .green
         case .no:
             return .primary
         case .unknown:
-            return .yellow
+            return Color(nsColor: .secondaryLabelColor)
         }
+    }
+
+    private func semanticHint(
+        _ presentation: RunwayWidgetResetTodayTimelineEntry,
+        l10n: L10n) -> String?
+    {
+        if presentation.reason == .grace {
+            let awaiting = l10n.text(.widgetResetScheduleAwaitingConfirmation)
+            guard presentation.scheduleBasis == .contextualInference else { return awaiting }
+            return "\(l10n.text(.widgetResetScheduleInferred)) · \(awaiting)"
+        }
+        guard presentation.reason == .upcoming || presentation.nextScheduledAt != nil else {
+            return nil
+        }
+        return l10n.text(
+            presentation.scheduleBasis == .contextualInference
+                ? .widgetResetScheduleInferred
+                : .widgetResetScheduleExplicit)
+    }
+
+    private func semanticAccessibility(
+        _ presentation: RunwayWidgetResetTodayTimelineEntry,
+        l10n: L10n) -> String
+    {
+        if presentation.reason == .grace {
+            return l10n.text(
+                presentation.scheduleBasis == .contextualInference
+                    ? .widgetResetScheduleInferredGraceAccessibility
+                    : .widgetResetScheduleGraceAccessibility)
+        }
+        if presentation.scheduleBasis == .contextualInference {
+            return l10n.text(.widgetResetScheduleInferredAccessibility)
+        }
+        return l10n.text(.widgetResetScheduleExplicit)
     }
 
     private func resetTypeColor(_ resetType: RateLimitResetType) -> Color {

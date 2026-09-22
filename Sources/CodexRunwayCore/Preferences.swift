@@ -331,6 +331,23 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case rateLimitResetDetectedGlobalAndBankedAlertBody
     case rateLimitResetDetectedAlertTitle
     case rateLimitResetDetectedTypedAlertTitle
+    case rateLimitResetPreviewAlertTitle
+    case rateLimitResetPreviewTypedAlertTitle
+    case rateLimitResetUpcomingDetailAlertBody
+    case rateLimitResetUpcomingRangeDetailAlertBody
+    case rateLimitResetPreviewDetailAlertBody
+    case rateLimitResetPreviewRangeDetailAlertBody
+    case rateLimitResetSchedulePassedAlertTitle
+    case rateLimitResetSchedulePassedTypedAlertTitle
+    case rateLimitResetSchedulePassedAlertBody
+    case rateLimitResetPreviewPassedAlertBody
+    case rateLimitResetPreviewLegacyAlertBody
+    case rateLimitResetPreviewAlertBody
+    case rateLimitResetQuestionCurrent
+    case rateLimitResetQuestionUpcoming
+    case rateLimitResetQuestionScheduledGrace
+    case rateLimitResetQuestionUnavailable
+    case rateLimitResetUnavailable
     case rateLimitResetTodayAlerts
     case rateLimitResetTodayAlertsDescription
     case rateLimitResetUpcomingAlertBody1h
@@ -424,6 +441,12 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case rateLimitResetTodayConfirmedHint
     case rateLimitResetTodayConfirmedHintNoPercent
     case rateLimitResetTodayScheduledChanceHint
+    case rateLimitResetTodayScheduledContextualHint
+    case rateLimitResetTodayScheduledGraceHint
+    case rateLimitResetTodayScheduledGraceContextualHint
+    case rateLimitResetTodayUnavailableHint
+    case rateLimitResetTodayUnavailableMonitorHint
+    case rateLimitResetTodayUnavailableStaleHint
     case recent
     case recentSessionsDescription
     case refresh
@@ -577,6 +600,13 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case widgetRemaining
     case widgetResetCredits
     case widgetResetTodayTitle
+    case widgetResetTodayRefreshRequired
+    case widgetResetScheduleExplicit
+    case widgetResetScheduleInferred
+    case widgetResetScheduleAwaitingConfirmation
+    case widgetResetScheduleInferredAccessibility
+    case widgetResetScheduleGraceAccessibility
+    case widgetResetScheduleInferredGraceAccessibility
     case widgetThisMac
     case widgetTokenTrendTitle
     case widgetUpdated
