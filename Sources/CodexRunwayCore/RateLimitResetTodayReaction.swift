@@ -146,10 +146,10 @@ public struct RateLimitResetTodayReactionReconcile: Sendable, Equatable {
 
 public enum RateLimitResetTodayReaction {
     public static let cookieName = "hr_react"
-    public static let origin = "https://www.codexrunway.com"
-    public static let referer = "https://www.codexrunway.com/"
+    public static let origin = "https://didcodexreset.com"
+    public static let referer = "https://didcodexreset.com/"
     public static let defaultPollMs = 5_000
-    public static let reactionURL = URL(string: "https://www.codexrunway.com/api/reaction")!
+    public static let reactionURL = URL(string: "https://didcodexreset.com/api/reaction")!
 
     public static func parseVisitorID(_ value: String?) -> String? {
         guard let value else { return nil }

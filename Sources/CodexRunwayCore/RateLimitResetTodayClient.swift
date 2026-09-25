@@ -1,8 +1,8 @@
 import Foundation
 
 public struct RateLimitResetTodayClient: Sendable {
-    public static let siteURL = URL(string: "https://www.codexrunway.com/")!
-    public static let statusURL = URL(string: "https://www.codexrunway.com/api/status.json")!
+    public static let siteURL = URL(string: "https://didcodexreset.com/")!
+    public static let statusURL = URL(string: "https://didcodexreset.com/api/status.json")!
 
     public var session: URLSession?
     public var statusURL: URL

@@ -4,12 +4,12 @@ import Testing
 
 @Suite("Rate limit reset today")
 struct RateLimitResetTodayTests {
-    @Test("uses the CodexRunway status endpoints")
-    func usesCodexRunwayStatusEndpoints() {
-        #expect(RateLimitResetTodayClient.siteURL.absoluteString == "https://www.codexrunway.com/")
+    @Test("uses the Did Codex Reset status endpoints")
+    func usesDidCodexResetStatusEndpoints() {
+        #expect(RateLimitResetTodayClient.siteURL.absoluteString == "https://didcodexreset.com/")
         #expect(
             RateLimitResetTodayClient.statusURL.absoluteString
-                == "https://www.codexrunway.com/api/status.json")
+                == "https://didcodexreset.com/api/status.json")
     }
 
     @Test("notifies when a reset becomes newly detected and when schedule is near")
@@ -116,7 +116,7 @@ struct RateLimitResetTodayTests {
         #expect(snapshot.nextScheduledReset(now: now)?.event.source.postID == "2082341416681001277")
         #expect(
             snapshot.evidenceURL(now: now)?.absoluteString
-                == "https://www.codexrunway.com/history/1785298142000.html")
+                == "https://didcodexreset.com/history/1785298142000.html")
     }
 
     @Test("decodes the complete API v1 event")
@@ -173,10 +173,10 @@ struct RateLimitResetTodayTests {
                 == "发现明确的 Codex 配额重置公告。")
         #expect(
             snapshot.evidenceURL(now: now)?.absoluteString
-                == "https://www.codexrunway.com/history/1785239700000.html")
+                == "https://didcodexreset.com/history/1785239700000.html")
         #expect(
             snapshot.evidenceURL(now: now, language: .simplifiedChinese)?.absoluteString
-                == "https://www.codexrunway.com/zh/history/1785239700000.html")
+                == "https://didcodexreset.com/zh/history/1785239700000.html")
     }
 
     @Test("completed reset is evaluated using the injected local calendar day")

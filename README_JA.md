@@ -18,7 +18,7 @@ CodexRunway は、Codex と Grok のクォータを確認するネイティブ m
 - Grok パネルでも Codex と同じ Token 使用量マルチチャート（ヒートマップ / 折れ線 / 棒）と API 換算コスト、Grok CLI ログの最近のローカルセッションを使います。
 - 複数の Grok OAuth / SuperGrok アカウントを、隔離サインイン、現在のログイン読み込み、トークン/JSON 貼り付け、更新、エイリアス、並べ替え、削除、明示的な切り替えで管理します。
 - 5 時間、週間、追加のクォータウィンドウを表示します。
-- 本日 Codex のレート制限がリセットされたかを確認します（データは [www.codexrunway.com](https://www.codexrunway.com)、関連する公開投稿へのリンク付き）。
+- 本日 Codex のレート制限がリセットされたかを確認します（データは [Did Codex Reset](https://didcodexreset.com)、関連する公開投稿へのリンク付き）。
 - 設定で「Codex リセット更新」セクションの表示と、専用の更新間隔を切り替えます（既定はオン、5 分ごと）。
 - 複数の Codex アカウントを管理します：ブラウザサインイン、ローカル `auth.json` の読み込み、トークン/JSON の貼り付け（`/auth/session` 含む）、ファイル読み込み、API キー追加。
 - 確認後に `~/.codex/auth.json` を原子的に書き換えて安全に切り替え、CLI / IDE を揃えるために Codex をすぐ再起動できます。
@@ -156,13 +156,13 @@ bash Scripts/package-app.sh
 - 週次クォータ推定は派生した Credits 合計と使用率だけを `~/.codex-runway/quota-estimate-history.json` に保存します。トークンや鍵は含みません。
 - オンライン使用量は、ローカルトークンデータがないときだけ API 換算コストを補います。チャートの「公式統計（全デバイス）」は現在アカウントのプロフィール統計で、遅延や改訂があり得ます。「ローカルログ（全セッション）」はこの Mac 上のセッションをスキャンし、履歴は複数アカウントにまたがることがあります。日別データには UTC 日付を使い、両方の出典が同じ日界を共有します。両者は部分集合関係ではなく、引き算してはいけません。
 - セッション修復は `~/.codex/session_index.jsonl` だけを扱い、書き込み前にバックアップを作り、セッションファイルは削除しません。
-- 「Codex リセット更新」は公開ステータスフィードだけをダウンロードします。Codex アカウント、トークン、ローカルセッション内容は送りません。
+- 「Codex リセット更新」は [Did Codex Reset](https://didcodexreset.com) の公開ステータスフィードだけをダウンロードします。Codex アカウント、トークン、ローカルセッション内容は送りません。
 - アップデート確認はバージョン情報だけを要求します。Codex アカウントとセッションデータはアップロードしません。
 - ウィジェットスナップショットには、秘密でない派生クォータ、残高、コスト、日次トークン、リセット状態だけが含まれます。書き込みはメインアプリのみで、ウィジェットは読み取り専用です。
 
 ## データソース
 
-- **Codex リセット更新**: データは [https://www.codexrunway.com/api/status.json](https://www.codexrunway.com/api/status.json) からです。非公式で参考用であり、遅延や一時的な欠落があり得ます。
+- **Codex リセット更新**: データは [Did Codex Reset](https://didcodexreset.com) の [https://didcodexreset.com/api/status.json](https://didcodexreset.com/api/status.json) からです。非公式で参考用であり、遅延や一時的な欠落があり得ます。
 - **クォータ / reset credits / 週次クォータ推定 / 公式トークン使用量 / 一部のオンライン使用量**: サインイン済みなら、ローカル資格情報で公式 ChatGPT / Codex バックエンド API に要求します。公式トークン使用量は現在アカウントに属し、バックエンド統計日を表示します。週次クォータ推定は非公式で、週次使用率と日次 Credits から外挿します（1000 Credits ≈ $40、バージョン `credits-usd-2026-08-26`）。
 - **Grok クォータ**: ローカル OAuth / SuperGrok ログインで公式 CLI chat-proxy の `/v1/billing?format=credits` だけが返します。第二のデータ源はなく、API 請求やローカルセッション統計をこのクォータに混ぜません。
 - **Grok API 換算コスト / ローカルセッション**: ローカル `~/.grok/sessions` の `turn_completed` 使用量を、公式 xAI Text API 価格（input / cached / output、prompt ≥ 200k は長文脈料金、価格版 `xai-builtin-2026-08-13`）で turn ごとに見積もります。未知モデルを正確な費用として作りません。CLI の `costUsdTicks` はサブスクリプションクレジット会計であり、API 換算には使いません。

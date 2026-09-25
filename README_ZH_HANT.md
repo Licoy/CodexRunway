@@ -18,7 +18,7 @@ CodexRunway 是一個原生 macOS 選單列應用程式，幫你在選單列查�
 - Grok 主面板與 Codex 一致：展示 Token 用量多圖表（熱力圖 / 折線 / 長條）與 API 等價成本（本機工作階段日誌），以及最近對話。
 - 管理多個 Grok OAuth / SuperGrok 帳號：隔離登入、匯入目前登入、貼上 Token / JSON、重新整理、別名、排序、刪除和顯式切號。
 - 查看 5 小時、每週和附加額度視窗。
-- 查看今日速率限制是否已重設（資料來自 [www.codexrunway.com](https://www.codexrunway.com)），並可跳轉到相關公開動態。
+- 查看今日速率限制是否已重設（資料來自 [Did Codex Reset](https://didcodexreset.com)），並可跳轉到相關公開動態。
 - 設定中可開關「Codex 重設動態」欄目，並單獨設定其重新整理間隔（預設開啟、每 5 分鐘）。
 - 管理多個 Codex 帳號：瀏覽器登入、匯入本機 `auth.json`、貼上 token / JSON（含 `/auth/session`）、匯入檔案或 API Key。
 - 確認後安全切號，原子寫回 `~/.codex/auth.json`，可選立即重新啟動 Codex，使 CLI / IDE 同步。
@@ -156,13 +156,13 @@ bash Scripts/package-app.sh
 - 訂閱額度推算只把衍生的 Credits 合計與占用率寫入 `~/.codex-runway/quota-estimate-history.json`，不含 token 或金鑰。
 - API 等價成本的線上用量只在本機沒有可用 token 資料時作為補全。Token 圖表的「官方統計（多端）」來自目前帳號的官方資料統計，可能延遲或後續修訂；「本機日誌（全部本機工作階段）」掃描本機現有工作階段，歷史記錄可能跨帳號。每日數據使用 UTC 日期，以便兩邊使用同一日界。兩者口徑不同，不能視為包含關係或直接相減。
 - 工作階段修復只處理 `~/.codex/session_index.jsonl`，寫入前會建立備份，不刪除工作階段檔案。
-- 「Codex 重設動態」只下載公開狀態源，不附帶 Codex 帳號、token 或本機工作階段內容。
+- 「Codex 重設動態」只從 [Did Codex Reset](https://didcodexreset.com) 下載公開狀態源，不附帶 Codex 帳號、token 或本機工作階段內容。
 - 更新檢測只存取版本資訊，不上傳 Codex 帳號或工作階段資料。
 - 桌面小工具快照儲存僅保存額度、餘額、衍生成本、Token 日序列和重設狀態等非金鑰資料；主應用程式是唯一寫入者，小工具唯讀。
 
 ## 資料來源
 
-- **Codex 重設動態**：資料來自 [https://www.codexrunway.com/api/status.json](https://www.codexrunway.com/api/status.json)，非官方且僅供參考，可能延遲或暫時無法使用。
+- **Codex 重設動態**：資料來自 [Did Codex Reset](https://didcodexreset.com) 的 [https://didcodexreset.com/api/status.json](https://didcodexreset.com/api/status.json)，非官方且僅供參考，可能延遲或暫時無法使用。
 - **配額 / reset credits / 訂閱額度推算 / Token 用量官方統計 / 部分線上用量**：在你已登入的前提下，透過本機憑證存取官方 ChatGPT / Codex 後端介面；官方 Token 統計僅對應目前帳號，並顯示伺服端統計截至日期。訂閱額度推算非正式：用週占用率和每日 Credits 外推本週額度（1000 Credits ≈ $40，版本 `credits-usd-2026-08-26`）。
 - **Grok 額度**：僅由官方 CLI chat-proxy 的 `/v1/billing?format=credits` 回傳（使用本機 OAuth / SuperGrok 登入憑證）。應用程式不提供第二資料源，也不會把 API 帳單或本機工作階段統計混入該額度。
 - **Grok API 等價成本 / 本機工作階段**：根據本機 `~/.grok/sessions` 的 `turn_completed` 用量，按官方 xAI Text API 價目（input / cached / output；prompt ≥ 200k 走長上下文價，價格版本 `xai-builtin-2026-08-13`）逐 turn 估算。未知模型不計精確費用。CLI 的 `costUsdTicks` 是訂閱額度口徑，不用作 API 等價。

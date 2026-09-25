@@ -35,7 +35,7 @@ struct RateLimitResetTodayOperatorTests {
                 == "运营确认已重置，Tibo 未发 X。")
         #expect(
             snapshot.evidenceURL(now: now, calendar: resetStatusUTCCalendar)?.absoluteString
-                == "https://www.codexrunway.com/history/1787668200000.html")
+                == "https://didcodexreset.com/history/1787668200000.html")
     }
 
     @Test("infers operator origin from an op_ event id")
