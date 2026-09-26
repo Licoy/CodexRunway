@@ -418,6 +418,35 @@ struct RunwayResetTypeAlertTests {
             calendar: alertCalendar).isEmpty)
     }
 
+    @Test("changing schedule grace duration does not create a notification fact")
+    func graceDurationChangeStaysSilent() throws {
+        let now = try alertDate("2026-08-23T14:00:00Z")
+        let effectiveAt = try alertDate("2026-08-23T10:00:00Z")
+        var previousSchedule = alertEvent(
+            postID: "500",
+            kind: .resetScheduled,
+            resetType: .global,
+            announcedAt: try alertDate("2026-08-23T09:00:00Z"),
+            effectiveAt: effectiveAt)
+        previousSchedule.scheduleGraceHours = 3
+        var currentSchedule = previousSchedule
+        currentSchedule.scheduleGraceHours = 24
+        let previous = alertSnapshot(now: now, events: [previousSchedule])
+        let current = alertSnapshot(
+            now: now,
+            events: [currentSchedule],
+            graceSchedules: [currentSchedule])
+
+        #expect(previous.verdictPresentation(now: now, calendar: alertCalendar).reason != .grace)
+        #expect(current.verdictPresentation(now: now, calendar: alertCalendar).reason == .grace)
+        #expect(!current.verdictPresentation(now: now, calendar: alertCalendar).isCompleted)
+        #expect(RunwayAlertDecider.rateLimitResetTodayAlerts(
+            previous: previous,
+            current: current,
+            now: now,
+            calendar: alertCalendar).isEmpty)
+    }
+
     @Test("alerts encoded before reset types remain decodable")
     func legacyAlertRemainsDecodable() throws {
         let data = Data(#"{"id":"legacy","kind":"rateLimitResetDetected","name":"100","threshold":null,"date":null,"endDate":null}"#.utf8)
@@ -482,6 +511,7 @@ private func alertSnapshot(
     now: Date,
     monitorStatus: RateLimitResetTodayMonitorStatus = .ok,
     events: [RateLimitResetTodayEvent] = [],
+    graceSchedules: [RateLimitResetTodayEvent] = [],
     timeline: RateLimitResetTimeline? = nil) -> RateLimitResetTodaySnapshot
 {
     RateLimitResetTodaySnapshot(
@@ -491,6 +521,7 @@ private func alertSnapshot(
             lastSuccessfulCheckAt: now,
             monitor: RateLimitResetTodayMonitor(status: monitorStatus),
             events: events,
+            graceSchedules: graceSchedules,
             resetTimeline: timeline),
         now: now,
         calendar: alertCalendar)

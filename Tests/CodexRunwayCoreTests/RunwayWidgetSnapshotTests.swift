@@ -21,6 +21,8 @@ struct RunwayWidgetSnapshotTests {
         #expect(!text.contains("refreshToken"))
         #expect(!text.contains("rationale"))
         #expect(!text.contains("text"))
+        #expect(!text.contains("scheduleGraceHours"))
+        #expect(!text.contains("graceSchedules"))
         #expect(text.contains("\"resetType\":\"global_and_banked\""))
         #expect(text.contains("\"nextScheduledResetType\":\"banked\""))
         #expect(text.contains("\"confidencePercent\":92"))
@@ -97,6 +99,64 @@ struct RunwayWidgetSnapshotTests {
         #expect(expired.effectiveAt == scheduledAt.addingTimeInterval(3 * 3_600))
         #expect(expired.confidencePercent == nil)
         #expect(expired.state == .no)
+    }
+
+    @Test("grace-only schedule keeps the widget in grace through its 24-hour deadline")
+    func graceOnlyScheduleUsesItsOwnCrossDayWidgetDeadline() throws {
+        let pendingUntil = try resetStatusDate("2026-07-28T13:00:00Z")
+        let schedule = ResetStatusEventFixture(
+            kind: "reset_scheduled",
+            announcedAt: "2026-07-28T11:00:00Z",
+            effectiveAt: "2026-07-28T13:00:00Z",
+            schedulePrecision: "datetime",
+            scheduleBasis: "explicit",
+            scheduleGraceHoursJSON: "24")
+        let snapshot = try ResetStatusFeedFixture(now: pendingUntil)
+            .withGraceSchedules(schedule.json)
+            .decode()
+
+        let timeline = try #require(snapshot.makeWidgetResetTodaySnapshot(
+            now: pendingUntil,
+            calendar: resetStatusUTCCalendar).timeline)
+        let deadline = pendingUntil.addingTimeInterval(24 * 3_600)
+
+        #expect(timeline.first?.reason == .grace)
+        #expect(timeline.first(where: { $0.effectiveAt == deadline })?.state == .no)
+        #expect(!timeline.contains { $0.state == .no && $0.effectiveAt < deadline })
+    }
+
+    @Test("zero and fractional grace durations produce exact widget boundaries")
+    func widgetUsesZeroAndFractionalGraceBoundaries() throws {
+        let pendingUntil = try resetStatusDate("2026-07-28T13:00:00Z")
+        let disabled = try ResetStatusFeedFixture(
+            event: ResetStatusEventFixture(
+                kind: "reset_scheduled",
+                announcedAt: "2026-07-28T11:00:00Z",
+                effectiveAt: "2026-07-28T13:00:00Z",
+                schedulePrecision: "datetime",
+                scheduleGraceHoursJSON: "0"),
+            now: pendingUntil)
+            .decode()
+        let fractional = try ResetStatusFeedFixture(
+            event: ResetStatusEventFixture(
+                kind: "reset_scheduled",
+                announcedAt: "2026-07-28T11:00:00Z",
+                effectiveAt: "2026-07-28T13:00:00Z",
+                schedulePrecision: "datetime",
+                scheduleGraceHoursJSON: "1.5"),
+            now: pendingUntil)
+            .decode()
+        let fractionalTimeline = try #require(fractional.makeWidgetResetTodaySnapshot(
+            now: pendingUntil,
+            calendar: resetStatusUTCCalendar).timeline)
+
+        #expect(disabled.makeWidgetResetTodaySnapshot(
+            now: pendingUntil,
+            calendar: resetStatusUTCCalendar).timeline?.first?.state == .no)
+        #expect(fractionalTimeline.first?.reason == .grace)
+        #expect(fractionalTimeline.first(where: {
+            $0.effectiveAt == pendingUntil.addingTimeInterval(1.5 * 3_600)
+        })?.state == .no)
     }
 
     @Test("widget snapshot stays stable within the same verdict phase")

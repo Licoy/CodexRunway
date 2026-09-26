@@ -50,8 +50,28 @@ extension RateLimitResetTodaySnapshot {
         guard response.events.count <= 50 else {
             throw invalidPayload("The reset-status feed contains too many events.")
         }
+        var eventsByID = [String: RateLimitResetTodayEvent]()
         for event in response.events {
             try validate(event)
+            guard eventsByID.updateValue(event, forKey: event.source.postID) == nil else {
+                throw invalidPayload("Events must have unique post IDs.")
+            }
+        }
+        var graceIDs = Set<String>()
+        for event in response.graceSchedules {
+            try validate(event)
+            guard event.kind == .resetScheduled else {
+                throw invalidPayload("Grace schedules must contain scheduled resets.")
+            }
+            guard event.scheduleGraceHours != nil else {
+                throw invalidPayload("Grace schedules must include scheduleGraceHours.")
+            }
+            guard graceIDs.insert(event.source.postID).inserted else {
+                throw invalidPayload("Grace schedules must have unique post IDs.")
+            }
+            if let duplicate = eventsByID[event.source.postID], duplicate != event {
+                throw invalidPayload("Events and grace schedules must agree for duplicate post IDs.")
+            }
         }
         if let timeline = response.resetTimeline {
             try validate(timeline)
@@ -170,9 +190,19 @@ extension RateLimitResetTodaySnapshot {
         guard event.acceptedRationales.contains(event.rationale) else {
             throw invalidPayload("Event rationale must be the derived explanation for its kind.")
         }
+        if let hours = event.scheduleGraceHours {
+            guard hours.isFinite, hours >= 0,
+                  event.graceDeadline(after: event.effectiveAt ?? event.announcedAt) != nil
+            else {
+                throw invalidPayload("Schedule grace hours must be finite, non-negative, and calculable.")
+            }
+        }
         switch event.kind {
         case .resetCompleted:
-            guard event.schedulePrecision == nil, event.scheduleBasis == nil else {
+            guard event.schedulePrecision == nil,
+                  event.scheduleBasis == nil,
+                  event.scheduleGraceHours == nil
+            else {
                 throw invalidPayload("Schedule metadata is only allowed for scheduled events.")
             }
         case .resetScheduled:
@@ -186,7 +216,10 @@ extension RateLimitResetTodaySnapshot {
             guard event.effectiveAt == nil else {
                 throw invalidPayload("This event kind cannot include an effective time.")
             }
-            guard event.schedulePrecision == nil, event.scheduleBasis == nil else {
+            guard event.schedulePrecision == nil,
+                  event.scheduleBasis == nil,
+                  event.scheduleGraceHours == nil
+            else {
                 throw invalidPayload("Schedule metadata is only allowed for scheduled events.")
             }
         case .limitIncrease, .uncertain:
@@ -196,7 +229,10 @@ extension RateLimitResetTodaySnapshot {
             guard event.effectiveAt == nil else {
                 throw invalidPayload("This event kind cannot include an effective time.")
             }
-            guard event.schedulePrecision == nil, event.scheduleBasis == nil else {
+            guard event.schedulePrecision == nil,
+                  event.scheduleBasis == nil,
+                  event.scheduleGraceHours == nil
+            else {
                 throw invalidPayload("Schedule metadata is only allowed for scheduled events.")
             }
         }
@@ -332,7 +368,18 @@ struct RateLimitResetTodayResponse: Decodable {
     var lastSuccessfulCheckAt: Date?
     var monitor: RateLimitResetTodayMonitor
     var events: [RateLimitResetTodayEvent]
+    var graceSchedules: [RateLimitResetTodayEvent]
     var resetTimeline: RateLimitResetTimeline?
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case generatedAt
+        case lastSuccessfulCheckAt
+        case monitor
+        case events
+        case graceSchedules
+        case resetTimeline
+    }
 
     init(
         schemaVersion: Int,
@@ -340,6 +387,7 @@ struct RateLimitResetTodayResponse: Decodable {
         lastSuccessfulCheckAt: Date?,
         monitor: RateLimitResetTodayMonitor,
         events: [RateLimitResetTodayEvent],
+        graceSchedules: [RateLimitResetTodayEvent] = [],
         resetTimeline: RateLimitResetTimeline? = nil)
     {
         self.schemaVersion = schemaVersion
@@ -347,6 +395,20 @@ struct RateLimitResetTodayResponse: Decodable {
         self.lastSuccessfulCheckAt = lastSuccessfulCheckAt
         self.monitor = monitor
         self.events = events
+        self.graceSchedules = graceSchedules
         self.resetTimeline = resetTimeline
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        generatedAt = try container.decode(Date.self, forKey: .generatedAt)
+        lastSuccessfulCheckAt = try container.decodeIfPresent(Date.self, forKey: .lastSuccessfulCheckAt)
+        monitor = try container.decode(RateLimitResetTodayMonitor.self, forKey: .monitor)
+        events = try container.decode([RateLimitResetTodayEvent].self, forKey: .events)
+        graceSchedules = container.contains(.graceSchedules)
+            ? try container.decode([RateLimitResetTodayEvent].self, forKey: .graceSchedules)
+            : []
+        resetTimeline = try container.decodeIfPresent(RateLimitResetTimeline.self, forKey: .resetTimeline)
     }
 }

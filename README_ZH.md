@@ -165,6 +165,7 @@ bash Scripts/package-app.sh
 ## 数据来源
 
 - **Codex 重置动态**：数据来源于 [Did Codex Reset](https://didcodexreset.com) 的 [https://didcodexreset.com/api/status.json](https://didcodexreset.com/api/status.json)，非官方且仅供参考，可能延迟或暂时不可用。
+- 排期进入等待确认阶段后，应用采用公开接口为该排期提供的缓和时长；旧接口未提供时按 3 小时处理；24 或 72 小时等较长时长可以跨本地日期，期间仍表示“等待确认”，不表示重置已经完成，到真实期限才退出；网络刷新失败时保留最近一次有效状态，并在重置详情中显示错误；公开状态超过 30 小时未更新后仍按不可用处理。
 - **配额 / reset credits / 订阅额度推算 / Token 用量官方统计 / 部分在线用量**：在你已登录的前提下，通过本机凭据访问官方 ChatGPT / Codex 后端接口；官方 Token 统计仅对应当前账号，并显示服务端统计截至日期。订阅额度推算非正式：用周占用率和每日 Credits 外推本周额度（1000 Credits ≈ $40，版本 `credits-usd-2026-08-26`）。
 - **Grok 额度**：仅由官方 CLI chat-proxy 的 `/v1/billing?format=credits` 返回（使用本机 OAuth / SuperGrok 登录凭据）。应用不提供第二数据源，也不会把 API 账单或本机会话统计混入该额度。
 - **Grok API 等价成本 / 本机会话**：根据本机 `~/.grok/sessions` 的 `turn_completed` 用量，按官方 xAI Text API 价目（input / cached / output；prompt ≥ 200k 走长上下文价，价格版本 `xai-builtin-2026-08-13`）逐 turn 估算。未知模型不计精确费用。CLI 的 `costUsdTicks` 是订阅额度口径，不用作 API 等价。

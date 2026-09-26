@@ -61,16 +61,15 @@ extension RateLimitResetTodaySnapshot {
         now: Date = Date(),
         calendar: Calendar = RateLimitResetTodaySnapshot.localDayCalendar) -> [Date]
     {
-        var scheduledEvents = events
-        if let nextSchedule = resetTimeline?.nextSchedule,
-           !scheduledEvents.contains(where: { $0.source.postID == nextSchedule.source.postID })
-        {
-            scheduledEvents.append(nextSchedule)
+        let scheduledEvents = mergedScheduleCandidates
+        let schedules = scheduledEvents.compactMap { event in
+            scheduledResetWindow(for: event).map { (event, $0) }
         }
-        let windows = scheduledEvents.compactMap { scheduledResetWindow(for: $0) }
-        var dates = windows.map(\.startAt)
-        dates += windows.map(\.pendingUntil)
-        dates += windows.map { $0.pendingUntil.addingTimeInterval(Self.scheduleGrace) }
+        var dates = schedules.map { $0.1.startAt }
+        dates += schedules.map { $0.1.pendingUntil }
+        dates += schedules.compactMap { event, window in
+            event.graceDeadline(after: window.pendingUntil)
+        }
         dates += events.compactMap { event in
             event.kind == .resetCompleted ? (event.effectiveAt ?? event.announcedAt) : nil
         }
@@ -227,7 +226,7 @@ extension RateLimitResetTodaySnapshot {
                 confidence: grace.event.confidence,
                 completedAt: nil)
         }
-        if let expired = events.first(where: {
+        if let expired = mergedScheduleCandidates.first(where: {
             $0.kind == .resetScheduled
                 && $0.resetType.includes(type)
                 && scheduledResetWindow(for: $0).map {
@@ -308,7 +307,7 @@ extension RateLimitResetTodaySnapshot {
             }
         }
         let suppressed = Set(resetTimeline?.suppressedPostIds ?? [])
-        return events.compactMap { event -> (RateLimitResetTodayEvent, RateLimitResetScheduleWindow)? in
+        return mergedScheduleCandidates.compactMap { event -> (RateLimitResetTodayEvent, RateLimitResetScheduleWindow)? in
             guard event.kind == .resetScheduled,
                   event.resetType.includes(type),
                   !suppressed.contains(event.source.postID),
@@ -324,15 +323,17 @@ extension RateLimitResetTodaySnapshot {
     {
         let suppressed = Set(resetTimeline?.suppressedPostIds ?? [])
         let fulfilled = fulfilledSchedulePostIDs
-        return events.compactMap { event -> (RateLimitResetTodayEvent, RateLimitResetScheduleWindow)? in
+        return mergedScheduleCandidates.compactMap { event -> (RateLimitResetTodayEvent, RateLimitResetScheduleWindow)? in
             guard event.kind == .resetScheduled,
                   event.resetType.includes(type),
                   !suppressed.contains(event.source.postID),
                   !fulfilled.contains(event.source.postID),
                   let window = scheduledResetWindow(for: event),
                   window.pendingUntil <= now,
-                  now < window.pendingUntil.addingTimeInterval(Self.scheduleGrace),
-                  !hasCompletion(for: type, since: window.pendingUntil, through: now)
+                  let deadline = event.graceDeadline(after: window.pendingUntil),
+                  window.pendingUntil < deadline,
+                  now < deadline,
+                  !hasCompletion(for: event, window: window, through: now)
             else { return nil }
             return (event, window)
         }.max {
@@ -350,23 +351,6 @@ extension RateLimitResetTodaySnapshot {
             ids.formUnion(manual.schedules.map { $0.source.postID })
         }
         return ids
-    }
-
-    private func hasCompletion(for type: RateLimitResetType, since: Date, through now: Date) -> Bool {
-        let suppressed = Set(resetTimeline?.suppressedPostIds ?? [])
-        if events.contains(where: {
-            guard $0.kind == .resetCompleted,
-                  $0.resetType.includes(type),
-                  !suppressed.contains($0.source.postID)
-            else { return false }
-            let at = $0.effectiveAt ?? $0.announcedAt
-            return since <= at && at <= now
-        }) {
-            return true
-        }
-        return (resetTimeline?.manualCompletions ?? []).contains {
-            $0.resetType.includes(type) && since <= $0.completedAt && $0.completedAt <= now
-        }
     }
 
     private func isWindow(

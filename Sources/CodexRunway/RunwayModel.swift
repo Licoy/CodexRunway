@@ -242,6 +242,7 @@ final class RunwayModel: ObservableObject {
     private var latestResetCredits: ResetCreditsSnapshot?
     private var latestQuotaEstimateDaily: ApiEquivalentSummary?
     private var lastRateLimitResetTodayFetch: Date?
+    private var rateLimitResetTodayRefreshError: String?
     private var reactionPollTask: Task<Void, Never>?
     private var reactionPollingDesired = false
     private var reactionWriteGeneration = 0
@@ -971,6 +972,10 @@ final class RunwayModel: ObservableObject {
         if let latestResetCredits { applyResetCredits(latestResetCredits) } else { resetCreditsText = l10n.text(.notLoaded) }
         if let rateLimitResetToday {
             applyRateLimitResetToday(rateLimitResetToday)
+        } else if let rateLimitResetTodayRefreshError {
+            rateLimitResetTodayText = l10n.text(.rateLimitResetUnavailable)
+            rateLimitResetTodayLines = makeRateLimitResetTodayUnavailableLines(
+                error: rateLimitResetTodayRefreshError)
         } else if settings.preferences.showsRateLimitResetToday {
             rateLimitResetTodayText = l10n.text(.notLoaded)
             rateLimitResetTodayLines = []
@@ -1553,19 +1558,18 @@ final class RunwayModel: ObservableObject {
         await withRefresh([.rateLimitResetToday]) {
             do {
                 let snapshot = try await services.fetchRateLimitResetToday()
+                rateLimitResetTodayRefreshError = nil
                 applyRateLimitResetToday(snapshot)
                 lastRateLimitResetTodayFetch = Date()
             } catch {
                 lastRateLimitResetTodayFetch = Date()
-                // Keep the last good snapshot; only mark error text when nothing is loaded yet.
-                if rateLimitResetToday == nil {
+                rateLimitResetTodayRefreshError = error.localizedDescription
+                if let snapshot = rateLimitResetToday {
+                    applyRateLimitResetToday(snapshot)
+                } else {
                     rateLimitResetTodayText = l10n.text(.rateLimitResetUnavailable)
-                    rateLimitResetTodayLines = [
-                        DetailLine(
-                            title: l10n.text(.rateLimitResetQuestionUnavailable),
-                            value: l10n.text(.rateLimitResetUnavailable)),
-                        DetailLine(title: l10n.text(.error), value: error.localizedDescription),
-                    ]
+                    rateLimitResetTodayLines = makeRateLimitResetTodayUnavailableLines(
+                        error: error.localizedDescription)
                 }
             }
         }
@@ -1786,7 +1790,19 @@ final class RunwayModel: ObservableObject {
                     since: snapshot.fetchedAt,
                     now: now,
                     language: l10n.language)))
+        if let rateLimitResetTodayRefreshError {
+            lines.append(DetailLine(title: l10n.text(.error), value: rateLimitResetTodayRefreshError))
+        }
         return lines
+    }
+
+    private func makeRateLimitResetTodayUnavailableLines(error: String) -> [DetailLine] {
+        [
+            DetailLine(
+                title: l10n.text(.rateLimitResetQuestionUnavailable),
+                value: l10n.text(.rateLimitResetUnavailable)),
+            DetailLine(title: l10n.text(.error), value: error),
+        ]
     }
 
     private func rateLimitResetTodaySummaryText(

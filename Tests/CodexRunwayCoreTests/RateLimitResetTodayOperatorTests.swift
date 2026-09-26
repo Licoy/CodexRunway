@@ -219,10 +219,9 @@ struct RateLimitResetTodayOperatorTests {
         let presentation = snapshot.verdictPresentation(
             now: now,
             calendar: resetStatusUTCCalendar)
-        // The producer cleared nextSchedule, while this LA date window has not
-        // reached pendingUntil yet; pinned classification therefore falls back
-        // to none rather than fabricating an expired lifecycle.
-        #expect(presentation.reason == .none)
+        // Explicit date precision uses the full Tibo calendar day, so this
+        // non-midnight input expired at the following local midnight.
+        #expect(presentation.reason == .expiredUnconfirmed)
         #expect(presentation.evidenceEvent == nil)
         #expect(presentation.confidence == nil)
         #expect(presentation.scheduleWindow == nil)

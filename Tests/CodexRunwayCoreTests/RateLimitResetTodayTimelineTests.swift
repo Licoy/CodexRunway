@@ -134,8 +134,8 @@ struct RateLimitResetTodayTimelineTests {
         #expect(snapshot.nextScheduledReset(now: midnight) == nil)
     }
 
-    @Test("date precision expands even when the clock is not midnight")
-    func datePrecisionExpandsWithoutMidnightHeuristic() throws {
+    @Test("date precision normalizes a non-midnight input to the Tibo calendar day")
+    func datePrecisionNormalizesToTiboDay() throws {
         let now = try resetStatusDate("2026-08-10T12:00:00Z")
         let scheduled = ResetStatusEventFixture(
             kind: "reset_scheduled",
@@ -152,11 +152,13 @@ struct RateLimitResetTodayTimelineTests {
             .decode()
 
         let next = try #require(snapshot.nextScheduledReset(now: now))
-        let expectedStart = try resetStatusDate("2026-08-10T15:00:00Z")
-        let expectedEnd = try resetStatusDate("2026-08-11T14:59:00Z")
+        let expectedStart = try resetStatusDate("2026-08-10T07:00:00Z")
+        let expectedEnd = try resetStatusDate("2026-08-11T06:59:00Z")
+        let pendingUntil = try resetStatusDate("2026-08-11T07:00:00Z")
         #expect(next.isRange)
         #expect(next.effectiveAt == expectedStart)
         #expect(next.effectiveUntil == expectedEnd)
+        #expect(snapshot.scheduledResetWindow(for: next.event)?.pendingUntil == pendingUntil)
     }
 
     @Test("date-only window stays pending until the next Tibo midnight")

@@ -139,6 +139,7 @@ public struct RateLimitResetTodayEvent: Decodable, Sendable, Equatable {
     public var effectiveAt: Date? = nil
     public var schedulePrecision: RateLimitResetSchedulePrecision? = nil
     public var scheduleBasis: RateLimitResetScheduleBasis? = nil
+    public var scheduleGraceHours: Double? = nil
     public var scope: RateLimitResetTodayScope
     public var source: RateLimitResetTodaySource
     public var confidence: Double
@@ -153,6 +154,7 @@ public struct RateLimitResetTodayEvent: Decodable, Sendable, Equatable {
         effectiveAt: Date? = nil,
         schedulePrecision: RateLimitResetSchedulePrecision? = nil,
         scheduleBasis: RateLimitResetScheduleBasis? = nil,
+        scheduleGraceHours: Double? = nil,
         scope: RateLimitResetTodayScope,
         source: RateLimitResetTodaySource,
         confidence: Double,
@@ -165,6 +167,7 @@ public struct RateLimitResetTodayEvent: Decodable, Sendable, Equatable {
         self.effectiveAt = effectiveAt
         self.schedulePrecision = schedulePrecision
         self.scheduleBasis = scheduleBasis
+        self.scheduleGraceHours = scheduleGraceHours
         self.scope = scope
         self.source = source
         self.confidence = confidence
@@ -179,6 +182,7 @@ public struct RateLimitResetTodayEvent: Decodable, Sendable, Equatable {
         case effectiveAt
         case schedulePrecision
         case scheduleBasis
+        case scheduleGraceHours
         case scope
         case source
         case confidence
@@ -202,11 +206,28 @@ public struct RateLimitResetTodayEvent: Decodable, Sendable, Equatable {
         scheduleBasis = try container.decodeIfPresent(
             RateLimitResetScheduleBasis.self,
             forKey: .scheduleBasis)
+        scheduleGraceHours = container.contains(.scheduleGraceHours)
+            ? try container.decode(Double.self, forKey: .scheduleGraceHours)
+            : nil
         scope = try container.decode(RateLimitResetTodayScope.self, forKey: .scope)
         source = try container.decode(RateLimitResetTodaySource.self, forKey: .source)
         confidence = try container.decode(Double.self, forKey: .confidence)
         rationale = try container.decode(String.self, forKey: .rationale)
         text = try container.decode(String.self, forKey: .text)
+    }
+}
+
+extension RateLimitResetTodayEvent {
+    var effectiveScheduleGraceInterval: TimeInterval {
+        scheduleGraceHours.map { $0 * 3_600 } ?? RateLimitResetTodaySnapshot.scheduleGrace
+    }
+
+    func graceDeadline(after pendingUntil: Date) -> Date? {
+        let interval = effectiveScheduleGraceInterval
+        guard interval.isFinite else { return nil }
+        let timestamp = pendingUntil.timeIntervalSinceReferenceDate + interval
+        guard timestamp.isFinite else { return nil }
+        return Date(timeIntervalSinceReferenceDate: timestamp)
     }
 }
 
@@ -421,6 +442,7 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
     public var lastSuccessfulCheckAt: Date?
     public var monitor: RateLimitResetTodayMonitor
     public var events: [RateLimitResetTodayEvent]
+    public var graceSchedules: [RateLimitResetTodayEvent]
     public var resetTimeline: RateLimitResetTimeline?
     public private(set) var state: RateLimitResetTodayState
     public var fetchedAt: Date
@@ -444,6 +466,7 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
             status: state == .unknown ? .degraded : .ok,
             errorCode: state == .unknown ? "mock_unavailable" : nil)
         self.events = []
+        self.graceSchedules = []
         self.resetTimeline = nil
         self.state = state
         self.fetchedAt = fetchedAt
@@ -460,6 +483,7 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         self.lastSuccessfulCheckAt = response.lastSuccessfulCheckAt
         self.monitor = response.monitor
         self.events = response.events
+        self.graceSchedules = response.graceSchedules
         self.resetTimeline = response.resetTimeline
         self.state = .unknown
         self.fetchedAt = now
@@ -758,9 +782,11 @@ public struct RateLimitResetTodaySnapshot: Sendable, Equatable {
         guard isRange else {
             return RateLimitResetScheduleWindow(startAt: startAt, endAt: startAt, isRange: false)
         }
-        let endAt = sourceCalendar.date(byAdding: .day, value: 1, to: startAt)!
-            .addingTimeInterval(-60)
-        return RateLimitResetScheduleWindow(startAt: startAt, endAt: endAt, isRange: true)
+        let interval = sourceCalendar.dateInterval(of: .day, for: startAt)!
+        return RateLimitResetScheduleWindow(
+            startAt: interval.start,
+            endAt: interval.end.addingTimeInterval(-60),
+            isRange: true)
     }
 
     public func visibleManualCompletions(now: Date = Date()) -> [RateLimitResetManualCompletion] {

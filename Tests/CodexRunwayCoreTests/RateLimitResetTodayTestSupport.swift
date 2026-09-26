@@ -8,6 +8,7 @@ struct ResetStatusEventFixture {
     var effectiveAt: String? = nil
     var schedulePrecision: String? = nil
     var scheduleBasis: String? = nil
+    var scheduleGraceHoursJSON: String? = nil
     var postID: String = "123"
     var origin: String? = nil
     var omitOrigin = false
@@ -25,6 +26,9 @@ struct ResetStatusEventFixture {
         }
         if let scheduleBasis {
             extra += ",\n          \"scheduleBasis\": \"\(scheduleBasis)\""
+        }
+        if let scheduleGraceHoursJSON {
+            extra += ",\n          \"scheduleGraceHours\": \(scheduleGraceHoursJSON)"
         }
         var sourceFields = ""
         if let origin, !omitOrigin {
@@ -115,6 +119,7 @@ struct ResetStatusEventFixture {
 
 struct ResetStatusFeedFixture {
     var eventsJSON: String
+    var graceSchedulesJSON: String?
     var resetTimelineJSON: String?
     var generatedAt = "2026-07-28T12:00:00Z"
     var lastSuccessfulCheckAt: String? = "2026-07-28T12:00:00Z"
@@ -125,12 +130,14 @@ struct ResetStatusFeedFixture {
 
     init(event: ResetStatusEventFixture, now: Date) {
         self.eventsJSON = event.json
+        self.graceSchedulesJSON = nil
         self.resetTimelineJSON = nil
         self.now = now
     }
 
     init(eventsJSON: String = "", now: Date) {
         self.eventsJSON = eventsJSON
+        self.graceSchedulesJSON = nil
         self.resetTimelineJSON = nil
         self.now = now
     }
@@ -166,17 +173,24 @@ struct ResetStatusFeedFixture {
         return copy
     }
 
+    func withGraceSchedules(_ json: String) -> ResetStatusFeedFixture {
+        var copy = self
+        copy.graceSchedulesJSON = json
+        return copy
+    }
+
     func decode() throws -> RateLimitResetTodaySnapshot {
         let lastSuccessValue = lastSuccessfulCheckAt.map { "\"\($0)\"" } ?? "null"
         let errorValue = errorCode.map { "\"\($0)\"" } ?? "null"
         let timelineField = resetTimelineJSON.map { ",\n          \"resetTimeline\": \($0)" } ?? ""
+        let graceField = graceSchedulesJSON.map { ",\n          \"graceSchedules\": [\($0)]" } ?? ""
         let data = """
         {
           "schemaVersion": 1,
           "generatedAt": "\(generatedAt)",
           "lastSuccessfulCheckAt": \(lastSuccessValue),
           "monitor": {"status": "\(monitorStatus)", "errorCode": \(errorValue)},
-          "events": [\(eventsJSON)]\(timelineField)
+          "events": [\(eventsJSON)]\(graceField)\(timelineField)
         }
         """.data(using: .utf8)!
         return try RateLimitResetTodaySnapshot.decode(
