@@ -346,7 +346,7 @@ extension ApiEquivalentTotals {
 
 public enum PricingTable {
     /// Bundled fallback verified against the official OpenAI pricing documentation.
-    public static let version = "openai-builtin-2026-09-11"
+    public static let version = "openai-builtin-2026-09-26"
 
     public struct Price: Codable, Equatable, Sendable {
         var inputPerMillion: Decimal
@@ -389,6 +389,24 @@ public enum PricingTable {
             longContextCachedInputPerMillion: 2,
             longContextCacheWritePerMillion: 25,
             longContextOutputPerMillion: 75),
+        "gpt-6-sol": Price(
+            inputPerMillion: 2,
+            cachedInputPerMillion: 0.2,
+            cacheWritePerMillion: 2.5,
+            outputPerMillion: 10,
+            longContextInputPerMillion: 4,
+            longContextCachedInputPerMillion: 0.4,
+            longContextCacheWritePerMillion: 5,
+            longContextOutputPerMillion: 15),
+        "gpt-6-luna": Price(
+            inputPerMillion: 0.1,
+            cachedInputPerMillion: 0.01,
+            cacheWritePerMillion: 0.125,
+            outputPerMillion: 0.5,
+            longContextInputPerMillion: 0.2,
+            longContextCachedInputPerMillion: 0.02,
+            longContextCacheWritePerMillion: 0.25,
+            longContextOutputPerMillion: 0.75),
         "gpt-5.6": Price(
             inputPerMillion: 5,
             cachedInputPerMillion: 0.5,
