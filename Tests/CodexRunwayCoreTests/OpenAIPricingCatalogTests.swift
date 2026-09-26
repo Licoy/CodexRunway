@@ -8,6 +8,8 @@ struct OpenAIPricingCatalogTests {
     func parsesStandardPricingTable() throws {
         let prices = try OpenAIPricingMarkdownParser.parseStandardPrices(Self.markdown)
         let astra = try #require(prices["gpt-6-astra"])
+        let sol6 = try #require(prices["gpt-6-sol"])
+        let luna6 = try #require(prices["gpt-6-luna"])
         let sol = try #require(prices["gpt-5.6-sol"])
         let terra = try #require(prices["gpt-5.6-terra"])
 
@@ -19,6 +21,8 @@ struct OpenAIPricingCatalogTests {
         #expect(astra.longContextCachedInputPerMillion == 2)
         #expect(astra.longContextCacheWritePerMillion == 25)
         #expect(astra.longContextOutputPerMillion == 75)
+        #expect(PricingTable.price(for: "gpt-6-sol") == sol6)
+        #expect(PricingTable.price(for: "gpt-6-luna") == luna6)
         #expect(sol.inputPerMillion == 5)
         #expect(sol.cachedInputPerMillion == 0.5)
         #expect(sol.cacheWritePerMillion == 6.25)
@@ -29,8 +33,10 @@ struct OpenAIPricingCatalogTests {
         #expect(prices["unrelated-provider"] == nil)
     }
 
-    @Test("uses a downloaded catalog and writes a last-known-good cache")
-    func downloadsAndCachesCatalog() async throws {
+    @Test("uses a downloaded catalog and writes a last-known-good cache", arguments: [
+        ("gpt-6-astra", "10.00"), ("gpt-6-sol", "2.00"), ("gpt-6-luna", "0.10"),
+    ])
+    func downloadsAndCachesCatalog(model: String, bundledInput: String) async throws {
         let directory = try PricingTestDirectory()
         let cacheURL = directory.url.appendingPathComponent("pricing.json")
         let now = Date(timeIntervalSince1970: 1_786_579_200)
@@ -41,8 +47,8 @@ struct OpenAIPricingCatalogTests {
                 OpenAIPricingHTTPResponse(
                     statusCode: 200,
                     data: Data(Self.markdown.replacingOccurrences(
-                        of: "| gpt-6-astra | $10.00 |",
-                        with: "| gpt-6-astra | $12.00 |").utf8),
+                        of: "| \(model) | $\(bundledInput) |",
+                        with: "| \(model) | $12.00 |").utf8),
                     eTag: #""official-etag""#,
                     lastModified: "Thu, 13 Aug 2026 04:57:43 GMT")
             })
@@ -58,18 +64,18 @@ struct OpenAIPricingCatalogTests {
 
         #expect(priceBook.version.hasPrefix("openai-docs-"))
         #expect(priceBook.cost(model: "gpt-5.6-terra", totals: oneMillionInput) == 2)
-        #expect(priceBook.cost(model: "gpt-6-astra", totals: oneMillionInput) == 12)
+        #expect(priceBook.cost(model: model, totals: oneMillionInput) == 12)
         #expect(FileManager.default.fileExists(atPath: cacheURL.path))
     }
 
-    @Test("bundled Astra pricing works offline with no cache or a pre-Astra cache", arguments: [false, true])
-    func bundledAstraOfflineFallback(useOlderCache: Bool) async throws {
+    @Test("bundled GPT-6 pricing works offline with no cache or an older cache", arguments: [false, true])
+    func bundledGPT6OfflineFallback(useOlderCache: Bool) async throws {
         let directory = try PricingTestDirectory()
         let cacheURL = directory.url.appendingPathComponent("pricing.json")
         let fetchedAt = Date(timeIntervalSince1970: 1_786_579_200)
         if useOlderCache {
             let olderMarkdown = Self.markdown.split(separator: "\n")
-                .filter { !$0.contains("| gpt-6-astra |") }
+                .filter { !$0.contains("| gpt-6-") }
                 .joined(separator: "\n")
             let initial = OpenAIPricingCatalogProvider(
                 cacheURL: cacheURL,
@@ -97,6 +103,8 @@ struct OpenAIPricingCatalogTests {
             threads: 1)
 
         #expect(priceBook.cost(model: "gpt-6-astra", totals: totals) == Decimal(string: "0.132"))
+        #expect(priceBook.cost(model: "gpt-6-sol", totals: totals) == Decimal(string: "0.0264"))
+        #expect(priceBook.cost(model: "gpt-6-luna", totals: totals) == Decimal(string: "0.00132"))
     }
 
     @Test("falls back to the cached catalog when refresh fails")
@@ -130,6 +138,8 @@ struct OpenAIPricingCatalogTests {
     func exactModelLookup() {
         #expect(PricingTable.price(for: "gpt-6") == nil)
         #expect(PricingTable.price(for: "gpt-6-astra-mini") == nil)
+        #expect(PricingTable.price(for: "gpt-6-solstice") == nil)
+        #expect(PricingTable.price(for: "gpt-6-luna-mini") == nil)
         #expect(PricingTable.price(for: "gpt-5.6-sol")?.inputPerMillion == 5)
         #expect(PricingTable.price(for: "gpt-5.6-sol-2026-08-13")?.inputPerMillion == 5)
         #expect(PricingTable.price(for: "gpt-5.6-solstice") == nil)
@@ -147,6 +157,8 @@ struct OpenAIPricingCatalogTests {
     | Model | Short context input | Short context cached input | Short context cache writes | Short context output | Long context input | Long context cached input | Long context cache writes | Long context output |
     | --- | --- | --- | --- | --- | --- | --- | --- | --- |
     | gpt-6-astra | $10.00 | $1.00 | $12.50 | $50.00 | $20.00 | $2.00 | $25.00 | $75.00 |
+    | gpt-6-sol | $2.00 | $0.20 | $2.50 | $10.00 | $4.00 | $0.40 | $5.00 | $15.00 |
+    | gpt-6-luna | $0.10 | $0.01 | $0.125 | $0.50 | $0.20 | $0.02 | $0.25 | $0.75 |
     | gpt-5.6-sol | $5.00 | $0.50 | $6.25 | $30.00 | $10.00 | $1.00 | $12.50 | $45.00 |
     | gpt-5.6-terra | $2.00 | $0.20 | $2.50 | $12.00 | $4.00 | $0.40 | $5.00 | $18.00 |
     | unrelated-provider | $1.00 | $0.10 | - | $2.00 | - | - | - | - |

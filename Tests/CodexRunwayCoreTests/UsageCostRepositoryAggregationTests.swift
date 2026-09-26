@@ -4,16 +4,18 @@ import Testing
 
 @Suite("Usage cost repository — aggregation")
 struct UsageCostRepositoryAggregationTests {
-    @Test("Astra usage is priced in the repository, streaming scanner, and recent sessions", arguments: [
-        "gpt-6-astra", "gpt-6-astra-2026-09-10", " GPT-6-ASTRA ",
+    @Test("GPT-6 usage is priced in the repository, streaming scanner, and recent sessions", arguments: [
+        ("gpt-6-astra", "0.132"), ("gpt-6-astra-2026-09-10", "0.132"), (" GPT-6-ASTRA ", "0.132"),
+        ("gpt-6-sol", "0.0264"), ("gpt-6-sol-2026-09-26", "0.0264"), (" GPT-6-SOL ", "0.0264"),
+        ("gpt-6-luna", "0.00132"), ("gpt-6-luna-2026-09-26", "0.00132"), (" GPT-6-LUNA ", "0.00132"),
     ])
-    func astraPricingAcrossLocalScanners(model: String) async throws {
+    func gpt6PricingAcrossLocalScanners(model: String, expectedUSD: String) async throws {
         let fixture = try RepositoryFixture()
         let contents = """
-        {"timestamp":"2026-06-29T00:00:00Z","type":"session_meta","payload":{"id":"astra-session","cwd":"/tmp/astra-project"}}
+        {"timestamp":"2026-06-29T00:00:00Z","type":"session_meta","payload":{"id":"gpt6-session","cwd":"/tmp/gpt6-project"}}
         \(tokenLine(timestamp: "2026-06-29T01:00:00Z", input: 10_000, cached: 2_000, output: 1_000, model: model))
         """
-        try fixture.write(contents, basename: "rollout-astra.jsonl")
+        try fixture.write(contents, basename: "rollout-gpt6.jsonl")
         let request = fullWindowQuery()
         let indexed = try #require(try await fixture.repository().summaries(
             for: [request], calculatedAt: fixedNow, policy: .ifChanged)[request.id])
@@ -21,7 +23,7 @@ struct UsageCostRepositoryAggregationTests {
             window: request.window, calculatedAt: fixedNow)
         let activity = try SessionActivityScanner(codexHome: fixture.codexHome).scan(limit: 1)
         let recent = try #require(activity.items.first)
-        let expectedCost = Decimal(string: "0.132")!
+        let expectedCost = try #require(Decimal(string: expectedUSD))
 
         for summary in [indexed, streamed] {
             #expect(summary.estimatedUSD == expectedCost)
