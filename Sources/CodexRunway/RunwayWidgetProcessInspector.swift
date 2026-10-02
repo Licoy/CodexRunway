@@ -245,9 +245,13 @@ enum RunwayWidgetProcessInspector {
         let pathMatches = isExpectedWidgetExecutablePath(
             executablePath,
             target: target)
-        guard arguments.count == 3,
-              arguments[1] == "-LaunchArguments",
-              let data = Data(base64Encoded: arguments[2]),
+        let launchArgumentIndices = arguments.indices.filter {
+            arguments[$0] == "-LaunchArguments"
+        }
+        guard launchArgumentIndices.count == 1,
+              let launchArgumentIndex = launchArgumentIndices.first,
+              arguments.indices.contains(launchArgumentIndex + 1),
+              let data = Data(base64Encoded: arguments[launchArgumentIndex + 1]),
               let object = try? JSONSerialization.jsonObject(with: data),
               let dictionary = object as? [String: Any],
               let serviceName = dictionary["serviceName"] as? String

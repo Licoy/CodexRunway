@@ -230,6 +230,18 @@ struct RunwayWidgetProcessRestarterTests {
         #expect(RunwayWidgetProcessInspector.widgetProcessMatch(
             fromProcessArguments: arguments,
             target: productionTarget) == .target(productionID))
+
+        let macOS27Arguments = [
+            arguments[0],
+            "-BSServiceDomains",
+            #"{"XPCService":{"Services":{"MainService":{}}}}"#,
+            arguments[1],
+            arguments[2],
+        ]
+        #expect(RunwayWidgetProcessInspector.widgetProcessMatch(
+            fromProcessArguments: macOS27Arguments,
+            target: productionTarget) == .target(productionID))
+
         #expect(RunwayWidgetProcessInspector.widgetProcessMatch(
             fromProcessArguments: ["/private/tmp/CodexRunwayWidget"],
             target: productionTarget) == .nonTarget)
