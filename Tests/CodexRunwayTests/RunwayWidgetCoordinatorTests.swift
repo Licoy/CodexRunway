@@ -118,6 +118,28 @@ struct RunwayWidgetCoordinatorTests {
         #expect(reloadSpy.reloadedKinds.isEmpty)
     }
 
+    @Test("forced unchanged publication refreshes the snapshot without changing provider freshness")
+    func forcedUnchangedPublicationPreservesProviderFreshness() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let reloadSpy = WidgetReloadSpy()
+        let coordinator = makeCoordinator(store: fixture.store, reloadSpy: reloadSpy)
+        let providerUpdatedAt = Date(timeIntervalSince1970: 5_500)
+        let initial = makeSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 6_000),
+            providerUpdatedAt: providerUpdatedAt)
+        var republished = initial
+        republished.generatedAt = Date(timeIntervalSince1970: 6_060)
+
+        await coordinator.publish(initial, force: true).value
+        await coordinator.publish(republished, force: true).value
+
+        let stored = try fixture.store.load()
+        #expect(stored.generatedAt == republished.generatedAt)
+        #expect(stored.provider(.codex)?.updatedAt == providerUpdatedAt)
+        #expect(reloadSpy.reloadAllCount == 2)
+    }
+
     @Test("a forced publish can write snapshots without reloading timelines")
     func forcedPublishCanSkipTimelineReload() async throws {
         let fixture = try makeFixture()
@@ -143,8 +165,8 @@ struct RunwayWidgetCoordinatorTests {
         #expect(reloadSpy.reloadedKinds.isEmpty)
     }
 
-    @Test("failed cleanup suppresses startup and first-refresh reloads before cadence resumes")
-    func failedCleanupDefersReloadUntilLaterCadence() async throws {
+    @Test("suppressed reloads do not delay the first allowed reload")
+    func suppressedReloadDoesNotAdvanceCadence() async throws {
         let fixture = try makeFixture()
         defer { fixture.cleanup() }
         let reloadSpy = WidgetReloadSpy()
@@ -176,7 +198,9 @@ struct RunwayWidgetCoordinatorTests {
 
         #expect(try fixture.store.load() == early)
         #expect(reloadSpy.reloadAllCount == 0)
-        #expect(reloadSpy.reloadedKinds.isEmpty)
+        #expect(Set(reloadSpy.reloadedKinds) == activeKinds)
+
+        reloadSpy.reset()
 
         let due = makeSnapshot(
             generatedAt: Date(timeIntervalSince1970: 1_070),
@@ -187,7 +211,7 @@ struct RunwayWidgetCoordinatorTests {
             minimumReloadInterval: 60).value
 
         #expect(try fixture.store.load() == due)
-        #expect(Set(reloadSpy.reloadedKinds) == activeKinds)
+        #expect(reloadSpy.reloadedKinds.isEmpty)
     }
 
     @Test("a late older forced publish cannot replace a newer snapshot")
@@ -287,8 +311,8 @@ struct RunwayWidgetCoordinatorTests {
         #expect(Set(reloadSpy.reloadedKinds) == activeKinds)
     }
 
-    @Test("non-forced generated-at-only changes neither write nor reload")
-    func timestampOnlyPublishIsSkipped() async throws {
+    @Test("an elapsed interval publishes a fresh timestamp and delivers throttled changes")
+    func elapsedIntervalPublishesAndReloadsThrottledChange() async throws {
         let fixture = try makeFixture()
         defer { fixture.cleanup() }
         let reloadSpy = WidgetReloadSpy()
@@ -296,14 +320,64 @@ struct RunwayWidgetCoordinatorTests {
         let initial = makeSnapshot(generatedAt: Date(timeIntervalSince1970: 3_000))
         await coordinator.publish(initial).value
         reloadSpy.reset()
-        var timestampOnly = initial
-        timestampOnly.generatedAt = Date(timeIntervalSince1970: 3_060)
+        let changed = makeSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 3_060),
+            remainingPercent: 40)
+        await coordinator.publish(changed, minimumReloadInterval: 300).value
+        #expect(try fixture.store.load() == changed)
+        #expect(reloadSpy.reloadedKinds.isEmpty)
 
-        await coordinator.publish(timestampOnly).value
+        var timestampOnly = changed
+        timestampOnly.generatedAt = Date(timeIntervalSince1970: 3_300)
+
+        await coordinator.publish(timestampOnly, minimumReloadInterval: 300).value
+
+        #expect(try fixture.store.load() == timestampOnly)
+        #expect(reloadSpy.reloadAllCount == 0)
+        #expect(Set(reloadSpy.reloadedKinds) == activeKinds)
+    }
+
+    @Test("an unchanged snapshot before the interval neither writes nor reloads")
+    func unchangedSnapshotBeforeIntervalIsSkipped() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let reloadSpy = WidgetReloadSpy()
+        let coordinator = makeCoordinator(store: fixture.store, reloadSpy: reloadSpy)
+        let initial = makeSnapshot(generatedAt: Date(timeIntervalSince1970: 5_000))
+        await coordinator.publish(initial, minimumReloadInterval: 300).value
+        reloadSpy.reset()
+        var unchanged = initial
+        unchanged.generatedAt = Date(timeIntervalSince1970: 5_060)
+
+        await coordinator.publish(unchanged, minimumReloadInterval: 300).value
 
         #expect(try fixture.store.load() == initial)
         #expect(reloadSpy.reloadAllCount == 0)
         #expect(reloadSpy.reloadedKinds.isEmpty)
+    }
+
+    @Test("concurrent due publications request only one timeline reload")
+    func concurrentDuePublicationsReloadOnce() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let reloadSpy = WidgetReloadSpy()
+        let coordinator = makeCoordinator(store: fixture.store, reloadSpy: reloadSpy)
+        let initial = makeSnapshot(generatedAt: Date(timeIntervalSince1970: 7_000))
+        await coordinator.publish(initial, minimumReloadInterval: 300).value
+        reloadSpy.reset()
+
+        let publications = (0..<20).map { offset in
+            var snapshot = initial
+            snapshot.generatedAt = Date(timeIntervalSince1970: 7_300 + Double(offset))
+            return coordinator.publish(snapshot, minimumReloadInterval: 300)
+        }
+        for publication in publications {
+            await publication.value
+        }
+
+        #expect(reloadSpy.reloadAllCount == 0)
+        #expect(reloadSpy.reloadedKinds.count == activeKinds.count)
+        #expect(Set(reloadSpy.reloadedKinds) == activeKinds)
     }
 
     private var activeKinds: Set<String> {
@@ -341,7 +415,8 @@ struct RunwayWidgetCoordinatorTests {
 
     private func makeSnapshot(
         generatedAt: Date,
-        remainingPercent: Int = 75
+        remainingPercent: Int = 75,
+        providerUpdatedAt: Date? = nil
     ) -> RunwayWidgetSnapshot {
         RunwayWidgetSnapshot(
             generatedAt: generatedAt,
@@ -351,7 +426,7 @@ struct RunwayWidgetCoordinatorTests {
                     provider: .codex,
                     availability: .available,
                     plan: "pro",
-                    updatedAt: nil,
+                    updatedAt: providerUpdatedAt,
                     quota: [
                         RunwayWidgetQuota(
                             title: "5 hours",

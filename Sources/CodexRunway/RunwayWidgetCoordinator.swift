@@ -151,19 +151,20 @@ final class RunwayWidgetCoordinator {
     ) -> Task<Void, Never> {
         Task { @MainActor [publisher] in
             do {
-                guard try await publisher.publish(snapshot, force: force) else { return }
-                guard reloadTimelines else {
-                    recordReload(at: snapshot.generatedAt)
-                    return
-                }
+                let intervalElapsed = reloadTimelines
+                    && !activeKinds.isEmpty
+                    && shouldReload(snapshot, minimumInterval: minimumReloadInterval)
+                guard try await publisher.publish(
+                    snapshot,
+                    includingUnchanged: force || intervalElapsed)
+                else { return }
+                guard reloadTimelines else { return }
                 if force {
                     reloader.reloadAllTimelines()
                     recordReload(at: snapshot.generatedAt)
                 } else {
-                    guard shouldReload(
-                        snapshot,
-                        minimumInterval: minimumReloadInterval),
-                        !activeKinds.isEmpty
+                    guard !activeKinds.isEmpty,
+                        shouldReload(snapshot, minimumInterval: minimumReloadInterval)
                     else { return }
                     for kind in activeKinds {
                         reloader.reloadTimelines(ofKind: kind)
@@ -203,10 +204,13 @@ private actor RunwayWidgetSnapshotPublisher {
         self.compatibilityStore = compatibilityStore
     }
 
-    func publish(_ snapshot: RunwayWidgetSnapshot, force: Bool) throws -> Bool {
+    func publish(
+        _ snapshot: RunwayWidgetSnapshot,
+        includingUnchanged: Bool
+    ) throws -> Bool {
         if let previous = lastSnapshot {
             guard snapshot.generatedAt >= previous.generatedAt else { return false }
-            if !force {
+            if !includingUnchanged {
                 var comparable = previous
                 comparable.generatedAt = snapshot.generatedAt
                 if comparable == snapshot { return false }
