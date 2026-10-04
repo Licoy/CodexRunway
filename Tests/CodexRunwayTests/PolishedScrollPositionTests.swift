@@ -5,6 +5,76 @@ import Testing
 
 @Suite("Polished scroll position")
 struct PolishedScrollPositionTests {
+    @Test("content refresh never temporarily expands the visible scroll document")
+    @MainActor
+    func contentRefreshKeepsDocumentAtFittedHeight() throws {
+        let position = PolishedScrollPosition()
+        let host = makeHost(position: position)
+        settle(host)
+        let scrollView = requireScrollView(in: host)
+        let document = try #require(scrollView.documentView)
+        let expectedHeight = document.frame.height
+        #expect(expectedHeight > 180)
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: 180))
+        let expectedOffset = scrollView.documentVisibleRect.minY
+
+        let frames = DocumentFrameRecorder()
+        document.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            frames,
+            selector: #selector(DocumentFrameRecorder.record(_:)),
+            name: NSView.frameDidChangeNotification,
+            object: document)
+        defer { NotificationCenter.default.removeObserver(frames) }
+
+        host.rootView = homeView(position: position, revision: 1)
+        settle(host)
+
+        #expect(scrollView === requireScrollView(in: host))
+        #expect(abs(document.frame.height - expectedHeight) <= 1)
+        #expect(abs(scrollView.documentVisibleRect.minY - expectedOffset) <= 1)
+        #expect(
+            frames.heights.allSatisfy { abs($0 - expectedHeight) <= 1 },
+            "Content-only refresh must not move the live document through a measurement height: \(frames.heights)")
+    }
+
+    @Test("document follows growing and shrinking content without a probe height")
+    @MainActor
+    func documentHeightTracksContentChanges() throws {
+        let position = PolishedScrollPosition()
+        let host = makeHost(position: position)
+        settle(host)
+        let document = try #require(requireScrollView(in: host).documentView)
+
+        for (revision, rowCount) in [60, 5, 40].enumerated() {
+            host.rootView = homeView(position: position, revision: revision + 1, rowCount: rowCount)
+            settle(host)
+            #expect(abs(document.frame.height - CGFloat(rowCount * 28)) <= 1)
+        }
+    }
+
+    @Test("width changes reflow long content to its fitted height")
+    @MainActor
+    func documentHeightTracksWrapping() throws {
+        let host = NSHostingView(rootView: wrappingView(width: 320))
+        host.frame = NSRect(x: 0, y: 0, width: 320, height: 180)
+        settle(host)
+        let document = try #require(requireScrollView(in: host).documentView)
+        let originalHeight = document.frame.height
+
+        host.rootView = wrappingView(width: 180)
+        host.setFrameSize(NSSize(width: 180, height: 180))
+        settle(host)
+        #expect(abs(document.frame.width - 180) <= 1)
+        #expect(document.frame.height > originalHeight)
+
+        host.rootView = wrappingView(width: 320)
+        host.setFrameSize(NSSize(width: 320, height: 180))
+        settle(host)
+        #expect(abs(document.frame.width - 320) <= 1)
+        #expect(abs(document.frame.height - originalHeight) <= 1)
+    }
+
     @Test("recreated scroll view restores position within one presentation")
     @MainActor
     func restoresPositionAfterDetailRoundTrip() {
@@ -57,22 +127,37 @@ struct PolishedScrollPositionTests {
     }
 
     @MainActor
-    private func homeView(position: PolishedScrollPosition) -> AnyView {
+    private func homeView(
+        position: PolishedScrollPosition,
+        revision: Int = 0,
+        rowCount: Int = 40) -> AnyView
+    {
         AnyView(
             PolishedScrollView(
                 verticalPadding: 0,
                 fadesEdges: false,
+                remasureToken: revision,
                 scrollPosition: position)
             {
                 VStack(spacing: 0) {
-                    ForEach(0..<40, id: \.self) { row in
-                        Text("row \(row)")
+                    ForEach(0..<rowCount, id: \.self) { row in
+                        Text("row \(row) revision \(revision)")
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .frame(height: 28)
                     }
                 }
             }
             .frame(width: 320, height: 180))
+    }
+
+    @MainActor
+    private func wrappingView(width: CGFloat) -> AnyView {
+        AnyView(
+            PolishedScrollView(verticalPadding: 0, fadesEdges: false) {
+                Text(String(repeating: "Long localized section text that must wrap. ", count: 20))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(width: width, height: 180))
     }
 
     private var detailView: some View {
@@ -106,5 +191,15 @@ struct PolishedScrollPositionTests {
             found.append(contentsOf: collectScrollViews(in: child))
         }
         return found
+    }
+}
+
+@MainActor
+private final class DocumentFrameRecorder: NSObject {
+    var heights: [CGFloat] = []
+
+    @objc func record(_ notification: Notification) {
+        guard let view = notification.object as? NSView else { return }
+        heights.append(view.frame.height)
     }
 }

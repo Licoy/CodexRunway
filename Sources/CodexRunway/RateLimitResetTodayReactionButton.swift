@@ -57,7 +57,6 @@ struct RateLimitResetTodayReactionButton: View {
                 }
             }
             .contentShape(Capsule())
-            .animation(.easeOut(duration: 0.12), value: isHovered)
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)

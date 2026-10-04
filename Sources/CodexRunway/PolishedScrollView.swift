@@ -195,20 +195,19 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
         force: Bool)
     {
         let width = max(1, scrollView.contentSize.width)
-        if let typed = hostingView as? NSHostingView<AnyView>, let makeRoot = coordinator.makeRoot {
-            // Keep the SwiftUI tree pinned to the scroll width so English / long
-            // locales wrap instead of measuring an unconstrained fitting width.
-            typed.rootView = makeRoot(width)
-        }
-        // Bounded probe height: large enough for the panel, cheap vs. 1_000_000.
-        let probeHeight: CGFloat = 8_000
         let widthChanged = abs(coordinator.lastWidth - width) > 0.5
         if !force && !widthChanged && coordinator.lastHeight > 0 {
             return
         }
 
-        hostingView.setFrameSize(NSSize(width: width, height: probeHeight))
-        hostingView.layoutSubtreeIfNeeded()
+        if let typed = hostingView as? NSHostingView<AnyView>, let makeRoot = coordinator.makeRoot {
+            // Keep the SwiftUI tree pinned to the scroll width so English / long
+            // locales wrap instead of measuring an unconstrained fitting width.
+            typed.rootView = makeRoot(width)
+        }
+        // The root has a fixed width and ideal vertical size, so fittingSize can
+        // measure it directly. Resizing the live host to a probe height first
+        // temporarily centers its controls far below their displayed positions.
         let fitting = hostingView.fittingSize
         let height = max(1, fitting.height)
 
@@ -225,6 +224,7 @@ private struct HiddenScrollerScrollView<Content: View>: NSViewRepresentable {
         hostingView.setFrameSize(NSSize(width: width, height: height))
         coordinator.lastWidth = width
         coordinator.lastHeight = height
+        hostingView.layoutSubtreeIfNeeded()
     }
 
     private func restoreScrollPosition(in scrollView: NSScrollView, coordinator: Coordinator) {

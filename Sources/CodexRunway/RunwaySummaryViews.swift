@@ -860,7 +860,6 @@ private struct RateLimitResetTodayWebsiteLink: View {
             .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
             .padding(.horizontal, -6)
             .padding(.vertical, -3)
-            .animation(.easeOut(duration: 0.12), value: isHovered)
         }
         .buttonStyle(.plain)
         .pointingHandCursor()
@@ -890,7 +889,6 @@ private struct EvidenceRowButton<Content: View>: View {
                 .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
                 .padding(.horizontal, -6)
                 .padding(.vertical, -3)
-                .animation(.easeOut(duration: 0.12), value: isHovered)
         }
         .buttonStyle(.plain)
         .help(help)
@@ -1157,7 +1155,6 @@ struct HeaderPopoverButton<PopoverContent: View>: View {
                     isHovered ? RunwaySurface.hoverNeutral : Color.clear,
                     in: RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
-                .animation(.easeOut(duration: 0.12), value: isHovered)
         }
         .buttonStyle(.plain)
         .help(help)
@@ -1233,7 +1230,6 @@ struct RefreshableSectionHeader: View {
                     isRefreshHovered && !isRefreshing ? RunwaySurface.hoverNeutral : Color.clear,
                     in: RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
-                .animation(.easeOut(duration: 0.12), value: isRefreshHovered)
             }
             .buttonStyle(.plain)
             .disabled(isRefreshing)
@@ -1259,7 +1255,6 @@ struct RefreshableSectionHeader: View {
                     isHovered ? RunwaySurface.hoverNeutral : Color.clear,
                     in: RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
-                .animation(.easeOut(duration: 0.12), value: isHovered)
         }
         .buttonStyle(.plain)
         .help(help)
