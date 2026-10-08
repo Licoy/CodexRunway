@@ -118,8 +118,10 @@ struct UpdateProxyBridgeTests {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.connectionProxyDictionary = [:]
         configuration.urlCredentialStorage = nil
-        configuration.timeoutIntervalForRequest = 3
-        configuration.timeoutIntervalForResource = 5
+        // 3s/5s fails when CI keeps the main actor busy. Update downloads allow 60s;
+        // a 256KB byte-at-a-time body still cannot finish inside this window.
+        configuration.timeoutIntervalForRequest = 20
+        configuration.timeoutIntervalForResource = 30
         return URLSession(configuration: configuration)
     }
 }
