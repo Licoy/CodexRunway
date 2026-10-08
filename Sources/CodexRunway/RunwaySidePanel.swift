@@ -47,7 +47,6 @@ struct SidePanelDisclosureRow: View {
                         colorScheme == .dark ? RunwaySurface.hairline : Color.clear,
                         lineWidth: 1))
             .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusRow, style: .continuous))
-            .animation(.easeOut(duration: 0.12), value: isHovered)
         }
         .buttonStyle(.plain)
         .pointingHandCursor()

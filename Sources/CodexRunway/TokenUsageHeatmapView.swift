@@ -299,7 +299,6 @@ struct TokenUsageHeatmapView: View {
                         isChartStyleHovered ? RunwaySurface.hoverNeutral : Color.clear,
                         in: RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
                     .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
-                    .animation(.easeOut(duration: 0.12), value: isChartStyleHovered)
                     .accessibilityLabel(l10n.text(.tokenUsageChartStyle))
                     .pointingHandCursor()
                     .onHover { isChartStyleHovered = $0 }
@@ -321,7 +320,6 @@ struct TokenUsageHeatmapView: View {
                         isRefreshHovered && !isRefreshing ? RunwaySurface.hoverNeutral : Color.clear,
                         in: RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
                     .contentShape(RoundedRectangle(cornerRadius: RunwaySurface.radiusControl, style: .continuous))
-                    .animation(.easeOut(duration: 0.12), value: isRefreshHovered)
                 }
                 .buttonStyle(.plain)
                 .disabled(isRefreshing)
