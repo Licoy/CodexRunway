@@ -19,10 +19,6 @@ jobs:
   package:
     needs: test
     runs-on: macos-26
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [arm64, x86_64]
     steps:
       - uses: actions/checkout@v7
       - name: Check Sparkle signing secrets
@@ -32,34 +28,39 @@ jobs:
         run: |
           test -n "$SPARKLE_PUBLIC_KEY" || { echo "Missing SPARKLE_PUBLIC_KEY secret"; exit 1; }
           test -n "$SPARKLE_PRIVATE_KEY" || { echo "Missing SPARKLE_PRIVATE_KEY secret"; exit 1; }
-      - name: Package ${{ matrix.arch }}
+      - name: Package both architectures
         env:
           EXPECTED_MACOS_SDK_MAJOR: "26"
           INCLUDE_WIDGET: "1"
           RUNWAY_WIDGET_STORAGE_MODE: local
           SPARKLE_PUBLIC_KEY: ${{ secrets.SPARKLE_PUBLIC_KEY }}
-        run: ARCH=${{ matrix.arch }} bash Scripts/package-app.sh
-      - name: Verify embedded widget ${{ matrix.arch }}
-        run: bash Scripts/verify-packaged-app.sh dist/CodexRunway.app ${{ matrix.arch }} local
-      - name: Generate appcast ${{ matrix.arch }}
-        env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
-          mkdir -p "dist/appcast-${{ matrix.arch }}"
-          cp "dist/CodexRunway-macos-${{ matrix.arch }}.zip" "dist/appcast-${{ matrix.arch }}/"
-          printf '%s' "$SPARKLE_PRIVATE_KEY" | .build/artifacts/sparkle/Sparkle/bin/generate_appcast \
-            --ed-key-file - \
-            --download-url-prefix "https://github.com/Licoy/codex-runway/releases/download/${GITHUB_REF_NAME}/" \
-            -o "dist/appcast-${{ matrix.arch }}.xml" \
-            "dist/appcast-${{ matrix.arch }}"
+          # One macos-26 runner. Asking for two at once was cancelled:
+          # "The job was not acquired by Runner of type hosted even after multiple attempts".
+          for arch in arm64 x86_64; do
+            ARCH="$arch" bash Scripts/package-app.sh
+            bash Scripts/verify-packaged-app.sh dist/CodexRunway.app "$arch" local
+            mkdir -p "dist/appcast-$arch"
+            cp "dist/CodexRunway-macos-$arch.zip" "dist/appcast-$arch/"
+            printf '%s' "$SPARKLE_PRIVATE_KEY" | .build/artifacts/sparkle/Sparkle/bin/generate_appcast \
+              --ed-key-file - \
+              --download-url-prefix "https://github.com/Licoy/codex-runway/releases/download/${GITHUB_REF_NAME}/" \
+              -o "dist/appcast-$arch.xml" \
+              "dist/appcast-$arch"
+          done
       - uses: actions/upload-artifact@v7
         with:
-          name: CodexRunway-macos-${{ matrix.arch }}
+          name: CodexRunway-macos
           path: |
-            dist/CodexRunway-macos-${{ matrix.arch }}.zip
-            dist/CodexRunway-macos-${{ matrix.arch }}.app.tar.gz
-            dist/CodexRunway-macos-${{ matrix.arch }}.dmg
-            dist/appcast-${{ matrix.arch }}.xml
+            dist/CodexRunway-macos-arm64.zip
+            dist/CodexRunway-macos-x86_64.zip
+            dist/CodexRunway-macos-arm64.app.tar.gz
+            dist/CodexRunway-macos-x86_64.app.tar.gz
+            dist/CodexRunway-macos-arm64.dmg
+            dist/CodexRunway-macos-x86_64.dmg
+            dist/appcast-arm64.xml
+            dist/appcast-x86_64.xml
 
   release-notes:
     runs-on: ubuntu-latest
