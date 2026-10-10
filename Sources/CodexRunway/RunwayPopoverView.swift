@@ -114,6 +114,8 @@ struct RunwayPopoverView: View {
                     model: model,
                     l10n: l10n,
                     apiCostInitialRange: apiCostDetailRange,
+                    privacyMode: settings.preferences.accountPrivacyModeEnabled,
+                    onTogglePrivacy: toggleAccountPrivacyMode,
                     onAddAccount: {
                         openControlPanel(.accounts)
                     })
@@ -151,6 +153,7 @@ struct RunwayPopoverView: View {
                 panelHeight: $panelHeight,
                 onResize: resizeMainPanel)
         }
+        .environment(\.accountPrivacyMode, settings.preferences.accountPrivacyModeEnabled)
         .preferredColorScheme(settings.colorScheme)
         .alert(l10n.text(.repairConfirmTitle), isPresented: $confirmRepair) {
             Button(l10n.text(.repair), role: .destructive) { model.repairSessions() }
@@ -340,6 +343,11 @@ struct RunwayPopoverView: View {
                 providerMenu
                 Spacer(minLength: 8)
                 HStack(spacing: 2) {
+                    AccountPrivacyModeButton(
+                        isEnabled: settings.preferences.accountPrivacyModeEnabled,
+                        title: l10n.text(.accountPrivacyMode),
+                        chrome: .header,
+                        action: toggleAccountPrivacyMode)
                     HeaderActionButton(title: l10n.text(.checkForUpdates), action: checkForUpdates) {
                         BootstrapIconImage(.cloudArrowDown)
                     }
@@ -387,7 +395,24 @@ struct RunwayPopoverView: View {
     }
 
     private var accountDisplayName: String {
-        model.selectedAccountDisplayName
+        let name = model.selectedAccountDisplayName
+        guard settings.preferences.accountPrivacyModeEnabled, hasMaskableAccountIdentity else {
+            return name
+        }
+        return AccountPrivacyMask.mask(name)
+    }
+
+    private var hasMaskableAccountIdentity: Bool {
+        switch model.selectedProvider {
+        case .codex:
+            return !model.accountDisplay.displayName.isEmpty
+        case .grok:
+            return model.grokPanelState.identityName != nil
+        }
+    }
+
+    private func toggleAccountPrivacyMode() {
+        settings.updateAccountPrivacyModeEnabled(!settings.preferences.accountPrivacyModeEnabled)
     }
 
     /// Compact provider dropdown placed next to the app title.

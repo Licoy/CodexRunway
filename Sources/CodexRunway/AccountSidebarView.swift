@@ -6,6 +6,8 @@ import SwiftUI
 struct AccountsDetailView: View {
     @ObservedObject var model: RunwayModel
     var l10n: L10n
+    var privacyMode: Bool
+    var onTogglePrivacy: () -> Void
     var onAddAccount: () -> Void
 
     @State private var accountPendingSwitch: ManagedAccount?
@@ -77,14 +79,16 @@ struct AccountsDetailView: View {
             }
             .keyboardShortcut(.defaultAction)
         } message: {
-            Text("\(accountPendingDelete?.resolvedDisplayName ?? "")\n\n\(l10n.text(.accountsDeleteConfirmMessage))")
+            Text("\(maskedAccountIdentity(accountPendingDelete?.resolvedDisplayName ?? "", enabled: privacyMode))\n\n\(l10n.text(.accountsDeleteConfirmMessage))")
         }
         .sheet(isPresented: Binding(
             get: { accountPendingSwitch != nil },
             set: { if !$0 { accountPendingSwitch = nil } }))
         {
             AccountSwitchConfirmSheet(
-                accountName: accountPendingSwitch?.resolvedDisplayName ?? "",
+                accountName: maskedAccountIdentity(
+                    accountPendingSwitch?.resolvedDisplayName ?? "",
+                    enabled: privacyMode),
                 l10n: l10n,
                 restartAfterSwitch: $restartAfterSwitch,
                 onConfirm: {
@@ -109,6 +113,11 @@ struct AccountsDetailView: View {
                 model.refreshAllAccountQuotas()
             }
             Spacer()
+            AccountPrivacyModeButton(
+                isEnabled: privacyMode,
+                title: l10n.text(.accountPrivacyMode),
+                chrome: .toolbar,
+                action: onTogglePrivacy)
             ToolbarAccentButton(title: l10n.text(.accountsAdd), systemImage: "plus", action: onAddAccount)
         }
     }
@@ -334,6 +343,8 @@ private struct AccountDetailCard: View {
     var onRefresh: () -> Void
     var onDelete: () -> Void
 
+    @Environment(\.accountPrivacyMode) private var privacyMode
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             headerRow
@@ -350,7 +361,7 @@ private struct AccountDetailCard: View {
     private var headerRow: some View {
         HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(account.resolvedDisplayName)
+                Text(maskedAccountIdentity(account.resolvedDisplayName, enabled: privacyMode))
                     .font(.callout.weight(.semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -360,7 +371,7 @@ private struct AccountDetailCard: View {
                     }
                     SubscriptionTierTag(tier: account.subscriptionTier, l10n: l10n)
                     if let email = account.email, email != account.resolvedDisplayName {
-                        Text(email)
+                        Text(maskedAccountIdentity(email, enabled: privacyMode))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -542,6 +553,8 @@ struct AccountIdentityDetailsLabel: View {
     var account: ManagedAccount
     var l10n: L10n
 
+    @Environment(\.accountPrivacyMode) private var privacyMode
+
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let userId = account.identityMarkerUserId {
@@ -580,11 +593,12 @@ struct AccountIdentityDetailsLabel: View {
         value: String,
         monospaced: Bool) -> some View
     {
-        (Text(label).font(.caption2)
-            + Text(value).font(monospaced ? .caption2.monospaced() : .caption2))
+        let shown = maskedAccountIdentity(value, enabled: privacyMode)
+        return (Text(label).font(.caption2)
+            + Text(shown).font(monospaced ? .caption2.monospaced() : .caption2))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
-            .help("\(label)\(value)")
+            .help("\(label)\(shown)")
     }
 }
 

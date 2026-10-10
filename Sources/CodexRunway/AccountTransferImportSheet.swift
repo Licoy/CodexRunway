@@ -10,6 +10,8 @@ struct AccountTransferImportSheet: View {
     var onCancel: () -> Void
     var onImport: () -> Void
 
+    @Environment(\.accountPrivacyMode) private var privacyMode
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(l10n.text(.accountsImportPreviewTitle))
@@ -44,7 +46,7 @@ struct AccountTransferImportSheet: View {
                             Toggle(isOn: binding(for: item.id)) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack(spacing: 6) {
-                                        Text(item.displayName)
+                                        Text(maskedAccountIdentity(item.displayName, enabled: privacyMode))
                                             .font(.body.weight(.medium))
                                             .lineLimit(1)
                                         Text(conflictLabel(item.conflict))
@@ -57,7 +59,7 @@ struct AccountTransferImportSheet: View {
                                             .foregroundStyle(conflictColor(item.conflict))
                                     }
                                     if let detail = item.detail, !detail.isEmpty {
-                                        Text(detail)
+                                        Text(maskedAccountIdentity(detail, enabled: privacyMode))
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                             .lineLimit(1)
@@ -74,7 +76,7 @@ struct AccountTransferImportSheet: View {
             }
 
             if !failures.isEmpty {
-                Text(failures.prefix(4).joined(separator: "\n"))
+                Text(failures.prefix(4).map { privacyMode ? AccountPrivacyMask.maskEmails(in: $0) : $0 }.joined(separator: "\n"))
                     .font(.caption)
                     .foregroundStyle(.red)
                     .textSelection(.enabled)

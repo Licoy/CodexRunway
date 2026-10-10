@@ -6,6 +6,8 @@ import UniformTypeIdentifiers
 struct AccountsSettingsPane: View {
     @ObservedObject var model: RunwayModel
     var l10n: L10n
+    var privacyMode: Bool
+    var onTogglePrivacy: () -> Void
 
     @State private var showPasteSheet = false
     @State private var showAPIKeySheet = false
@@ -79,6 +81,7 @@ struct AccountsSettingsPane: View {
                     isExporting = false
                 },
                 onExport: { performExport() })
+                .environment(\.accountPrivacyMode, privacyMode)
         }
         .sheet(isPresented: $showImportPreviewSheet) {
             AccountTransferImportSheet(
@@ -92,6 +95,7 @@ struct AccountsSettingsPane: View {
                     showImportPreviewSheet = false
                 },
                 onImport: { performImportSelection() })
+                .environment(\.accountPrivacyMode, privacyMode)
         }
         .sheet(isPresented: $showPasteSheet) {
             importSheet(
@@ -156,14 +160,16 @@ struct AccountsSettingsPane: View {
             }
             .keyboardShortcut(.defaultAction)
         } message: {
-            Text("\(accountPendingDelete?.resolvedDisplayName ?? "")\n\n\(l10n.text(.accountsDeleteConfirmMessage))")
+            Text("\(maskedAccountIdentity(accountPendingDelete?.resolvedDisplayName ?? "", enabled: privacyMode))\n\n\(l10n.text(.accountsDeleteConfirmMessage))")
         }
         .sheet(isPresented: Binding(
             get: { accountPendingSwitch != nil },
             set: { if !$0 { accountPendingSwitch = nil } }))
         {
             AccountSwitchConfirmSheet(
-                accountName: accountPendingSwitch?.resolvedDisplayName ?? "",
+                accountName: maskedAccountIdentity(
+                    accountPendingSwitch?.resolvedDisplayName ?? "",
+                    enabled: privacyMode),
                 l10n: l10n,
                 restartAfterSwitch: $restartAfterSwitch,
                 onConfirm: {
@@ -176,6 +182,7 @@ struct AccountsSettingsPane: View {
                     accountPendingSwitch = nil
                 })
         }
+        .environment(\.accountPrivacyMode, privacyMode)
     }
 
     private var platformToolbar: some View {
@@ -193,60 +200,84 @@ struct AccountsSettingsPane: View {
 
             Spacer(minLength: 8)
 
-            Button {
-                openExportSheet()
-            } label: {
-                Label(l10n.text(.accountsExport), systemImage: "square.and.arrow.up")
-            }
-            .disabled(currentPlatformAccountCount == 0
-                || model.isGrokAccountOperationInProgress
-                || isExporting
-                || isImportingTransfer)
-
-            if model.selectedProvider == .grok {
-                Menu {
-                    Button(l10n.text(.grokAccountsAddOAuth)) { model.startGrokOAuthLogin() }
-                    Button(l10n.text(.grokAccountsAddPaste)) {
-                        pasteText = ""
-                        pasteSheetError = nil
-                        showPasteSheet = true
-                    }
-                    Button(l10n.text(.grokAccountsAddFile)) { pickFiles(for: .grok) }
-                    Button(l10n.text(.grokAccountsImportOfficial)) { model.importOfficialGrokAccount() }
-                } label: {
-                    Label(l10n.text(.accountsAdd), systemImage: "plus")
-                }
-                .disabled(model.isGrokAccountOperationInProgress)
-
-                Button {
+            SettingsAccountIconButton(
+                systemImage: "square.and.arrow.up",
+                title: l10n.text(.accountsExport),
+                isDisabled: currentPlatformAccountCount == 0
+                    || model.isGrokAccountOperationInProgress
+                    || isExporting
+                    || isImportingTransfer,
+                action: openExportSheet)
+            SettingsAccountIconButton(
+                systemImage: privacyMode ? "eye.slash" : "eye",
+                title: l10n.text(.accountPrivacyMode),
+                isSelected: privacyMode,
+                action: onTogglePrivacy)
+            SettingsAccountIconMenu(
+                systemImage: "plus",
+                title: l10n.text(.accountsAdd),
+                isDisabled: model.selectedProvider == .grok && model.isGrokAccountOperationInProgress,
+                items: addAccountMenuItems)
+            SettingsAccountIconButton(
+                systemImage: "arrow.clockwise",
+                title: model.selectedProvider == .grok
+                    ? l10n.text(.grokAccountsRefreshAll)
+                    : l10n.text(.accountsRefreshAll),
+                isDisabled: model.selectedProvider == .grok
+                    ? model.isRefreshingGrok
+                    : model.isRefreshingAccountQuotas)
+            {
+                if model.selectedProvider == .grok {
                     model.refreshAllGrokAccountQuotas()
-                } label: {
-                    Label(l10n.text(.grokAccountsRefreshAll), systemImage: "arrow.clockwise")
-                }
-                .disabled(model.isRefreshingGrok)
-
-                if model.isGrokOAuthLoginInProgress {
-                    Button(l10n.text(.cancel)) { model.cancelGrokOAuthLogin() }
-                }
-            } else {
-                Menu {
-                    Button(l10n.text(.accountsAddLocal)) { model.importOfficialAccount() }
-                    Button(l10n.text(.accountsAddPaste)) { showPasteSheet = true }
-                    Button(l10n.text(.accountsAddFile)) { pickFiles(for: .codex) }
-                    Button(l10n.text(.accountsAddOAuth)) { model.startOAuthLogin() }
-                    Button(l10n.text(.accountsAddAPIKey)) { showAPIKeySheet = true }
-                } label: {
-                    Label(l10n.text(.accountsAdd), systemImage: "plus")
-                }
-
-                Button {
+                } else {
                     model.refreshAllAccountQuotas()
-                } label: {
-                    Label(l10n.text(.accountsRefreshAll), systemImage: "arrow.clockwise")
                 }
-                .disabled(model.isRefreshingAccountQuotas)
+            }
+            if model.selectedProvider == .grok, model.isGrokOAuthLoginInProgress {
+                SettingsAccountIconButton(
+                    systemImage: "xmark",
+                    title: l10n.text(.cancel),
+                    action: { model.cancelGrokOAuthLogin() })
             }
         }
+    }
+
+    private var addAccountMenuItems: [SettingsAccountMenuItem] {
+        if model.selectedProvider == .grok {
+            return [
+                SettingsAccountMenuItem(title: l10n.text(.grokAccountsAddOAuth)) {
+                    model.startGrokOAuthLogin()
+                },
+                SettingsAccountMenuItem(title: l10n.text(.grokAccountsAddPaste)) {
+                    pasteText = ""
+                    pasteSheetError = nil
+                    showPasteSheet = true
+                },
+                SettingsAccountMenuItem(title: l10n.text(.grokAccountsAddFile)) {
+                    pickFiles(for: .grok)
+                },
+                SettingsAccountMenuItem(title: l10n.text(.grokAccountsImportOfficial)) {
+                    model.importOfficialGrokAccount()
+                },
+            ]
+        }
+        return [
+            SettingsAccountMenuItem(title: l10n.text(.accountsAddLocal)) {
+                model.importOfficialAccount()
+            },
+            SettingsAccountMenuItem(title: l10n.text(.accountsAddPaste)) {
+                showPasteSheet = true
+            },
+            SettingsAccountMenuItem(title: l10n.text(.accountsAddFile)) {
+                pickFiles(for: .codex)
+            },
+            SettingsAccountMenuItem(title: l10n.text(.accountsAddOAuth)) {
+                model.startOAuthLogin()
+            },
+            SettingsAccountMenuItem(title: l10n.text(.accountsAddAPIKey)) {
+                showAPIKeySheet = true
+            },
+        ]
     }
 
     private var currentPlatformAccountCount: Int {
@@ -323,7 +354,7 @@ struct AccountsSettingsPane: View {
             HStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
-                        Text(account.resolvedDisplayName)
+                        Text(maskedAccountIdentity(account.resolvedDisplayName, enabled: privacyMode))
                             .font(.body.weight(.semibold))
                             .lineLimit(1)
                         if account.id == model.activeAccountId {
@@ -332,7 +363,9 @@ struct AccountsSettingsPane: View {
                         SubscriptionTierTag(tier: account.subscriptionTier, l10n: l10n)
                     }
                     if let email = account.email, email != account.resolvedDisplayName {
-                        Text(email).font(.caption).foregroundStyle(.secondary)
+                        Text(maskedAccountIdentity(email, enabled: privacyMode))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     AccountIdentityDetailsLabel(account: account, l10n: l10n)
                     if account.requiresReauth {

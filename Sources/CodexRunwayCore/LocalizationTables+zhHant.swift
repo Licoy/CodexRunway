@@ -43,6 +43,7 @@ extension L10n {
         .about: "關於",
         .advanced: "進階",
         .account: "帳號",
+        .accountPrivacyMode: "隱私模式",
         .accounts: "多帳號",
         .accountsAdd: "新增帳號",
         .accountsAddAPIKey: "API Key",

@@ -4,6 +4,27 @@ import Testing
 
 @Suite("Runway preferences")
 struct PreferencesTests {
+    @Test("account privacy mode defaults off, including older preference JSON")
+    func accountPrivacyModeDefaultsOff() throws {
+        #expect(!RunwayPreferences().accountPrivacyModeEnabled)
+
+        let oldData = """
+        {
+          "language": "english",
+          "appearance": "dark"
+        }
+        """.data(using: .utf8)!
+        let oldPreferences = try JSONDecoder().decode(RunwayPreferences.self, from: oldData)
+        #expect(!oldPreferences.accountPrivacyModeEnabled)
+
+        let suiteName = "CodexRunwayPrivacyMode-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = PreferencesStore(defaults: defaults)
+        store.save(RunwayPreferences(accountPrivacyModeEnabled: true))
+        #expect(store.load().accountPrivacyModeEnabled)
+    }
+
     @Test("launch at login defaults on, including older preference JSON")
     func launchAtLoginDefaultsOn() throws {
         #expect(RunwayPreferences().launchAtLoginEnabled)

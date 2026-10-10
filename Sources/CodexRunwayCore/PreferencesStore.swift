@@ -123,6 +123,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
     public var resetCreditAlertsEnabled: Bool
     public var rateLimitResetTodayAlertsEnabled: Bool
     public var exportsStatusJSON: Bool
+    public var accountPrivacyModeEnabled: Bool
 
     public static let widgetRefreshIntervalOptions: [Int] = [60, 300, 600, 900, 1_800]
     public static let defaultWidgetRefreshIntervalSeconds = 60
@@ -177,7 +178,8 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         quotaAlertsEnabled: Bool = false,
         resetCreditAlertsEnabled: Bool = false,
         rateLimitResetTodayAlertsEnabled: Bool = true,
-        exportsStatusJSON: Bool = false)
+        exportsStatusJSON: Bool = false,
+        accountPrivacyModeEnabled: Bool = false)
     {
         self.selectedProvider = selectedProvider
         self.language = language
@@ -213,6 +215,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         self.resetCreditAlertsEnabled = resetCreditAlertsEnabled
         self.rateLimitResetTodayAlertsEnabled = rateLimitResetTodayAlertsEnabled
         self.exportsStatusJSON = exportsStatusJSON
+        self.accountPrivacyModeEnabled = accountPrivacyModeEnabled
     }
 
     public static func clampRateLimitResetTodayRefreshInterval(_ seconds: Int) -> Int {
@@ -295,6 +298,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         case resetCreditAlertsEnabled
         case rateLimitResetTodayAlertsEnabled
         case exportsStatusJSON
+        case accountPrivacyModeEnabled
     }
 
     public init(from decoder: Decoder) throws {
@@ -351,6 +355,7 @@ public struct RunwayPreferences: Codable, Sendable, Equatable {
         resetCreditAlertsEnabled = try container.decodeIfPresent(Bool.self, forKey: .resetCreditAlertsEnabled) ?? false
         rateLimitResetTodayAlertsEnabled = try container.decodeIfPresent(Bool.self, forKey: .rateLimitResetTodayAlertsEnabled) ?? true
         exportsStatusJSON = try container.decodeIfPresent(Bool.self, forKey: .exportsStatusJSON) ?? false
+        accountPrivacyModeEnabled = try container.decodeIfPresent(Bool.self, forKey: .accountPrivacyModeEnabled) ?? false
     }
 }
 

@@ -5,6 +5,8 @@ import SwiftUI
 struct GrokAccountsDetailView: View {
     @ObservedObject var model: RunwayModel
     var l10n: L10n
+    var privacyMode: Bool
+    var onTogglePrivacy: () -> Void
 
     @State private var accountPendingSwitch: GrokManagedAccount?
     @State private var accountPendingDelete: GrokManagedAccount?
@@ -83,7 +85,9 @@ struct GrokAccountsDetailView: View {
             set: { if !$0 { accountPendingSwitch = nil } }))
         {
             GrokSwitchConfirmSheet(
-                accountName: accountPendingSwitch?.resolvedDisplayName ?? "",
+                accountName: maskedAccountIdentity(
+                    accountPendingSwitch?.resolvedDisplayName ?? "",
+                    enabled: privacyMode),
                 l10n: l10n,
                 onConfirm: {
                     if let id = accountPendingSwitch?.id {
@@ -146,6 +150,11 @@ struct GrokAccountsDetailView: View {
                 }
             }
             Spacer()
+            AccountPrivacyModeButton(
+                isEnabled: privacyMode,
+                title: l10n.text(.accountPrivacyMode),
+                chrome: .toolbar,
+                action: onTogglePrivacy)
             ToolbarAccentMenu(
                 title: l10n.text(.accountsAdd),
                 systemImage: "plus",
@@ -278,6 +287,8 @@ private struct GrokAccountDetailCard: View {
     var onMoveDown: () -> Void
     var onDelete: () -> Void
 
+    @Environment(\.accountPrivacyMode) private var privacyMode
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             headerRow
@@ -308,7 +319,7 @@ private struct GrokAccountDetailCard: View {
     private var headerRow: some View {
         HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(account.resolvedDisplayName)
+                Text(maskedAccountIdentity(account.resolvedDisplayName, enabled: privacyMode))
                     .font(.callout.weight(.semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -320,7 +331,7 @@ private struct GrokAccountDetailCard: View {
                         GrokSubscriptionTierTag(plan: account.cachedQuota?.plan, l10n: l10n)
                     }
                     if let email = account.email, email != account.resolvedDisplayName {
-                        Text(email)
+                        Text(maskedAccountIdentity(email, enabled: privacyMode))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)

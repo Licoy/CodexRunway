@@ -10,6 +10,8 @@ struct GrokAccountsSettingsContent: View {
     @State private var editingAliasID: String?
     @State private var aliasDraft = ""
 
+    @Environment(\.accountPrivacyMode) private var privacyMode
+
     var body: some View {
         Group {
             Text(l10n.text(.grokSwitchOnlyNewSessions))
@@ -42,7 +44,9 @@ struct GrokAccountsSettingsContent: View {
             set: { if !$0 { pendingSwitch = nil } }))
         {
             GrokSwitchConfirmSheet(
-                accountName: pendingSwitch?.resolvedDisplayName ?? "",
+                accountName: maskedAccountIdentity(
+                    pendingSwitch?.resolvedDisplayName ?? "",
+                    enabled: privacyMode),
                 l10n: l10n,
                 onConfirm: {
                     if let id = pendingSwitch?.id { model.switchGrokAccount(id: id) }
@@ -93,7 +97,7 @@ struct GrokAccountsSettingsContent: View {
             HStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
-                        Text(account.resolvedDisplayName)
+                        Text(maskedAccountIdentity(account.resolvedDisplayName, enabled: privacyMode))
                             .font(.body.weight(.semibold))
                             .lineLimit(1)
                         if isCurrent(account) { CurrentAccountTag(l10n: l10n) }
@@ -102,7 +106,9 @@ struct GrokAccountsSettingsContent: View {
                         }
                     }
                     if let email = account.email, email != account.resolvedDisplayName {
-                        Text(email).font(.caption).foregroundStyle(.secondary)
+                        Text(maskedAccountIdentity(email, enabled: privacyMode))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     if account.requiresReauth {
                         Text(l10n.text(.grokReauthenticationRequired))

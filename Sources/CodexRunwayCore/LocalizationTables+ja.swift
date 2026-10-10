@@ -43,6 +43,7 @@ extension L10n {
         .about: "情報",
         .advanced: "詳細",
         .account: "アカウント",
+        .accountPrivacyMode: "プライバシーモード",
         .accounts: "アカウント",
         .accountsAdd: "アカウントを追加",
         .accountsAddAPIKey: "API Key",

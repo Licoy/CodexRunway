@@ -85,7 +85,14 @@ struct ControlPanelView: View {
             generalPane
                 .tabItem { Label(l10n.text(.general), systemImage: "gearshape") }
                 .tag(ControlPanelTab.general)
-            AccountsSettingsPane(model: model, l10n: l10n)
+            AccountsSettingsPane(
+                model: model,
+                l10n: l10n,
+                privacyMode: settings.preferences.accountPrivacyModeEnabled,
+                onTogglePrivacy: {
+                    settings.updateAccountPrivacyModeEnabled(
+                        !settings.preferences.accountPrivacyModeEnabled)
+                })
                 .tabItem { Label(l10n.text(.accounts), systemImage: "person.2") }
                 .tag(ControlPanelTab.accounts)
             displayPane

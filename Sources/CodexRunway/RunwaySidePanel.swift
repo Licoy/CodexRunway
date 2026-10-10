@@ -66,15 +66,26 @@ struct DetailPageView: View {
     @ObservedObject var model: RunwayModel
     var l10n: L10n
     var apiCostInitialRange: ApiCostSummaryRange = .today
+    var privacyMode: Bool = false
+    var onTogglePrivacy: () -> Void = {}
     var onAddAccount: () -> Void = {}
 
     var body: some View {
         switch page {
         case .accounts:
             if model.selectedProvider == .grok {
-                GrokAccountsDetailView(model: model, l10n: l10n)
+                GrokAccountsDetailView(
+                    model: model,
+                    l10n: l10n,
+                    privacyMode: privacyMode,
+                    onTogglePrivacy: onTogglePrivacy)
             } else {
-                AccountsDetailView(model: model, l10n: l10n, onAddAccount: onAddAccount)
+                AccountsDetailView(
+                    model: model,
+                    l10n: l10n,
+                    privacyMode: privacyMode,
+                    onTogglePrivacy: onTogglePrivacy,
+                    onAddAccount: onAddAccount)
             }
         case .resetCredits:
             PolishedScrollView(verticalPadding: 4) {

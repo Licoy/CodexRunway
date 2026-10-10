@@ -14,6 +14,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case about
     case advanced
     case account
+    case accountPrivacyMode
     case accounts
     case accountsAdd
     case accountsAddAPIKey

@@ -15,6 +15,8 @@ struct AccountTransferExportSheet: View {
     var onCancel: () -> Void
     var onExport: () -> Void
 
+    @Environment(\.accountPrivacyMode) private var privacyMode
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(l10n.text(.accountsExportTitle))
@@ -48,11 +50,11 @@ struct AccountTransferExportSheet: View {
                         ForEach(rows) { row in
                             Toggle(isOn: binding(for: row.id)) {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(row.title)
+                                    Text(maskedAccountIdentity(row.title, enabled: privacyMode))
                                         .font(.body.weight(.medium))
                                         .lineLimit(1)
                                     if let subtitle = row.subtitle, !subtitle.isEmpty {
-                                        Text(subtitle)
+                                        Text(maskedAccountIdentity(subtitle, enabled: privacyMode))
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                             .lineLimit(1)
